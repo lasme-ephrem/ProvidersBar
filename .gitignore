@@ -27,6 +27,3 @@ __pycache__/
 .DS_Store
 Thumbs.db
 Desktop.ini
-
-mobile-access.json
-mobile-access.json.tmp

@@ -26,6 +26,6 @@ async function closeRunningApp() {
   await closeRunningApp();
   const appDir = path.join(portable, 'resources', 'app');
   await fs.mkdir(appDir, { recursive: true });
-  for (const name of ['main.cjs', 'preload.cjs', 'lib', 'renderer', 'mobile', 'assets', 'docs', 'README.md']) await fs.cp(path.join(root, name), path.join(appDir, name), { recursive: true });
+  for (const name of ['main.cjs', 'preload.cjs', 'lib', 'renderer', 'assets', 'docs', 'README.md']) await fs.cp(path.join(root, name), path.join(appDir, name), { recursive: true });
   console.log('Portable application resources updated. Existing account data preserved.');
 })().catch(error => { console.error(error.message); process.exitCode = 1; });

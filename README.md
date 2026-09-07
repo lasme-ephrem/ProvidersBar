@@ -37,10 +37,6 @@ OpenAI utilise la session de Codex ; arrêter son suivi ne déconnecte pas Codex
 
 Les limites sont présentées en lignes **Hebdo**, puis **5 h**, quand ces périodes sont disponibles. Antigravity distingue **Gemini** et **Claude / GPT**. OpenAI affiche seulement la semaine dans les cartes et le widget. Les pourcentages affichés sont des **quotas restants**.
 
-## Accès sur iPhone
-
-Une vue mobile installable reprend les comptes et quotas du PC, avec actualisation à distance et affichage du dernier relevé hors connexion. Elle utilise Tailscale pour rester privée, à la maison comme à l’extérieur. Configurer **Réglages → Accès mobile** puis suivre le [guide iPhone](docs/mobile.md). Le PC reste allumé et ProvidersBar actif.
-
 ## Données et confidentialité
 
 Aucun fichier Excel ni inventaire externe n’est nécessaire. Aucun compte n’est connecté par défaut.
@@ -72,7 +68,6 @@ npm start
 | --- | --- |
 | `npm start` | Lancer Electron avec les données de développement |
 | `npm test` | Tester la logique et les connecteurs avec des réponses simulées |
-| `npm run test:mobile` | Tester la vue mobile avec un viewport iPhone |
 | `npm run test:desktop` | Tester Electron, le stockage et le widget avec Playwright |
 | `npm run preview` | Servir l’aperçu en lecture seule sur `http://127.0.0.1:4317` |
 | `npm run package` | Fabriquer le dossier portable Windows x64 |
@@ -102,7 +97,6 @@ L’exécutable n’est pas signé ; ses métadonnées binaires restent celles d
 assets/       Icône de l’application et logos des fournisseurs
 lib/          Modèle de données, migrations et connecteurs
 renderer/     Interface du tableau de bord et du widget
-mobile/       Tableau de bord mobile installable
 scripts/      Tests Electron, aperçu, packaging et mise à jour
 tests/       Tests unitaires et tests de connecteurs
 docs/        Documentation technique et maintenance

@@ -56,7 +56,6 @@ const busy = new Map();
 const announced = new Set();
 const uiPath = path.join(__dirname, 'renderer', 'index.html');
 const uiUrl = pathToFileURL(uiPath).href;
-const mobileAccess = require('./lib/mobile-access.cjs').createMobileAccess({root:__dirname,dataDir,safeStorage,getState:publicState,sync:syncAll});
 const subscriptionAccounts = createSubscriptionController({
   dataDir, openBrowser: (...args) => accountBrowser.openSubscriptionBrowser(...args), deleteProfile: deleteAccountProfile, onChange: () => { if (state) broadcast(); },
   onResult: async (id, snapshot, message) => {
@@ -349,9 +348,6 @@ function registerIpc() {
     });
   }
   handle('state:get', () => publicState());
-  handle('mobile:info', () => mobileAccess.info());
-  handle('mobile:update', patch => mobileAccess.update(patch));
-  handle('mobile:preview', () => require('electron').shell.openExternal('http://127.0.0.1:4318'));
   handle('orca:open-account', openOrcaAccount);
   handle('orca:verify-account', verifyOrcaAccount);
   handle('ollama:open-account', openOllamaSystemAccount);
@@ -442,7 +438,7 @@ else {
     if (browsersClosed) return;
     event.preventDefault(); clearInterval(ollamaDetectionTimer);
     const browser = ollamaBrowser; ollamaBrowser = null;
-    Promise.allSettled([mobileAccess.close(), subscriptionAccounts.closeAll(), openAiAccount.close(), browser?.close(), antigravityWork, writeQueue]).finally(() => { browsersClosed = true; app.quit(); });
+    Promise.allSettled([subscriptionAccounts.closeAll(), openAiAccount.close(), browser?.close(), antigravityWork, writeQueue]).finally(() => { browsersClosed = true; app.quit(); });
   });
   app.whenReady().then(async () => {
     try {
@@ -472,7 +468,6 @@ else {
       }
       try { secrets = JSON.parse(await fs.readFile(path.join(dataDir, 'credentials.json'), 'utf8')); }
       catch (error) { if (error.code !== 'ENOENT') throw error; }
-      await mobileAccess.load();
       registerIpc();
       const webPreferences = { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true, spellcheck: false };
       mainWindow = new BrowserWindow({ width: 1360, height: 940, minWidth: 900, minHeight: 680, show: false, title: 'ProvidersBar', backgroundColor: '#101112', icon: path.join(__dirname, 'assets/icon.png'), autoHideMenuBar: true, webPreferences });

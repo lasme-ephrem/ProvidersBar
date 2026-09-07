@@ -1,8 +1,5 @@
 const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('providersBar', {
-  mobileInfo: () => ipcRenderer.invoke('mobile:info'),
-  updateMobile: patch => ipcRenderer.invoke('mobile:update', patch),
-  previewMobile: () => ipcRenderer.invoke('mobile:preview'),
   getState: () => ipcRenderer.invoke('state:get'),
   updateProvider: (id, patch) => ipcRenderer.invoke('provider:update', id, patch),
   saveManual: (id, input) => ipcRenderer.invoke('provider:manual', id, input),
