@@ -1,0 +1,29 @@
+node_modules/
+dist/
+.local/
+.npm-cache/
+test-results/
+
+# Données personnelles, sessions et sauvegardes (y compris hors du portable)
+data/
+credentials.json
+state.json
+state.before-*.json
+account-browsers/
+Partitions/
+DevToolsActivePort
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Résultats locaux et fichiers temporaires
+*.log
+*.tmp
+*.bak
+__pycache__/
+*.pyc
+.DS_Store
+Thumbs.db
+Desktop.ini
