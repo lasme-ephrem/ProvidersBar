@@ -10,7 +10,8 @@
     "test:desktop": "node scripts/smoke.cjs",
     "package": "node scripts/package.cjs",
     "preview": "node scripts/preview.cjs",
-    "update:portable": "node scripts/update-portable.cjs"
+    "update:portable": "node scripts/update-portable.cjs",
+    "test:mobile": "node scripts/smoke-mobile.cjs"
   },
   "devDependencies": {
     "electron": "44.2.0",
