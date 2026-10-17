@@ -1,6 +1,6 @@
 {
   "name": "providersbar",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Suivi local des usages et abonnements IA pour Windows",
   "main": "main.cjs",
@@ -8,9 +8,13 @@
     "start": "electron .",
     "test": "node --test tests/*.test.cjs",
     "test:desktop": "node scripts/smoke.cjs",
+    "test:resources:desktop": "node scripts/smoke-resource-status.cjs",
     "package": "node scripts/package.cjs",
     "preview": "node scripts/preview.cjs",
-    "update:portable": "node scripts/update-portable.cjs"
+    "update:portable": "node scripts/update-portable.cjs",
+    "test:claude:desktop": "node scripts/smoke-claude.cjs",
+    "package:release": "node scripts/package.cjs --release",
+    "verify:connections": "node scripts/verify-connections.cjs"
   },
   "devDependencies": {
     "electron": "44.2.0",
@@ -18,5 +22,8 @@
   },
   "engines": {
     "node": ">=24"
+  },
+  "dependencies": {
+    "proper-lockfile": "4.1.2"
   }
 }

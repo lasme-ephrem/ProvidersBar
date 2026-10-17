@@ -5,8 +5,11 @@ const {createSeed}=require('../lib/seed.cjs');
 const {summary}=require('../lib/domain.cjs');
 const {connectionInfo}=require('../lib/provider-catalog.cjs');
 const providerAssets=require('../assets/providers/sources.json');
-const providerExtensions={antigravity:'ico',deepseek:'ico',ollama:'png',openrouter:'png',orcarouter:'png'};
-const routes={'/':'renderer/index.html','/app.js':'renderer/app.js','/styles.css':'renderer/styles.css','/assets/icon.png':'assets/icon.png'};
+const providerExtensions={claude:'ico',antigravity:'ico',deepseek:'ico',ollama:'png',openrouter:'png',orcarouter:'png'};
+const routes={'/':'renderer/index.html','/app.js':'renderer/app.js','/styles.css':'renderer/styles.css','/theme.css':'renderer/theme.css','/theme-init.js':'renderer/theme-init.js','/assets/icon.png':'assets/icon.png'};
+routes['/lib/resource-levels.js']='lib/resource-levels.js';
+Object.assign(routes, {'/lib/usage-strategy.js':'lib/usage-strategy.js','/strategy-ui.js':'renderer/strategy-ui.js','/strategy.css':'renderer/strategy.css'});
+Object.assign(routes, {'/lib/quota-resets.js':'lib/quota-resets.js','/reset-ui.js':'renderer/reset-ui.js'});
 for(const id of Object.keys(providerAssets)){const file=`assets/providers/${id}.${providerExtensions[id]||'svg'}`;routes['/'+file]=file;}
 http.createServer(async(req,res)=>{
   const url=new URL(req.url,'http://127.0.0.1');
@@ -15,4 +18,4 @@ http.createServer(async(req,res)=>{
   }
   const file=routes[url.pathname];if(!file){res.writeHead(404);res.end('Not found');return;}
   try{const data=await fs.readFile(path.join(__dirname,'..',file));res.setHeader('Content-Type',{'html':'text/html; charset=utf-8','js':'text/javascript; charset=utf-8','css':'text/css; charset=utf-8','png':'image/png','svg':'image/svg+xml','ico':'image/x-icon'}[file.split('.').at(-1)]);res.end(data);}catch{res.writeHead(500);res.end('Preview unavailable');}
-}).listen(4317,'127.0.0.1',()=>console.log('AperÃ§u : http://127.0.0.1:4317'));
+}).listen(4317,'127.0.0.1',()=>console.log('Aperçu : http://127.0.0.1:4317'));

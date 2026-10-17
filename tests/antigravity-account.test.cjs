@@ -12,12 +12,38 @@ test('Antigravity reads four distinct quotas and matches desktop rounding, witho
  assert.equal(snapshot.resetAt,'2026-09-07T18:32:42.000Z');assert.deepEqual(snapshot.balances,[]);
  assert.ok(!JSON.stringify(snapshot).includes('private'));assert.ok(!JSON.stringify(snapshot).includes('500'));
 });
+test('Antigravity reads the installed Gemini 4 Argon weekly bucket',()=>{
+ const data=response();
+ data.response.groups.push({displayName:'Gemini 4 Argon',buckets:[{bucketId:'gemini-argon-wtu-weekly',window:'weekly',remainingFraction:.88,resetTime:'2026-10-24T12:00:00Z'}]});
+ const snapshot=parseAntigravityQuota(data);
+ const argon=snapshot.quotaWindows.find(w=>w.label==='Gemini 4 Argon · Semaine');
+ assert.deepEqual(argon,{label:'Gemini 4 Argon · Semaine',remaining:88,resetAt:'2026-10-24T12:00:00.000Z'});
+ assert.equal(snapshot.quotaWindows.length,5);
+ assert.equal(snapshot.quotaRemaining,88);
+ assert.equal(snapshot.quotaLabel,'Antigravity · Gemini 4 Argon · Semaine');
+});
 test('Unknown, missing, disabled and conflicting buckets never fabricate 100% remaining',()=>{
  for(const value of [null,undefined,NaN,Infinity,-.1,1.1,'0.5']) {const data=response();data.response.groups[0].buckets[0].remainingFraction=value;assert.throws(()=>parseAntigravityQuota(data));}
  assert.throws(()=>parseAntigravityQuota({response:{groups:[]}}));
  const data=response();data.response.groups[0].buckets[0].disabled=true;assert.equal(parseAntigravityQuota(data).quotaWindows.length,3);
  data.response.groups[1].buckets.push(data.response.groups[1].buckets[0]);assert.throws(()=>parseAntigravityQuota(data),/contradictoires/);
  const zero=response();zero.response.groups[0].buckets[0].remainingFraction=0;assert.equal(parseAntigravityQuota(zero).quotaRemaining,0);
+});
+test('Unknown new groups remain ignored while malformed Argon weekly data is rejected',()=>{
+ const data=response();
+ data.response.groups.push({displayName:'Unrecognized model group',buckets:[{bucketId:'unknown-weekly',window:'monthly',remainingFraction:1.5}]});
+ assert.equal(parseAntigravityQuota(data).quotaWindows.length,4);
+ const invalidWindow=response();invalidWindow.response.groups.push({displayName:'Gemini 4 Argon',buckets:[{bucketId:'gemini-argon-wtu-weekly',window:'5h',remainingFraction:.5}]});
+ assert.throws(()=>parseAntigravityQuota(invalidWindow),/Quota Antigravity invalide/);
+ for(const value of [NaN,Infinity,-.1,1.1,'0.5']) {
+  const invalidFraction=response();invalidFraction.response.groups.push({displayName:'Gemini 4 Argon',buckets:[{bucketId:'gemini-argon-wtu-weekly',window:'weekly',remainingFraction:value}]});
+  assert.throws(()=>parseAntigravityQuota(invalidFraction),/Quota Antigravity invalide/);
+ }
+ const invalidReset=response();invalidReset.response.groups.push({displayName:'Gemini 4 Argon',buckets:[{bucketId:'gemini-argon-wtu-weekly',window:'weekly',remainingFraction:.5,resetTime:'not-a-date'}]});
+ assert.throws(()=>parseAntigravityQuota(invalidReset),/Date de quota Antigravity invalide/);
+ const duplicate=response();duplicate.response.groups.push({displayName:'Gemini 4 Argon',buckets:[{bucketId:'gemini-argon-wtu-weekly',window:'weekly',remainingFraction:.5}]});
+ duplicate.response.groups[1].buckets.push({bucketId:'gemini-argon-wtu-weekly',window:'weekly',remainingFraction:.5});
+ assert.throws(()=>parseAntigravityQuota(duplicate),/Quotas Antigravity contradictoires/);
 });
 test('Local discovery handles a closed app and skips non-HTTP service ports without exposing local tokens',async()=>{
  await assert.rejects(fetchAntigravityQuota({discover:async()=>[]}),/Aucune CLI/);
@@ -28,9 +54,9 @@ test('Local discovery handles a closed app and skips non-HTTP service ports with
 });
 test('Adding Antigravity preserves Gemini web sessions, existing billing and historical readings',()=>{
  const state=createSeed();state.providers=state.providers.filter(p=>p.id!=='antigravity');
- const gemini=state.providers.find(p=>p.id==='gemini');Object.assign(gemini,{name:'Gemini',accountSession:{kind:'subscription-browser'},amount:109.99,snapshot:{quotaRemaining:100}});
+ state.providers.push({id:'gemini',type:'subscription'});const gemini=state.providers.find(p=>p.id==='gemini');Object.assign(gemini,{name:'Gemini',accountSession:{kind:'subscription-browser'},amount:109.99,snapshot:{quotaRemaining:100}});
  state.history.push({providerId:'gemini',quotaRemaining:100});const before=structuredClone(state);
- const result=addAntigravity(state);assert.equal(result.changed,true);assert.equal(result.state.providers.length,10);
+ const result=addAntigravity(state);assert.equal(result.changed,true);assert.equal(result.state.providers.length,11);
  assert.deepEqual(result.state.providers.find(p=>p.id==='gemini'),{...gemini,name:'Gemini web'});
  assert.equal(result.state.providers.find(p=>p.id==='antigravity').snapshot,null);
  assert.deepEqual(result.state.history,before.history);assert.deepEqual(state,before);assert.equal(addAntigravity(result.state).changed,false);

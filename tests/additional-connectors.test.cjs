@@ -20,6 +20,17 @@ test('RunInfra rejects incomplete or inconsistent amounts instead of displaying 
   }
 });
 
+test('DeepSeek rejects malformed decimal strings and duplicate currency balances', () => {
+  for (const total_balance of ['0x10', ' 12.50 ', '1e3', '']) {
+    assert.throws(() => parseResponse('deepseek', { balance_infos: [{ currency: 'USD', total_balance }] }));
+  }
+  assert.throws(() => parseResponse('deepseek', { balance_infos: [null] }));
+  assert.throws(() => parseResponse('deepseek', { balance_infos: [
+    { currency: 'USD', total_balance: '12.50' }, { currency: 'USD', total_balance: '2.00' },
+  ] }), /ambigus/);
+  assert.throws(() => parseResponse('openrouter', { data: { total_credits: '0x10', total_usage: 0 } }));
+});
+
 test('OrcaRouter API-key limits are never interpreted as wallet balances, even when plausible', () => {
   for (const amount of [100000000, 53.2, 0, '12.50', -0.2, null]) {
     assert.throws(() => parseResponse('orcarouter', { object: 'billing_subscription', hard_limit_usd: amount, total_usage: 0, access_until: 0 }), /plafond de la clé/);

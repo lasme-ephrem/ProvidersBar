@@ -1,13 +1,15 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { createSeed } = require('../lib/seed.cjs');
-const { summary, manualSnapshot, validatePatch, daysUntil, dateOnly } = require('../lib/domain.cjs');
+const { summary, manualSnapshot, validatePatch, daysUntil, dateOnly, isTracked, expireSubscriptions } = require('../lib/domain.cjs');
 const { fetchUsage, parseResponse } = require('../lib/connectors.cjs');
 
 test('Selected inventory has 10 unique services, keeping six subscription services and four APIs', () => {
   const s=createSeed();
+  assert.equal(s.settings.theme,'light');
   assert.equal(new Set(s.providers.map(p=>p.id)).size,10);
   assert.equal(s.providers.filter(p=>p.type==='subscription').length,6);
+  assert.equal(s.providers.find(p=>p.id==='claude').plan,'Claude Pro');
   assert.deepEqual(s.providers.filter(p=>p.type==='api').map(p=>p.id),['openrouter','deepseek','runinfra','orcarouter']);
   assert.ok(s.providers.every(p=>p.snapshot===null&&p.billingCycle==='unknown'));
   for(const id of ['ollama']) assert.equal(s.providers.find(p=>p.id===id).renewalDate,null);
@@ -32,6 +34,33 @@ test('Provider updates only accept allowed fields and real calendar dates',()=>{
   assert.throws(()=>validatePatch({amount:-1}));assert.throws(()=>validatePatch({currency:'XYZ'}));
   assert.throws(()=>dateOnly('2026-02-30'));assert.equal(dateOnly('2028-02-29'),'2028-02-29');
   assert.equal(daysUntil('2026-09-08',new Date(2026,8,7,23,59)),1);
+});
+test('Expired subscription is excluded without losing its historic price or renewal date',()=>{
+  const p={type:'subscription',active:true,subscriptionStatus:'expired',amount:18,currency:'USD',billingCycle:'monthly',renewalDate:'2026-09-25'};
+  assert.equal(isTracked(p),false);
+  assert.deepEqual(summary([p]),{monthly:{},unpriced:0});
+  assert.deepEqual(validatePatch({subscriptionStatus:'expired',statusMessage:'  Renouvellement indisponible.  '}),{subscriptionStatus:'expired',statusMessage:'Renouvellement indisponible.'});
+  assert.throws(()=>validatePatch({subscriptionStatus:'ended'}),/Statut/);
+  assert.throws(()=>validatePatch({statusMessage:'x'.repeat(501)}),/Message/);
+  assert.equal(isTracked({...p,active:true,subscriptionStatus:'paused'}),false);
+  assert.equal(isTracked({...p,active:true,subscriptionStatus:'active'}),true);
+});
+
+test('Passed subscription dates expire once; Ollama keeps Free tracking and its purchased credit amount',()=>{
+  const paid={id:'openai',type:'subscription',active:true,subscriptionStatus:'active',amount:20,currency:'USD',billingCycle:'monthly',renewalDate:'2026-09-28'};
+  const ollama={id:'ollama',type:'subscription',active:true,subscriptionStatus:'active',amount:18,currency:'USD',billingCycle:'monthly',renewalDate:'2026-09-28',snapshot:{source:'api',connectorVersion:'ollama-monthly-credits-v1',balances:[{currency:'USD',remaining:47.5}],usageCredits:{currency:'USD',remaining:2.98},quotaRemaining:79,resetAt:'2026-10-07T12:00:00Z',details:[{label:'Crédits inclus',amount:60,currency:'USD'}]}};
+  const rows=[paid,ollama];
+  assert.equal(expireSubscriptions(rows,new Date(2026,8,28,23,59)),false);
+  assert.equal(expireSubscriptions(rows,new Date(2026,8,29,0,1)),true);
+  assert.equal(paid.subscriptionStatus,'expired');assert.equal(paid.active,false);
+  assert.equal(ollama.subscriptionStatus,'expired');assert.equal(ollama.active,true);
+  assert.equal(isTracked(ollama),true);
+  assert.deepEqual(summary(rows),{monthly:{},unpriced:0});
+  assert.deepEqual(ollama.snapshot.balances,[]);
+  assert.equal(ollama.snapshot.quotaRemaining,null);
+  assert.equal(ollama.snapshot.usageCredits.remaining,2.98);
+  assert.equal(expireSubscriptions(rows,new Date(2026,8,30)),false);
+  assert.deepEqual(validatePatch({subscriptionStatus:'active',confirmRenewal:true,renewalDate:'2026-10-29'}),{subscriptionStatus:'active',confirmRenewal:true,renewalDate:'2026-10-29'});
 });
 test('OpenRouter balance is credits minus usage, including depleted balances',()=>{
   assert.deepEqual(parseResponse('openrouter',{data:{total_credits:100.5,total_usage:25.75}}).balances,[{currency:'USD',remaining:74.75,total:100.5,used:25.75}]);

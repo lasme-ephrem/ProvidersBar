@@ -31,3 +31,43 @@ test('Official login callback verifies limits automatically without requiring br
   authenticated=true;await callback({success:true});assert.equal(saved,true);assert.equal(c.info().status,'connected');
   await c.close();
 });
+
+test('Concurrent opens share one login flow', async () => {
+  let factories = 0, starts = 0, externalOpens = 0;
+  const c = createOpenAiAccount({ onChange() {}, onResult: async () => {}, openExternal: async () => { externalOpens++; },
+    rpcFactory: async () => {
+      factories++;
+      return { close() {}, onLogin() {}, request: async method => {
+        if (method === 'account/read') return { account: null };
+        if (method === 'account/login/start') { starts++; return { authUrl: 'https://auth.openai.com/authorize' }; }
+        assert.fail(method);
+      } };
+    } });
+  assert.deepEqual(await Promise.all([c.open(), c.open()]), [true, true]);
+  assert.equal(factories, 2); assert.equal(starts, 1); assert.equal(externalOpens, 1);
+  await c.close();
+});
+
+test('Disconnect cancels a login while its app-server is starting', async () => {
+  let resolveLoginRpc, loginStarted;
+  const started = new Promise(resolve => { loginStarted = resolve; });
+  let factories = 0, closedLoginRpcs = 0, starts = 0;
+  const c = createOpenAiAccount({ onChange() {}, onResult: async () => {}, openExternal: async () => {},
+    rpcFactory: async () => {
+      factories++;
+      if (factories === 1) return { close() {}, request: async method => {
+        assert.equal(method, 'account/read'); return { account: null };
+      } };
+      loginStarted();
+      return await new Promise(resolve => { resolveLoginRpc = resolve; });
+    } });
+  const opening = c.open();
+  await started;
+  await c.disconnect();
+  resolveLoginRpc({ close() { closedLoginRpcs++; }, onLogin() {}, request: async method => {
+    if (method === 'account/login/start') starts++;
+    assert.fail(`Unexpected RPC after disconnect: ${method}`);
+  } });
+  assert.equal(await opening, false);
+  assert.equal(closedLoginRpcs, 1); assert.equal(starts, 0); assert.equal(c.info().status, 'idle');
+});

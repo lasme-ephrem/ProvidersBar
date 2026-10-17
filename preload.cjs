@@ -1,8 +1,10 @@
 const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('providersBar', {
   getState: () => ipcRenderer.invoke('state:get'),
+  getHistory: () => ipcRenderer.invoke('history:get'),
   updateProvider: (id, patch) => ipcRenderer.invoke('provider:update', id, patch),
   saveManual: (id, input) => ipcRenderer.invoke('provider:manual', id, input),
+  saveResets: (id, input) => ipcRenderer.invoke('provider:resets', id, input),
   connect: (id, key) => ipcRenderer.invoke('provider:connect', id, key),
   openOrcaAccount: () => ipcRenderer.invoke('orca:open-account'),
   verifyOrcaAccount: () => ipcRenderer.invoke('orca:verify-account'),
@@ -11,11 +13,14 @@ contextBridge.exposeInMainWorld('providersBar', {
   verifyOllamaAccount: () => ipcRenderer.invoke('ollama:verify-account'),
   openAccount: id => ipcRenderer.invoke('account:open', id),
   verifyAccount: id => ipcRenderer.invoke('account:verify', id),
+  enableClaudeLive: () => ipcRenderer.invoke('claude:enable-live'),
   disconnect: id => ipcRenderer.invoke('provider:disconnect', id),
   syncAll: () => ipcRenderer.invoke('sync:all'),
   syncOne: id => ipcRenderer.invoke('sync:one', id),
   updateSettings: patch => ipcRenderer.invoke('settings:update', patch),
+  updateStrategy: input => ipcRenderer.invoke('strategy:update', input),
   exportData: () => ipcRenderer.invoke('export'),
   showMain: () => ipcRenderer.invoke('window:main'),
+  fitQuick: height => ipcRenderer.invoke('window:quick-size', height),
   onChange: callback => { const listener = (_event, data) => callback(data); ipcRenderer.on('state:changed', listener); return () => ipcRenderer.removeListener('state:changed', listener); },
 });
