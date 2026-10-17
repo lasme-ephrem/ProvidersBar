@@ -258,6 +258,27 @@ test('Grok and Z.ai human checks are visible during manual verification and clos
   await controller.closeAll();
 });
 
+test('Background Grok refresh waits for its known Bot limit; a shared pool switch can drop the separate limit', async () => {
+  const weekly = { label: 'Semaine', remaining: 92, resetAt: null };
+  const bot = { label: 'Grok Bot · Semaine', remaining: 100, resetAt: null };
+  let reads = 0, saved;
+  const controller = createSubscriptionController({ dataDir: 'fixture', wait: async () => {}, onChange() {}, deleteProfile: async () => {},
+    getPreviousSnapshot: () => ({ usageKind: 'supergrok-legacy', quotaWindows: [weekly, bot] }),
+    onResult: async (_id, snapshot) => { saved = snapshot; },
+    openBrowser: async () => ({ isOpen: () => true, close: async () => {}, readSubscriptionPage: async () => ({ authenticated: true,
+      usageKind: reads >= 2 ? 'x-subscription-shared' : 'supergrok-legacy', windows: ++reads === 1 || reads > 2 ? [weekly] : [weekly, bot] }) }),
+  });
+  try {
+    await controller.read('grok', { background: true });
+    assert.equal(reads, 2);
+    assert.deepEqual(saved.quotaWindows.map(w => w.label), ['Semaine', 'Grok Bot · Semaine']);
+    await controller.read('grok', { background: true });
+    assert.equal(reads, 3);
+    assert.equal(saved.usageKind, 'x-subscription-shared');
+    assert.equal(saved.quotaWindows.length, 1);
+  } finally { await controller.closeAll(); }
+});
+
 test('An automatic refresh with valid authentication and missing quotas retains the session and closes its temporary browser', async () => {
   let closed = 0, result;
   const controller = createSubscriptionController({ dataDir: 'test-only', wait: async () => {}, onChange() {}, deleteProfile: async () => {},

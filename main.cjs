@@ -115,6 +115,7 @@ const announced = new Set();
 const uiPath = path.join(__dirname, 'renderer', 'index.html');
 const uiUrl = pathToFileURL(uiPath).href;
 const subscriptionAccounts = createSubscriptionController({
+  getPreviousSnapshot: id => state?.providers.find(p => p.id === id)?.snapshot,
   dataDir, openBrowser: (...args) => accountBrowser.openSubscriptionBrowser(...args), deleteProfile: deleteAccountProfile, onChange: () => { if (state) broadcast(); },
   onResult: async (id, snapshot, message) => {
     const p = provider(id);

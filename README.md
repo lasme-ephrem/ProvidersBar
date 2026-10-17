@@ -2,7 +2,7 @@
 
 Application desktop Windows pour suivre les abonnements, quotas et crédits de dix fournisseurs IA. Un tableau de bord et un widget dans la zone de notification regroupent les ressources restantes, leur fraîcheur et leurs dates de réinitialisation.
 
-**Version 0.2.0 — octobre 2026 :** nouveau dashboard Grok et pool partagé avec Grok Bot/Cursor, quota hebdomadaire Gemini 4 Argon dans Antigravity, connexions renforcées et mise à jour du portable sans conserver les anciennes sources applicatives.
+**Version 0.2.1 — octobre 2026 :** correctif des ouvertures répétées de Grok pendant l’actualisation automatique. Inclut Grok Bot, le quota hebdomadaire Gemini 4 Argon et les améliorations de connexion de la version 0.2.0.
 
 ## Utiliser l’application
 
@@ -42,7 +42,7 @@ Les anciens forfaits SuperGrok restent distincts : le panneau Settings → Usage
 
 Pour la première connexion web, se connecter dans la fenêtre Chrome ou Edge dédiée, puis **la fermer**. ProvidersBar vérifie alors la session. **Vérifier maintenant** ouvre une fenêtre visible : laisser le lecteur terminer et effectuer soi-même un éventuel contrôle humain. Une session valide sans quota lisible conserve le dernier relevé avec un avertissement.
 
-La lecture automatique Grok utilise une fenêtre Chrome ou Edge normale, démarrée réduite puis fermée après lecture : le portail actuel ne rend pas ses réglages correctement en mode sans fenêtre. Aucun contrôle humain n’est contourné.
+La lecture automatique Grok fonctionne sans fenêtre Chrome ou Edge, y compris au démarrage. Si le dashboard redirige un ancien compte vers une connexion Cursor, le lecteur essaie une seule fois le panneau d’utilisation officiel Grok, sans inspecter la page externe. Seules les actions explicites **Ouvrir mon compte** et **Vérifier maintenant** peuvent ouvrir une fenêtre visible. Aucun contrôle humain n’est contourné.
 
 ### Antigravity et Argon
 
@@ -115,7 +115,7 @@ npm run test:claude:desktop
 npm run package:release
 ```
 
-La distribution propre se trouve dans `dist/ProvidersBar-0.2.0-win32-x64/`. La commande refuse un dossier de release déjà existant. Le portable personnel reste dans `dist/ProvidersBar-win32-x64/`, à côté de ses données.
+La distribution propre se trouve dans `dist/ProvidersBar-0.2.1-win32-x64/`. La commande refuse un dossier de release déjà existant. Le portable personnel reste dans `dist/ProvidersBar-win32-x64/`, à côté de ses données.
 
 Les ressources applicatives sont préparées dans un dossier temporaire, puis remplacées ensemble : les fichiers supprimés des sources ne restent pas dans l’installation. `npm run update:portable` conserve `data/` et les sessions, ferme l’ancien processus s’il est joignable en diagnostic, puis nécessite de relancer l’application. Sinon, la quitter manuellement avant la mise à jour. Le packaging inclut les dépendances de production et leurs notices.
 

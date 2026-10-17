@@ -52,4 +52,6 @@ Après mise à jour, lancer le portable avec `--remote-debugging-port=0 --remote
 
 Le panneau Grok observé le 17 octobre 2026 présente une limite SuperGrok et une `Weekly Grok Bot Limit` distincte. Les associer par section ; ne jamais convertir tous les compteurs animés en une seule semaine, ce qui crée de faux conflits. Les nouveaux forfaits X Subscription utilisent au contraire un pool partagé. Pour Antigravity, le bucket Argon observé est `gemini-argon-wtu-weekly`, période `weekly`.
 
+Depuis 0.2.1, les lectures automatiques Grok restent strictement sans fenêtre. Ne pas réintroduire une fenêtre réduite comme solution à un dashboard vide : certains anciens comptes sont redirigés vers l’authentification Cursor, alors que le panneau Grok `/?_s=usage` reste lisible sans fenêtre. Le lecteur tente ce parcours officiel une seule fois et n’inspecte jamais le contenu de l’origine externe. Le test `account-browser.test.cjs` couvre plusieurs actualisations successives et la visibilité conservée pour les actions manuelles.
+
 Les scripts de packaging et de mise à jour incluent les dépendances de production (`proper-lockfile` et ses dépendances) avec leurs notices, indispensables au renouvellement Claude dans le portable.
