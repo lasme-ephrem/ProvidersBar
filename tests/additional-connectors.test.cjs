@@ -9,26 +9,33 @@ test('RunInfra converts integer cents without subtracting holds twice or using a
   assert.deepEqual(result.balances, [{ currency: 'USD', remaining: 54.76 }]);
   assert.deepEqual(result.details.map(d => d.amount), [54.76, 0.34, 15]);
   assert.equal(result.updatedAt, credits.as_of);
-  const depleted = parseResponse('runinfra', { ...credits, balance_cents: -25, available_cents: 0 });
-  assert.equal(depleted.balances[0].remaining, -0.25);
-  assert.equal(depleted.details[0].amount, 0);
+  const zero = parseResponse('runinfra', { ...credits, balance_cents: 0, available_cents: 0, held_cents: 0 });
+  assert.equal(zero.balances[0].remaining, 0);
 });
 
-test('RunInfra rejects incomplete or inconsistent amounts instead of displaying zero', () => {
-  for (const patch of [{ balance_cents: null }, { balance_cents: 4.5 }, { held_cents: -1 }, { available_cents: 5442 }, { currency: 'eur' }, { object: 'other' }, { as_of: 'bad' }, { period: { spent_cents: -2 } }]) {
+test('RunInfra rejects incomplete, negative or inconsistent amounts instead of displaying them', () => {
+  for (const patch of [{ balance_cents: null }, { balance_cents: 4.5 }, { balance_cents: -25 }, { held_cents: -1 }, { available_cents: 5442 }, { currency: 'eur' }, { object: 'other' }, { as_of: 'bad' }, { period: { spent_cents: -2 } }]) {
     assert.throws(() => parseResponse('runinfra', { ...credits, ...patch }));
   }
+  // A date without timezone is ambiguous and must be refused (not interpreted locally).
+  assert.throws(() => parseResponse('runinfra', { ...credits, as_of: '2026-08-27T10:41:12' }), /fuseau/);
 });
 
-test('DeepSeek rejects malformed decimal strings and duplicate currency balances', () => {
+test('DeepSeek rejects malformed decimal strings, negative balances and duplicate currencies', () => {
   for (const total_balance of ['0x10', ' 12.50 ', '1e3', '']) {
     assert.throws(() => parseResponse('deepseek', { balance_infos: [{ currency: 'USD', total_balance }] }));
   }
   assert.throws(() => parseResponse('deepseek', { balance_infos: [null] }));
+  assert.throws(() => parseResponse('deepseek', { balance_infos: [{ currency: 'USD', total_balance: '-12.50' }] }), /négatif/);
   assert.throws(() => parseResponse('deepseek', { balance_infos: [
     { currency: 'USD', total_balance: '12.50' }, { currency: 'USD', total_balance: '2.00' },
   ] }), /ambigus/);
   assert.throws(() => parseResponse('openrouter', { data: { total_credits: '0x10', total_usage: 0 } }));
+});
+
+test('OpenRouter never returns a negative remaining balance', () => {
+  assert.deepEqual(parseResponse('openrouter', { data: { total_credits: 10, total_usage: 4 } }).balances, [{ currency: 'USD', remaining: 6, total: 10, used: 4 }]);
+  assert.throws(() => parseResponse('openrouter', { data: { total_credits: 4, total_usage: 10 } }), /incohérent/);
 });
 
 test('OrcaRouter API-key limits are never interpreted as wallet balances, even when plausible', () => {

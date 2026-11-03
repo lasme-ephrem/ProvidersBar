@@ -117,3 +117,20 @@ test('resource replacement rejects a portable output outside the workspace dist 
     await assert.rejects(fs.access(outside), { code: 'ENOENT' });
   });
 });
+
+test('transparency documents are shipped when present and never required for packaging', async () => {
+  await withWorkspace(async (root, { portable }) => {
+    // Absents : la fabrication réussit (comportement historique inchangé).
+    await updateAppResources(root, portable);
+    const app = path.join(portable, 'resources', 'app');
+    await assert.rejects(fs.access(path.join(app, 'PRIVACY.md')), { code: 'ENOENT' });
+    await assert.rejects(fs.access(path.join(app, 'SECURITY.md')), { code: 'ENOENT' });
+
+    // Présents : ils sont copiés dans l'arbre applicatif.
+    await write(root, 'PRIVACY.md', '# Confidentialité\n');
+    await write(root, 'SECURITY.md', '# Sécurité\n');
+    await updateAppResources(root, portable);
+    assert.equal(await fs.readFile(path.join(app, 'PRIVACY.md'), 'utf8'), '# Confidentialité\n');
+    assert.equal(await fs.readFile(path.join(app, 'SECURITY.md'), 'utf8'), '# Sécurité\n');
+  });
+});

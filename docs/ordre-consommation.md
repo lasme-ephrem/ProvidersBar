@@ -1,6 +1,6 @@
 # Proposition d’ordre de consommation
 
-État de la recherche : 12 septembre 2026. Cette méthode est intégrée au dashboard et au widget, sous forme de recommandations uniquement. Les modèles accessibles et les routes retenues se règlent dans l’application. Aucun appel de génération payant n’a été effectué pour cette comparaison.
+État de la recherche : 12 septembre 2026, complété en octobre 2026 par le quota hebdomadaire Gemini 4 Argon. Cette méthode est intégrée au dashboard et au widget, sous forme de recommandations uniquement. Les modèles accessibles et les routes retenues se règlent dans l’application. Aucun appel de génération payant n’a été effectué pour cette comparaison.
 
 ## Principe
 
@@ -29,6 +29,7 @@ L’ordre ci-dessous reste conditionné aux modèles effectivement proposés dan
 | 3 | Z.ai et Ollama | GLM-5.3 ; départager ces deux accès par le renouvellement connu de leurs quotas. |
 | 4 | Grok | Grok 4.6 si inclus dans le compte. Kimi K3 via Ollama est une autre option de niveau comparable, dans le même portefeuille Ollama. |
 | 5 | Antigravity, quota Gemini | Gemini 3.8 Flash, avec le niveau de raisonnement adapté au classement retenu. |
+| 6 | Antigravity, quota Gemini 4 Argon | Réserve **hebdomadaire indépendante** de Gemini et de Claude/GPT ; à ouvrir quand la réserve Gemini du même compte est épuisée ou proche de l’être. Aucun score de qualité public n’est inventé pour Argon : il est classé après les modèles dont le score est connu. |
 | Avant les API | Antigravity, quota Claude/GPT | Utiliser aussi ce quota indépendant si les accès mieux classés sont épuisés. Le catalogue consulté comprend notamment Claude Opus 4.6 Thinking ; ne pas le confondre avec une génération Claude plus récente. |
 
 Repères de qualité consultés : Astra max 53, GLM-5.3 max 45, Grok 4.6 high 44, Kimi K3 max 44 et Gemini 3.8 Flash high 41 sur l’Intelligence Index v4.3. Ce sont des résultats d’évaluation à des réglages précis, pas une garantie de qualité universelle ni de performance identique dans les interfaces d’abonnement. [Évaluateur original : Artificial Analysis](https://artificialanalysis.ai/leaderboards/models).
@@ -42,7 +43,7 @@ Les offres publiques confirment plusieurs possibilités intéressantes : [Ollama
 - Deux modèles utilisant le même quota Codex ne constituent pas deux réserves indépendantes.
 - GLM-5.3 et GLM-5.3 Flash sur Z.ai partagent les crédits du plan.
 - Les différents modèles Ollama consomment le même portefeuille ; seuls les crédits inclus dans l’abonnement passent avant les API. Une recharge supplémentaire est une dépense distincte.
-- Antigravity possède deux groupes à suivre : Gemini et Claude/GPT, chacun avec ses fenêtres applicables.
+- Antigravity possède **trois réserves indépendantes** à suivre : Gemini, Claude/GPT et Gemini 4 Argon (hebdomadaire), chacune avec ses fenêtres applicables. Épuiser l’une n’épuise pas les autres.
 - Lorsque le quota d’un meilleur abonnement se renouvelle, il reprend sa priorité.
 
 ## API : sélection principale et tarifs vérifiés
@@ -83,7 +84,7 @@ MiniMax M3 et Step3.7 Flash restent des alternatives secondaires plutôt que des
 2. Écarter les accès indisponibles, sans solde suffisant ou incompatibles avec les conditions acceptées. Signaler les informations non vérifiées.
 3. Choisir d’abord parmi les abonnements utilisables, par qualité puis prochain renouvellement connu.
 4. Indépendamment des recommandations, afficher les fournisseurs API disponibles selon leurs crédits USD restants décroissants, sans utiliser le prix des modèles comme critère. Sans abonnement utilisable, ne proposer aucune API dans la file d’usage.
-5. Estimer le coût à partir d’un même profil global d’usage : entrée, cache lu/écrit, sortie facturée, raisonnement facturé et frais d’outils applicables. Les prix longs contextes et horaires peuvent modifier l’ordre. Ne pas compter deux fois le raisonnement déjà inclus dans la sortie facturée.
+5. Estimer le coût à partir d’un même profil global d’usage : entrée sans cache, **lecture de cache** (`cachePercent`) et sortie facturée. L’écriture de cache et les frais d’outils ne sont pas modélisés dans le profil actuel ; ils doivent être signalés comme non pris en compte plutôt que devinés. Les prix longs contextes et horaires peuvent modifier l’ordre. Ne pas compter deux fois le raisonnement déjà inclus dans la sortie facturée.
 6. Distinguer une erreur propre à un modèle d’une panne de fournisseur ou d’un portefeuille épuisé : dans les deux derniers cas, changer de modèle sur le même accès ne résout pas le problème.
 7. Réévaluer après un renouvellement, une panne, un changement de prix ou de solde. Ne pas organiser une rotation artificielle pour consommer tous les modèles.
 

@@ -354,3 +354,169 @@ test('Concurrent opening/verification creates one browser and one measurement; d
   assert.deepEqual(events, ['opened', 'closed', 'deleted']);
   await c.closeAll();
 });
+
+// ---------------------------------------------------------------------------
+// Courses entre rafraîchissement de fond et vérification interactive.
+// ---------------------------------------------------------------------------
+const nextTick = () => new Promise(resolve => setImmediate(resolve));
+
+test('Une vérification interactive n’est jamais servie par un travail de fond en cours', async () => {
+  let releaseBackground;
+  const backgroundGate = new Promise(resolve => { releaseBackground = resolve; });
+  const opens = [], saved = [];
+  let activeBrowsers = 0, maxBrowsers = 0;
+  const controller = createSubscriptionController({ dataDir: 'test-only', wait: async () => {}, onChange() {}, deleteProfile: async () => {},
+    onResult: async (_id, snapshot) => saved.push(snapshot?.quotaRemaining ?? null),
+    openBrowser: async (_dir, _id, headless, options = {}) => {
+      const interactive = options.interactive === true;
+      opens.push({ headless, interactive });
+      activeBrowsers++; maxBrowsers = Math.max(maxBrowsers, activeBrowsers);
+      let open = true;
+      return {
+        isOpen: () => open,
+        close: async () => { if (open) { open = false; activeBrowsers--; } },
+        readSubscriptionPage: async () => {
+          if (!interactive) { await backgroundGate; return { authenticated: true, windows: [{ label: 'Semaine', remaining: 10, resetAt: null }] }; }
+          return { authenticated: true, windows: [{ label: 'Semaine', remaining: 90, resetAt: null }] };
+        },
+      };
+    } });
+  try {
+    const background = controller.read('grok', { background: true });
+    await nextTick();
+    assert.deepEqual(opens, [{ headless: true, interactive: false }]);
+    let interactiveDone = false;
+    const interactive = controller.read('grok', { background: true, interactive: true }).then(snapshot => { interactiveDone = true; return snapshot; });
+    await nextTick();
+    // La demande interactive n'est pas servie par le relevé de fond : elle attend.
+    assert.equal(interactiveDone, false);
+    assert.deepEqual(opens, [{ headless: true, interactive: false }], 'aucun second Chrome tant que le fond tourne');
+    releaseBackground();
+    await background;
+    const snapshot = await interactive;
+    assert.equal(interactiveDone, true);
+    assert.equal(snapshot.quotaRemaining, 90, 'le relevé interactif doit être réellement relu');
+    assert.equal(maxBrowsers, 1, 'jamais deux navigateurs pour le même profil');
+    assert.deepEqual(opens, [{ headless: true, interactive: false }, { headless: true, interactive: true }]);
+    assert.deepEqual(saved, [10, 90]);
+  } finally { await controller.closeAll(); }
+});
+
+test('Deux clics « Vérifier maintenant » ne lancent qu’une passe interactive, rejointe par le fond', async () => {
+  let releaseBackground, releaseInteractive;
+  const backgroundGate = new Promise(resolve => { releaseBackground = resolve; });
+  const interactiveGate = new Promise(resolve => { releaseInteractive = resolve; });
+  const opens = [];
+  const controller = createSubscriptionController({ dataDir: 'test-only', wait: async () => {}, onChange() {}, deleteProfile: async () => {}, onResult: async () => {},
+    openBrowser: async (_dir, _id, headless, options = {}) => {
+      const interactive = options.interactive === true;
+      opens.push({ headless, interactive });
+      let open = true;
+      return { isOpen: () => open, close: async () => { open = false; }, readSubscriptionPage: async () => {
+        if (!interactive) { await backgroundGate; return { authenticated: true, windows: [{ label: 'Semaine', remaining: 10, resetAt: null }] }; }
+        await interactiveGate;
+        return { authenticated: true, windows: [{ label: 'Semaine', remaining: 90, resetAt: null }] };
+      } };
+    } });
+  try {
+    const background = controller.read('grok', { background: true });
+    await nextTick();
+    const first = controller.read('grok', { background: true, interactive: true });
+    const second = controller.read('grok', { background: true, interactive: true });
+    assert.equal(opens.length, 1);
+    releaseBackground();
+    await background;
+    await nextTick();
+    assert.deepEqual(opens, [{ headless: true, interactive: false }, { headless: true, interactive: true }], 'une seule passe interactive pour deux clics');
+    // Un rafraîchissement de fond arrivé pendant la vérification la rejoint.
+    const joined = controller.read('grok', { background: true });
+    releaseInteractive();
+    const [a, b] = await Promise.all([first, second]);
+    assert.equal(a.quotaRemaining, 90);
+    assert.equal(b.quotaRemaining, 90);
+    assert.equal((await joined).quotaRemaining, 90);
+    assert.equal(opens.length, 2, 'aucun troisième navigateur');
+  } finally { await controller.closeAll(); }
+});
+
+test('Des rafraîchissements simultanés ne lancent qu’un navigateur par fournisseur', async () => {
+  let launches = 0, active = 0, maxActive = 0;
+  const controller = createSubscriptionController({ dataDir: 'test-only', wait: async () => {}, onChange() {}, deleteProfile: async () => {}, onResult: async () => {},
+    openBrowser: async () => {
+      launches++; active++; maxActive = Math.max(maxActive, active);
+      let open = true;
+      return { isOpen: () => open, close: async () => { if (open) { open = false; active--; } },
+        readSubscriptionPage: async () => { await new Promise(resolve => setTimeout(resolve, 10)); return { authenticated: true, windows: [{ label: 'Semaine', remaining: 55, resetAt: null }] }; } };
+    } });
+  try {
+    const results = await Promise.all([1, 2, 3].map(() => controller.read('grok', { background: true })));
+    assert.equal(launches, 1, 'une seule mesure pour des demandes simultanées');
+    assert.equal(maxActive, 1);
+    assert.ok(results.every(snapshot => snapshot?.quotaRemaining === 55));
+  } finally { await controller.closeAll(); }
+});
+
+test('Une vérification interactive reste possible après l’échec du fond qui l’a précédée', async () => {
+  let attempts = 0;
+  const statuses = [];
+  const controller = createSubscriptionController({ dataDir: 'test-only', wait: async () => {}, onChange() { statuses.push(controller.info('zai').status); },
+    deleteProfile: async () => {}, onResult: async () => {}, onFailure: async () => {},
+    openBrowser: async (_dir, _id, _headless, options = {}) => {
+      const interactive = options.interactive === true;
+      attempts++;
+      let open = true;
+      return { isOpen: () => open, close: async () => { open = false; }, readSubscriptionPage: async () => {
+        if (!interactive) throw Object.assign(new Error('Session Z.ai absente ou expirée.'), { code: 'ACCOUNT_SIGNIN' });
+        return { authenticated: true, windows: [{ label: 'Semaine', remaining: 33, resetAt: null }] };
+      } };
+    } });
+  try {
+    const background = controller.read('zai', { background: true }).catch(() => {});
+    const interactive = controller.read('zai', { background: true, interactive: true });
+    await background;
+    const snapshot = await interactive;
+    assert.equal(snapshot.quotaRemaining, 33);
+    assert.equal(attempts, 2, 'le fond a échoué puis l’interactif a relancé une passe');
+    assert.ok(statuses.includes('error'));
+  } finally { await controller.closeAll(); }
+});
+
+test('Ouvrir la connexion pendant une file interactive ne bloque pas et n’ouvre que deux navigateurs', async () => {
+  const opens = [];
+  let releaseBackground;
+  const backgroundGate = new Promise(resolve => { releaseBackground = resolve; });
+  const controller = createSubscriptionController({ dataDir: 'test-only', wait: async () => {}, onChange() {}, deleteProfile: async () => {}, onResult: async () => {},
+    openBrowser: async (_dir, _id, headless) => {
+      opens.push({ headless });
+      let open = true;
+      return {
+        isOpen: () => open,
+        phase: () => 'login',
+        onReady() {},
+        close: async () => { open = false; },
+        readSubscriptionPage: async ({ signal, interactive: readingInteractive } = {}) => {
+          if (!readingInteractive) {
+            if (signal?.aborted) throw new Error('annulé');
+            await new Promise((resolve, reject) => {
+              backgroundGate.then(resolve);
+              signal?.addEventListener('abort', () => reject(new Error('annulé')), { once: true });
+            });
+            return { authenticated: false, windows: [] };
+          }
+          return { authenticated: true, windows: [{ label: 'Semaine', remaining: 77, resetAt: null }] };
+        },
+      };
+    } });
+  try {
+    controller.read('grok', { background: true }).catch(() => {});
+    await nextTick();
+    const interactive = controller.read('grok', { background: true, interactive: true });
+    const opened = await controller.open('grok');
+    assert.equal(opened, true);
+    releaseBackground();
+    const snapshot = await Promise.race([interactive, new Promise((_resolve, reject) => setTimeout(() => reject(new Error('interblocage')), 3000))]);
+    assert.equal(snapshot.quotaRemaining, 77);
+    assert.deepEqual(opens, [{ headless: true }, { headless: false }]);
+    assert.equal(opens.filter(entry => entry.headless === false).length, 1);
+  } finally { await controller.closeAll(); }
+});

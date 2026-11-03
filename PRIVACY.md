@@ -1,0 +1,205 @@
+# Confidentialité — ProvidersBar 0.3.0
+
+ProvidersBar est une application **locale pour Windows x64**. Elle ne dispose
+d'aucun serveur, d'aucun compte ProvidersBar et d'aucune télémétrie : les données
+décrites ici restent sur l'appareil de l'utilisateur, dans le dossier de données
+de l'application.
+
+Ce document décrit ce que l'application traite réellement, où ces données sont
+stockées, comment elles sont protégées, et comment les consulter ou les effacer.
+Il ne constitue pas une certification de conformité juridique (voir
+[Limites et transparence](#limites-et-transparence)).
+
+## 1. Données traitées
+
+| Donnée | Contenu | Origine |
+| --- | --- | --- |
+| Inventaire des services | Nom, type (abonnement ou API), tarif, devise, périodicité, date d'échéance, notes libres, favori, état actif/expiré | Saisie de l'utilisateur, complétée par les migrations de l'application |
+| Historique des relevés | Jusqu'à **20 000 relevés** (identifiant, fournisseur, horodatage, soldes par devise, pourcentages de quota, dates de remise à zéro) | Lectures fournisseurs et relevés manuels |
+| Réglages | Actualisation automatique, notifications, seuil de solde bas, thème clair/sombre/système | Saisie de l'utilisateur |
+| Stratégie de consommation | Profil de coût (tokens), modèles choisis par réserve, exclusions de routes API | Saisie de l'utilisateur |
+| Clés API | Clés OpenRouter, DeepSeek et RunInfra, **chiffrées** (voir §3) | Saisie de l'utilisateur |
+| Sessions de connexion aux comptes | Profils Chrome/Edge dédiés et partitions Electron (`persist:ollama-account`, `persist:orcarouter-account`) : cookies de session, stockage local des portails fournisseurs | Connexion de l'utilisateur sur les sites officiels |
+| Identifiants de compte pseudonymes | Pour OpenAI : empreinte SHA-256 de l'adresse e-mail du compte Codex (jamais l'adresse en clair). Pour OrcaRouter : identifiants **numériques** de compte et d'espace de travail. | Réponses des services officiels |
+| Cooldowns API | Empreintes SHA-256 de clés API et échéance de reprise après une réponse HTTP 429 (plafond 100 entrées) | Réponses des fournisseurs |
+| Relevé local Claude Desktop | Deux pourcentages lus dans `plan-usage-history.json` du profil Claude Desktop local | Fichier local de Claude Desktop |
+| Jetons Claude Code | Jetons OAuth lus **en mémoire** depuis le fichier officiel de Claude Code, jamais copiés dans ProvidersBar | Fichier local `~/.claude/.credentials.json` |
+
+Aucune conversation, aucun contenu de prompt, aucun mot de passe et aucun
+message ne sont lus ou conservés. Les lecteurs de comptes n'extraient que des
+pourcentages, des soldes, des libellés de limite bornés et des dates.
+
+## 2. Où sont stockées les données
+
+| Mode d'installation | Dossier de données |
+| --- | --- |
+| Portable personnel | `dist/ProvidersBar-win32-x64/data/` (à côté de l'exécutable) |
+| Développement | `.local/` |
+| Choix explicite | dossier indiqué par la variable d'environnement `PROVIDERSBAR_DATA_DIR` |
+
+Ce dossier contient notamment :
+
+- `state.json` : inventaire, réglages, stratégie, cooldowns et historique ;
+- `credentials.json` : clés API chiffrées (aucune clé en clair) ;
+- `account-browsers/<fournisseur>/` : profils Chrome/Edge dédiés aux comptes web ;
+- `Partitions/` : sessions Electron persistantes (Ollama, OrcaRouter) ;
+- `temporary-account-browsers/` : profils temporaires de lecture, purgés au démarrage ;
+- `state.before-*.json` : sauvegardes de migration, limitées aux **deux plus récentes** par la purge de démarrage.
+
+`state.json` et l'historique **ne sont pas chiffrés** : leur protection repose sur
+le contrôle d'accès du système de fichiers (voir §3) et sur la session Windows.
+Il ne faut jamais partager ni synchroniser ce dossier.
+
+## 3. Protection des données locales
+
+- **Clés API** : chiffrées par Electron `safeStorage`, qui s'appuie sur Windows
+  DPAPI et lie le chiffrement au compte Windows courant. Les données chiffrées
+  sont inutilisables sur un autre compte Windows ou un autre appareil. Si le
+  chiffrement Windows est indisponible, l'application **refuse d'enregistrer**
+  la clé au lieu de la stocker en clair. La clé n'est jamais renvoyée au
+  renderer, jamais journalisée et jamais incluse dans l'export.
+- **Dossier de données** : à chaque démarrage, l'application retire l'héritage
+  ACL du dossier et n'y accorde l'accès complet qu'à l'utilisateur courant et à
+  `SYSTEM` (`icacls /inheritance:r`). Un échec de cette étape produit un
+  avertissement mais ne bloque pas l'application : dans ce cas, seules les
+  permissions héritées du dossier parent protègent les fichiers. Le dossier ne
+  doit donc pas être placé sur un partage réseau, une clé USB non chiffrée ou un
+  répertoire accessible à d'autres comptes.
+- **Sessions navigateur** : chaque fournisseur dispose d'un profil ou d'une
+  partition isolés. Les cookies sont gérés et chiffrés par Windows pour le
+  compte courant. Les lecteurs de comptes communiquent avec le navigateur par un
+  **pipe local** (`--remote-debugging-pipe`) : aucun port TCP de débogage n'est
+  ouvert pour lire une session.
+- **Suppression locale** : la déconnexion d'un fournisseur efface sa session
+  (profil ou partition) et sa clé API ; les sessions Ollama et OrcaRouter sont
+  effacées via `clearStorageData`.
+
+## 4. Jetons Claude Code
+
+La lecture directe des quotas Claude est **optionnelle** et activée
+explicitement. Elle utilise la connexion OAuth existante de Claude Code :
+
+- les jetons sont lus depuis `~/.claude/.credentials.json` et restent en mémoire
+  du processus principal ; ils ne sont **jamais** copiés dans les données
+  ProvidersBar, jamais envoyés au renderer et jamais exportés ;
+- le renouvellement de la connexion réécrit ce même fichier officiel, avec les
+  verrous et l'écriture atomique de Claude Code, et conserve les autres champs ;
+- l'activation du mode direct et les délais de reprise sont enregistrés dans
+  `state.json` sous forme de code d'erreur et d'horodatage, sans jeton.
+
+L'effacement des données de ProvidersBar ne supprime **pas** ce fichier : il
+appartient à Claude Code. Une révocation ou une déconnexion dans Claude Code
+reste la manière de supprimer cette connexion.
+
+De la même façon, OpenAI s'appuie sur la session Codex installée sur le poste
+(gérée par Codex), et Claude Desktop sur son propre fichier local de relevés.
+Ces composants restent sous la responsabilité de leurs éditeurs.
+
+## 5. Réseau et absence de télémétrie
+
+ProvidersBar n'envoie aucune donnée d'usage, de diagnostic ou de performance à
+un serveur ProvidersBar. Il n'y a ni analytics, ni crash reporting, ni publicité.
+
+Les seules connexions sortantes servent à lire les informations demandées par
+l'utilisateur, vers les services officiels qu'il a lui-même configurés :
+
+- `openrouter.ai`, `api.deepseek.com`, `api.runinfra.ai` (soldes par clé API) ;
+- `platform.claude.com` et `api.anthropic.com` (renouvellement OAuth et quotas Claude) ;
+- `chatgpt.com` / Codex local pour OpenAI ;
+- `claude.ai`, `grok.com`, `z.ai` (pages d'utilisation dans Chrome/Edge) ;
+- `ollama.com` et `www.orcarouter.ai` (sessions de compte) ;
+- services locaux en boucle locale : service Antigravity sur `127.0.0.1` (port
+  du processus installé vérifié) et Codex `app-server` local.
+
+Les écritures sont temporaires ou mises en cache par Windows/Chromium comme tout
+navigateur. Aucun proxy particulier n'est utilisé : les réglages réseau de
+Windows s'appliquent.
+
+## 6. Export des données
+
+L'action **Exporter mes données** produit un fichier JSON choisi par
+l'utilisateur, au format :
+
+```json
+{ "app": "ProvidersBar", "version": "0.3.0", "exportedAt": "…",
+  "inventory": [], "settings": {}, "strategy": null,
+  "manualResets": {}, "history": [] }
+```
+
+L'export est **nettoyé** : il ne contient ni session de compte, ni identifiant de
+compte, ni identité pseudonyme, ni empreinte de clé API, ni jeton. Il peut en
+revanche contenir l'historique d'usage, les notes libres et les tarifs saisis :
+c'est un fichier **en clair**, à conserver et à partager avec précaution. La
+restauration depuis l'interface n'est pas proposée.
+
+## 7. Effacement des données
+
+**Réglages → Effacer mes données** demande une double confirmation (second clic
+dans les 10 secondes). L'effacement est refusé pendant une synchronisation. Il
+supprime `state.json`, `credentials.json`, les profils de navigateur dédiés, les
+profils temporaires, les sauvegardes de migration et les caches Chromium
+(`Cache`, `Network`, `Local Storage`, `Partitions`, etc.), puis réinitialise
+l'inventaire de départ.
+
+Ce qui n'est **pas** effacé par cette action :
+
+- `~/.claude/.credentials.json` (fichier de Claude Code) ;
+- la session Codex et l'installation de Codex ;
+- les fichiers système, l'historique Windows et les sauvegardes externes
+  éventuelles (par exemple une copie du dossier `data/` faite par l'utilisateur).
+
+Pour une remise à zéro complète, effacer les données depuis l'interface, quitter
+l'application, puis supprimer le dossier de données s'il subsiste. Une
+désinstallation manuelle (suppression du dossier portable) n'efface pas
+forcément ce dossier de données : il doit être supprimé explicitement.
+
+## 8. Durées de conservation
+
+| Donnée | Conservation |
+| --- | --- |
+| Historique | 20 000 relevés maximum ; les plus anciens sont purgés à l'écriture et au chargement |
+| Sauvegardes de migration | 2 plus récentes, les autres purgées au démarrage |
+| Cooldowns API | Entrées expirées purgées au démarrage et avant chaque lecture ; plafond 100 |
+| Profils temporaires de lecture | Purgés au démarrage et à la fermeture normale du lecteur |
+| Sessions de compte et clés API | Jusqu'à déconnexion ou effacement des données |
+
+## 9. Droits et contrôle de l'utilisateur
+
+- **Accès** : toutes les données sont visibles dans l'application et
+  exportables en JSON.
+- **Rectification** : les fiches de service, les réglages et les dates de
+  réinitialisation sont modifiables dans l'interface.
+- **Effacement** : action dédiée dans les réglages (voir §7).
+- **Portabilité** : export JSON autonome, lisible par un autre outil.
+- **Refus** : aucune connexion de compte ni saisie de clé n'est obligatoire ;
+  l'application reste utilisable avec des relevés manuels.
+- **Transparence** : ce document, [`SECURITY.md`](SECURITY.md) et
+  [`docs/architecture.md`](docs/architecture.md) décrivent les flux réels.
+
+## 10. Limites et transparence
+
+- L'identité des comptes (e-mail, jetons Google, mots de passe) est gérée par les
+  **fournisseurs** et par leurs pages officielles. ProvidersBar ne lit ni ne
+  stocke ces éléments ; il enregistre uniquement les pourcentages et soldes
+  affichés sur les pages d'utilisation.
+- Les données affichées peuvent être incomplètes ou retardées par le fournisseur :
+  l'application conserve alors le dernier relevé et l'indique, sans estimation
+  silencieuse.
+- `state.json`, l'historique et l'export **ne sont pas chiffrés au repos** : la
+  confidentialité de ces fichiers dépend du compte Windows, des ACL du dossier et
+  du chiffrement du disque. Activer BitLocker et réserver le dossier `data/` à
+  l'utilisateur sont recommandés.
+- La protection contre un logiciel malveillant exécuté **sous le même compte
+  Windows** est limitée par construction : un tel programme peut lire les
+  fichiers de l'utilisateur et les secrets déchiffrables par DPAPI. Voir
+  [`SECURITY.md`](SECURITY.md).
+- Ce document décrit le comportement de l'application ; il **ne constitue pas une
+  certification de conformité** (RGPD ou autre) et ne crée pas d'engagement
+  contractuel. Pour un usage professionnel soumis à des obligations particulières,
+  faire valider le déploiement par le responsable conformité compétent.
+
+## 11. Signalement
+
+Pour signaler un problème de sécurité (fuite de données, faille, comportement
+inattendu), suivre la procédure de [`SECURITY.md`](SECURITY.md) — de préférence
+un signalement privé, sans publier de détails exploitables.

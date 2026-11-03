@@ -4,6 +4,7 @@ const { createSeed } = require('../lib/seed.cjs');
 const { removeUnusedProviders, addClaude, normalizeProviderPresentation } = require('../lib/migrations.cjs');
 const { removeInvalidOrcaBalances } = require('../lib/migrations.cjs');
 const { removeImportMetadata } = require('../lib/migrations.cjs');
+const { normalizeThemeSettings, addApiCooldowns, MAX_API_COOLDOWNS } = require('../lib/migrations.cjs');
 
 test('Import cleanup preserves account sessions, readings and configured billing information', () => {
   const original = createSeed();
@@ -118,4 +119,47 @@ test('Provider presentation migration reorders subscriptions and renames without
   assert.deepEqual(result.state.history, before.history);
   assert.deepEqual(state, before);
   assert.equal(normalizeProviderPresentation(result.state).changed, false);
+});
+
+test('Theme migration keeps explicit light/dark choices and only defaults invalid values', () => {
+  const light = createSeed();
+  light.settings.theme = 'light';
+  const before = structuredClone(light);
+  assert.deepEqual(normalizeThemeSettings(light), { changed: false, state: light });
+  assert.deepEqual(light, before);
+
+  const dark = createSeed();
+  dark.settings.theme = 'dark';
+  assert.equal(normalizeThemeSettings(dark).changed, false);
+
+  const legacy = createSeed();
+  delete legacy.settings.theme;
+  const defaulted = normalizeThemeSettings(legacy);
+  assert.equal(defaulted.changed, true);
+  assert.equal(defaulted.state.settings.theme, 'system');
+  assert.equal(defaulted.state.settings.autoRefresh, legacy.settings.autoRefresh);
+  assert.equal(Object.hasOwn(legacy.settings, 'theme'), false);
+  assert.equal(normalizeThemeSettings(defaulted.state).changed, false);
+});
+
+test('API cooldown migration seeds an empty object and preserves valid entries without secrets', () => {
+  const fresh = createSeed();
+  delete fresh.apiCooldowns;
+  const seeded = addApiCooldowns(fresh);
+  assert.equal(seeded.changed, true);
+  assert.deepEqual(seeded.state.apiCooldowns, {});
+  assert.equal(addApiCooldowns(seeded.state).changed, false);
+
+  const state = createSeed();
+  state.apiCooldowns = { 'openrouter:abcdef': 1767225600000, 'deepseek:ghijkl': 1767229200000 };
+  const preserved = addApiCooldowns(state);
+  assert.equal(preserved.changed, false);
+  assert.deepEqual(preserved.state.apiCooldowns, state.apiCooldowns);
+
+  const oversized = Object.fromEntries(Array.from({ length: MAX_API_COOLDOWNS + 20 }, (_v, i) => [`key-${i}:x`, 1_767_225_600_000 + i]));
+  const capped = addApiCooldowns({ ...createSeed(), apiCooldowns: oversized });
+  assert.equal(capped.changed, true);
+  assert.equal(Object.keys(capped.state.apiCooldowns).length, MAX_API_COOLDOWNS);
+  assert.equal(Object.hasOwn(capped.state.apiCooldowns, `key-${MAX_API_COOLDOWNS + 19}:x`), true);
+  assert.equal(Object.hasOwn(capped.state.apiCooldowns, 'key-0:x'), false);
 });

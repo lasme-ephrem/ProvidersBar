@@ -31,17 +31,22 @@ async function main() {
     }, { id, snapshot });
   }
   for (const theme of ['light', 'dark']) {
-    for (const surface of [dashboard, widget]) await surface.evaluate(theme => { document.documentElement.dataset.theme = theme; }, theme);
+    // Le renderer applique le thème depuis state.settings.theme à chaque rendu :
+    // forcer l'état est la seule façon déterministe de tester les deux palettes.
+    for (const surface of [dashboard, widget]) await surface.evaluate(theme => { state.settings.theme = theme; document.documentElement.dataset.theme = theme; }, theme);
     for (const currency of ['USD', 'EUR', 'CNY']) {
       for (const id of ['openrouter', 'deepseek', 'runinfra', 'orcarouter']) {
         await fixture(id, { balances: [{ currency, remaining: -0.08 }], quotaRemaining: null });
         for (const container of [card(id), row(id)]) {
           assert.match(await container.getAttribute('class'), /resource-empty/);
-          assert.match(await container.innerText(), /Solde épuisé/);
+          // Le widget 0.3.0 exprime l'épuisement par la pastille textuelle
+          // « Épuisé » ; la carte du tableau de bord garde « Solde épuisé ».
+          assert.match(await container.innerText(), /Épuisé/);
           const color = await container.locator('.resource-value').first().evaluate(el => getComputedStyle(el).color);
           const [r, g, b] = color.match(/[\d.]+/g).map(Number);
           assert.ok(r > g && r > b, `${id}/${currency}/${theme} should be red: ${color}`);
         }
+        assert.match(await card(id).innerText(), /Solde épuisé/);
       }
     }
   }
@@ -67,19 +72,24 @@ async function main() {
     await fixture(id, { quotaWindows: windows.map(([label]) => ({ label, remaining: 0 })) });
     const expected = windows.length > 1 ? 'Toutes les limites atteintes' : 'Limite atteinte';
     assert.equal(await card(id).locator('.resource-status').innerText(), expected);
-    assert.equal(await row(id).locator('.quick-resource-status').innerText(), expected);
+    // Le widget 0.3.0 n'affiche pas de statut global redondant : chaque fenêtre
+    // épuisée porte son statut et la pastille de niveau reste textuelle.
+    assert.equal(await row(id).locator('.level-pill.resource-empty').count(), 1);
+    assert.equal(await row(id).locator('.quick-period-status').count(), windows.length);
   }
   await fixture('grok', { usageKind: 'x-subscription-shared', quotaWindows: [{ label: 'Semaine', remaining: 40 }] });
   assert.equal(await card('grok').locator('.quota-period').count(), 1);
   assert.equal(await row('grok').locator('.quick-period').count(), 1);
   assert.match(await card('grok').innerText(), /Grok \/ Bot \/ Cursor/);
-  // Both shared Claude windows exhausted still cannot label Fable exhausted.
+  // Les deux fenêtres partagées Claude épuisées ne doivent pas étiqueter Fable.
   await fixture('claude', { quotaWindows: [{ label: 'Semaine', remaining: 0 }, { label: '5 heures', remaining: 0 }, { label: 'Fable · Semaine', remaining: 100 }] });
-  assert.equal(await row('claude').locator('.quick-resource-status').count(), 0);
-  // Exact situation reported by the user, retained in screenshots.
+  assert.equal(await card('claude').locator('.resource-status').count(), 0);
+  assert.equal(await row('claude').locator('.level-pill.resource-empty').count(), 0);
+  assert.match(await row('claude').getAttribute('class'), /resource-healthy/);
+  // Situation exacte signalée, conservée dans les captures.
   await fixture('claude', { quotaWindows: [{ label: 'Semaine', remaining: 18 }, { label: 'Fable · Semaine', remaining: 0 }, { label: '5 heures', remaining: 100 }] });
   await fixture('openrouter', { balances: [{ currency: 'USD', remaining: -0.08 }] });
-  for (const surface of [dashboard, widget]) await surface.evaluate(() => { document.documentElement.dataset.theme = 'light'; });
+  for (const surface of [dashboard, widget]) await surface.evaluate(() => { state.settings.theme = 'light'; document.documentElement.dataset.theme = 'light'; });
   await desktop.evaluate(({ BrowserWindow }) => { BrowserWindow.getAllWindows().find(w => w.webContents.getURL().includes('mode=quick')).show(); });
   await dashboard.screenshot({ path: path.join(results, 'resource-status-dashboard.png'), fullPage: true });
   await widget.screenshot({ path: path.join(results, 'resource-status-widget.png') });

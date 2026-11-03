@@ -6,7 +6,7 @@ const { fetchUsage, parseResponse } = require('../lib/connectors.cjs');
 
 test('Selected inventory has 10 unique services, keeping six subscription services and four APIs', () => {
   const s=createSeed();
-  assert.equal(s.settings.theme,'light');
+  assert.equal(s.settings.theme,'system');
   assert.equal(new Set(s.providers.map(p=>p.id)).size,10);
   assert.equal(s.providers.filter(p=>p.type==='subscription').length,6);
   assert.equal(s.providers.find(p=>p.id==='claude').plan,'Claude Pro');
@@ -64,7 +64,9 @@ test('Passed subscription dates expire once; Ollama keeps Free tracking and its 
 });
 test('OpenRouter balance is credits minus usage, including depleted balances',()=>{
   assert.deepEqual(parseResponse('openrouter',{data:{total_credits:100.5,total_usage:25.75}}).balances,[{currency:'USD',remaining:74.75,total:100.5,used:25.75}]);
-  assert.equal(parseResponse('openrouter',{data:{total_credits:10,total_usage:12}}).balances[0].remaining,-2);
+  // Un solde négatif signale une incohérence fournisseur : rejet explicite,
+  // jamais un crédit négatif affiché comme une ressource disponible.
+  assert.throws(()=>parseResponse('openrouter',{data:{total_credits:10,total_usage:12}}),/incohérent|négatif/i);
   assert.throws(()=>parseResponse('openrouter',{data:{total_credits:null,total_usage:0}}));
   assert.throws(()=>parseResponse('openrouter',{data:{total_credits:10,total_usage:-3}}));
 });

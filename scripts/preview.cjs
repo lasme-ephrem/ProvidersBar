@@ -10,6 +10,8 @@ const routes={'/':'renderer/index.html','/app.js':'renderer/app.js','/styles.css
 routes['/lib/resource-levels.js']='lib/resource-levels.js';
 Object.assign(routes, {'/lib/usage-strategy.js':'lib/usage-strategy.js','/strategy-ui.js':'renderer/strategy-ui.js','/strategy.css':'renderer/strategy.css'});
 Object.assign(routes, {'/lib/quota-resets.js':'lib/quota-resets.js','/reset-ui.js':'renderer/reset-ui.js'});
+// Renderer refonte 0.3.0 : les vues et helpers sont chargés avant app.js.
+Object.assign(routes, {'/ui-core.js':'renderer/ui-core.js','/views.js':'renderer/views.js'});
 for(const id of Object.keys(providerAssets)){const file=`assets/providers/${id}.${providerExtensions[id]||'svg'}`;routes['/'+file]=file;}
 http.createServer(async(req,res)=>{
   const url=new URL(req.url,'http://127.0.0.1');

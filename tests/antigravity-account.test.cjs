@@ -1,6 +1,6 @@
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
-const {parseAntigravityQuota,fetchAntigravityQuota}=require('../lib/antigravity-account.cjs');
+const {parseAntigravityQuota,fetchAntigravityQuota,discoverServers,DISCOVERY_COMMAND}=require('../lib/antigravity-account.cjs');
 const {addAntigravity}=require('../lib/migrations.cjs');
 const {createSeed}=require('../lib/seed.cjs');
 function response(){return {response:{groups:[{displayName:'Gemini Models',buckets:[{bucketId:'gemini-weekly',window:'weekly',remainingFraction:.9779,resetTime:'2026-09-10T23:06:43Z'},{bucketId:'gemini-5h',window:'5h',remainingFraction:.9351,resetTime:'2026-09-07T18:32:42Z'}]},{displayName:'Claude and GPT models',buckets:[{bucketId:'3p-weekly',window:'weekly',remainingFraction:1},{bucketId:'3p-5h',window:'5h',remainingFraction:1}]}]}};}
@@ -29,21 +29,41 @@ test('Unknown, missing, disabled and conflicting buckets never fabricate 100% re
  data.response.groups[1].buckets.push(data.response.groups[1].buckets[0]);assert.throws(()=>parseAntigravityQuota(data),/contradictoires/);
  const zero=response();zero.response.groups[0].buckets[0].remainingFraction=0;assert.equal(parseAntigravityQuota(zero).quotaRemaining,0);
 });
-test('Unknown new groups remain ignored while malformed Argon weekly data is rejected',()=>{
+test('A known bucket whose window changed is degraded with a warning instead of failing the reading',()=>{
  const data=response();
  data.response.groups.push({displayName:'Unrecognized model group',buckets:[{bucketId:'unknown-weekly',window:'monthly',remainingFraction:1.5}]});
  assert.equal(parseAntigravityQuota(data).quotaWindows.length,4);
- const invalidWindow=response();invalidWindow.response.groups.push({displayName:'Gemini 4 Argon',buckets:[{bucketId:'gemini-argon-wtu-weekly',window:'5h',remainingFraction:.5}]});
- assert.throws(()=>parseAntigravityQuota(invalidWindow),/Quota Antigravity invalide/);
+ // A provider-side window change on a known bucket must not hide the other quotas.
+ const changedWindow=response();changedWindow.response.groups.push({displayName:'Gemini 4 Argon',buckets:[{bucketId:'gemini-argon-wtu-weekly',window:'5h',remainingFraction:.5}]});
+ const degraded=parseAntigravityQuota(changedWindow);
+ assert.equal(degraded.quotaWindows.length,4);
+ assert.equal(degraded.quotaWindows.some(w=>w.label==='Gemini 4 Argon · Semaine'),false);
+ assert.equal(degraded.warnings.length,1);
+ assert.match(degraded.warnings[0],/Gemini 4 Argon/);
+ // A malformed amount or an ambiguous date on a known bucket is still a hard error.
  for(const value of [NaN,Infinity,-.1,1.1,'0.5']) {
   const invalidFraction=response();invalidFraction.response.groups.push({displayName:'Gemini 4 Argon',buckets:[{bucketId:'gemini-argon-wtu-weekly',window:'weekly',remainingFraction:value}]});
   assert.throws(()=>parseAntigravityQuota(invalidFraction),/Quota Antigravity invalide/);
  }
  const invalidReset=response();invalidReset.response.groups.push({displayName:'Gemini 4 Argon',buckets:[{bucketId:'gemini-argon-wtu-weekly',window:'weekly',remainingFraction:.5,resetTime:'not-a-date'}]});
  assert.throws(()=>parseAntigravityQuota(invalidReset),/Date de quota Antigravity invalide/);
+ // ISO dates without a timezone are ambiguous and must be refused.
+ const noTimezone=response();noTimezone.response.groups.push({displayName:'Gemini 4 Argon',buckets:[{bucketId:'gemini-argon-wtu-weekly',window:'weekly',remainingFraction:.5,resetTime:'2026-10-24T12:00:00'}]});
+ assert.throws(()=>parseAntigravityQuota(noTimezone),/fuseau/);
  const duplicate=response();duplicate.response.groups.push({displayName:'Gemini 4 Argon',buckets:[{bucketId:'gemini-argon-wtu-weekly',window:'weekly',remainingFraction:.5}]});
  duplicate.response.groups[1].buckets.push({bucketId:'gemini-argon-wtu-weekly',window:'weekly',remainingFraction:.5});
  assert.throws(()=>parseAntigravityQuota(duplicate),/Quotas Antigravity contradictoires/);
+});
+test('Discovery forces UTF-8 output and tolerates scalar ports without re-comparing decoded paths',async()=>{
+ assert.match(DISCOVERY_COMMAND,/\$OutputEncoding/);
+ assert.match(DISCOVERY_COMMAND,/Encoding\]::UTF8/);
+ assert.match(DISCOVERY_COMMAND,/ExecutablePath/);
+ const servers=await discoverServers({run:async()=>JSON.stringify({args:'--csrf_token=abcdefghijklmnop1234',ports:9222})});
+ assert.deepEqual(servers,[{port:9222,csrf:'abcdefghijklmnop1234'}]);
+ const many=await discoverServers({run:async()=>JSON.stringify([{args:'--csrf_token abcdefghijklmnop1234',ports:[9222,9223,9223,0,70000]},{args:'no-token',ports:[9224]},null])});
+ assert.deepEqual(many,[{port:9222,csrf:'abcdefghijklmnop1234'},{port:9223,csrf:'abcdefghijklmnop1234'}]);
+ await assert.rejects(discoverServers({run:async()=>{throw new Error('private token')}}),error=>!error.message.includes('private token'));
+ await assert.rejects(discoverServers({run:async()=>'not json'}),/ne peut pas être détecté/);
 });
 test('Local discovery handles a closed app and skips non-HTTP service ports without exposing local tokens',async()=>{
  await assert.rejects(fetchAntigravityQuota({discover:async()=>[]}),/Aucune CLI/);

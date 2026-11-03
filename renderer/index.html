@@ -12,14 +12,22 @@
   <link rel="stylesheet" href="theme.css">
   <script src="../lib/quota-resets.js" defer></script>
   <script src="../lib/resource-levels.js" defer></script>
+  <script src="ui-core.js" defer></script>
   <script src="reset-ui.js" defer></script>
   <script src="../lib/usage-strategy.js" defer></script>
   <script src="strategy-ui.js" defer></script>
+  <script src="views.js" defer></script>
   <script src="app.js" defer></script>
 </head>
 <body>
-  <div id="app"><div class="loading">Chargement de ProvidersBar…</div></div>
+  <div id="app">
+    <div class="loading" role="status" aria-live="polite">
+      <span class="loading-dot" aria-hidden="true"></span>
+      <p>Chargement de ProvidersBar…</p>
+    </div>
+  </div>
   <dialog id="detail-dialog" aria-labelledby="detail-title"></dialog>
-  <div id="toast" role="status" aria-live="polite"></div>
+  <div id="live-region" class="sr-only" aria-live="polite" aria-atomic="true"></div>
+  <div id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
 </body>
 </html>

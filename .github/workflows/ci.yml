@@ -1,0 +1,135 @@
+# Intégration continue ProvidersBar — Windows x64 uniquement.
+#
+# Deux jobs volontairement séparés :
+#   1. « tests »      : garde-fous déterministes (syntaxe, tests unitaires, audit
+#                       des dépendances de production). Ce job doit rester vert.
+#   2. « smoke-electron » : tests d'intégration Electron/Playwright. Ils lancent de
+#                       vraies fenêtres Chromium et dépendent d'une session graphique
+#                       Windows interactive (et de DPAPI pour le chiffrement des clés).
+#                       Ils sont donc marqués « best-effort » (continue-on-error) :
+#                       un échec est visible, conservé en artefact, mais ne bloque pas
+#                       la fusion. La validation release les exécute manuellement sur
+#                       une machine Windows interactive avant `npm run package:release`.
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - 'refonte/**'
+  pull_request:
+  workflow_dispatch:
+
+# Moindre privilège : la CI lit le dépôt et n'écrit rien sur GitHub.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '24'
+  CI: 'true'
+
+jobs:
+  tests:
+    name: Tests unitaires et vérifications (Windows)
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - name: Récupérer le dépôt
+        uses: actions/checkout@v4
+
+      - name: Installer Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Installer les dépendances verrouillées
+        run: npm ci
+
+      # `npm run verify` est ajouté par le Lead dans package.json. Le repli sur
+      # scripts/check-syntax.cjs garde la CI utile même si le script manque encore.
+      - name: Vérifier la syntaxe (verify, sinon check-syntax)
+        shell: pwsh
+        run: |
+          $scripts = (Get-Content package.json -Raw | ConvertFrom-Json).scripts
+          if ($scripts.PSObject.Properties.Name -contains 'verify') {
+            npm run verify
+          } else {
+            Write-Host "::warning::npm run verify absent de package.json — repli sur node scripts/check-syntax.cjs"
+            node scripts/check-syntax.cjs
+          }
+
+      - name: Linter (si déclaré)
+        shell: pwsh
+        run: |
+          $scripts = (Get-Content package.json -Raw | ConvertFrom-Json).scripts
+          if ($scripts.PSObject.Properties.Name -contains 'lint') {
+            npm run lint
+          } else {
+            Write-Host '::notice::npm run lint absent de package.json — étape ignorée (le Lead l’ajoutera).'
+          }
+
+      - name: Tests unitaires
+        run: npm test
+
+      # Les tests transverses écrivent uniquement dans des dossiers temporaires,
+      # mais un échec des migrations/packaging peut laisser des traces utiles.
+      - name: Conserver les traces de tests en cas d'échec
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 7
+
+      # Audit restreint aux dépendances de production : Electron/Playwright sont
+      # des dépendances de développement et n'embarquent pas dans le portable.
+      - name: Audit des dépendances de production
+        run: npm audit --omit=dev
+
+  smoke-electron:
+    name: Smoke Electron (best-effort, session graphique requise)
+    needs: tests
+    runs-on: windows-latest
+    timeout-minutes: 25
+    # Voir le commentaire d'en-tête : un échec de ce job ne doit pas bloquer la
+    # fusion, mais il reste visible dans l'onglet Actions et dans les artefacts.
+    continue-on-error: true
+    steps:
+      - name: Récupérer le dépôt
+        uses: actions/checkout@v4
+
+      - name: Installer Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Installer les dépendances verrouillées
+        run: npm ci
+
+      - name: Intégration Electron — inventaire, IPC, chiffrement, widget
+        continue-on-error: true
+        run: npm run test:desktop
+
+      - name: Ressources et niveaux visuels (deux thèmes)
+        continue-on-error: true
+        run: npm run test:resources:desktop
+
+      - name: Claude — pannes, reprise, persistance du mode direct
+        continue-on-error: true
+        run: npm run test:claude:desktop
+
+      - name: Conserver captures et résultats des smoke tests
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: electron-smoke-results
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 7

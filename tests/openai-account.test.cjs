@@ -10,6 +10,19 @@ test('OpenAI uses named quota buckets, seconds for resets and preserves the main
   for (const usedPercent of [null, -1, 101, NaN, '2']) assert.throws(() => parseOpenAiLimits({ rateLimits: { primary: { usedPercent, windowDurationMins: 300, resetsAt: null } } }));
   assert.throws(() => parseOpenAiLimits({ rateLimitsByLimitId: {} }));
 });
+test('OpenAI exposes the five-hour and weekly windows required by the strategy', () => {
+  const full = parseOpenAiLimits({ rateLimitsByLimitId: { codex: {
+    primary: { usedPercent: 10, windowDurationMins: 300, resetsAt: 1788793467 },
+    secondary: { usedPercent: 20, windowDurationMins: 10080, resetsAt: 1789378823 },
+  } } });
+  assert.deepEqual(full.quotaWindows.map(window => window.label), ['Codex et Work · 5 heures', 'Codex et Work · Semaine']);
+  assert.equal(full.quotaRemaining, 80);
+  // A partial report stays a partial report: the strategy must see it as incomplete,
+  // never silently turned into a complete quota.
+  const partial = parseOpenAiLimits({ rateLimitsByLimitId: { codex: { primary: { usedPercent: 10, windowDurationMins: 300, resetsAt: null } } } });
+  assert.deepEqual(partial.quotaWindows.map(window => window.label), ['Codex et Work · 5 heures']);
+  assert.equal(partial.quotaWindows.some(window => window.label === 'Codex et Work · Semaine'), false);
+});
 test('Connecting reuses the official account interface, stores no email and disconnect never logs Codex out', async () => {
   const calls = [], saved = []; let closes = 0;
   const c = createOpenAiAccount({ onChange() {}, openExternal: async () => assert.fail('No browser needed for an existing account'), onResult: async (s, identity) => saved.push({s,identity}), rpcFactory: async () => ({ close: () => closes++, request: async method => { calls.push(method); if(method==='account/read')return {account:{type:'chatgpt',email:'account@example.test'}}; if(method==='account/rateLimits/read')return limits; assert.fail(method); } }) });

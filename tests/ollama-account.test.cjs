@@ -1,6 +1,6 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { parseOllamaCredits, fetchOllamaCredits, SETTINGS_URL, lastKnownUsageCredits } = require('../lib/ollama-account.cjs');
+const { parseOllamaCredits, fetchOllamaCredits, SETTINGS_URL, lastKnownUsageCredits, resetOllamaRateLimit } = require('../lib/ollama-account.cjs');
 const page = (used='12.50', total='60.00') => `<main><h2>Included usage <span>Pro</span></h2><h3>Monthly usage</h3><span>$${used}</span> of <span>$${total}</span> used<div data-time="2026-10-07T12:00:00Z">Resets</div><h3>Extra usage</h3><span>$99.00</span><p>Subscription: $20</p></main>`;
 test('Monthly dollar credits are independent of subscription price and extra credits', () => {
   const s = parseOllamaCredits(page());
@@ -78,6 +78,7 @@ test('Missing dollar amounts, style widths, scripts and unrelated amounts cannot
   assert.equal(parseOllamaCredits(page().replace(' data-time="2026-10-07T12:00:00Z"','')).resetAt,null);
 });
 test('Ollama uses only session-authenticated read-only settings; expired sessions remain unknown', async () => {
+  resetOllamaRateLimit();
   const s = await fetchOllamaCredits(async(url, options)=>{
     assert.equal(url, SETTINGS_URL); assert.equal(options.method,'GET'); assert.equal(options.credentials,'include');
     assert.equal(options.redirect,'manual'); assert.equal(options.headers.Authorization,undefined);
@@ -85,6 +86,28 @@ test('Ollama uses only session-authenticated read-only settings; expired session
   });
   assert.equal(s.balances[0].remaining,47.5);
   for(const status of [302,401,403]) await assert.rejects(fetchOllamaCredits(async()=>({ok:false,status})),e=>e.code==='OLLAMA_SIGNIN');
-  await assert.rejects(fetchOllamaCredits(async()=>({ok:false,status:429})),/Trop de demandes/);
-  await assert.rejects(fetchOllamaCredits(async()=>{throw new Error('secret');}),/Connexion.*impossible/);
+  await assert.rejects(fetchOllamaCredits(async()=>({ok:false,status:429})),e=>e.code==='OLLAMA_RATE_LIMIT'&&/Trop de demandes/.test(e.message));
+  resetOllamaRateLimit();
+  await assert.rejects(fetchOllamaCredits(async()=>{throw new Error('secret');}),e=>e.code==='OLLAMA_TRANSIENT'&&/Connexion.*impossible/.test(e.message)&&!e.message.includes('secret'));
+  await assert.rejects(fetchOllamaCredits(async()=>({ok:false,status:500})),{code:'OLLAMA_TRANSIENT'});
+  // A layout change keeps the session usable: it is a transient format error, not a sign-in failure.
+  await assert.rejects(fetchOllamaCredits(async()=>({ok:true,status:200,url:SETTINGS_URL,text:async()=>'<main>Public page</main>'})),e=>e.code==='OLLAMA_TRANSIENT'&&/non reconnus/.test(e.message));
+  resetOllamaRateLimit();
+});
+
+test('Ollama honors Retry-After on 429 with a local cooldown and never exposes a secret', async () => {
+  resetOllamaRateLimit();
+  let time = Date.parse('2026-10-14T21:00:00Z');
+  const now = () => new Date(time);
+  let calls = 0;
+  const limited = async () => { calls++; return { ok: false, status: 429, headers: { get: name => name === 'retry-after' ? '30' : null } }; };
+  await assert.rejects(fetchOllamaCredits(limited, now()), error => error.code === 'OLLAMA_RATE_LIMIT' && error.retryAt === time + 60000 && /Nouvelle lecture possible après/.test(error.message));
+  assert.equal(calls, 1);
+  // While the cooldown is active no request is sent and the same actionable error is returned.
+  await assert.rejects(fetchOllamaCredits(limited, now()), { code: 'OLLAMA_RATE_LIMIT' });
+  assert.equal(calls, 1);
+  time += 60001;
+  const snapshot = await fetchOllamaCredits(async () => ({ ok: true, status: 200, url: SETTINGS_URL, text: async () => page() }), now());
+  assert.equal(snapshot.balances[0].remaining, 47.5);
+  resetOllamaRateLimit();
 });

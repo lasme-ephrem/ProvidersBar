@@ -37,6 +37,24 @@ test('Claude Desktop history rejects stale or changed data and does not invent e
   assert.throws(() => parseClaudeDesktopUsage(history, { updatedAt: '2026-09-26T00:50:00.000Z' }, now), /plus ancien/);
 });
 
+test('A newer unreadable profile never hides the other valid Claude Desktop profile', async t => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'providersbar-claude-fallback-'));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const options = { localAppData: path.join(root, 'local'), roamingAppData: path.join(root, 'roaming'), now: new Date('2026-09-26T00:55:00.000Z') };
+  const files = usagePaths(options.localAppData, options.roamingAppData);
+  for (const file of files) await fs.mkdir(path.dirname(file), { recursive: true });
+  const older = Date.parse('2026-09-26T00:25:00.000Z');
+  await fs.writeFile(files[0], JSON.stringify({ version: 2, samples: [{ t: older, u: { fh: 20, sd: 10 } }] }));
+  // The newest profile has a format this version cannot read.
+  await fs.writeFile(files[1], JSON.stringify({ version: 3, samples: [{ t: Date.parse('2026-09-26T00:48:00.000Z'), u: { fh: 10, sd: 5 } }] }));
+  const snapshot = await readClaudeDesktopUsage(null, options);
+  assert.deepEqual(snapshot.quotaWindows.map(window => window.remaining), [80, 90]);
+  assert.equal(snapshot.updatedAt, new Date(older).toISOString());
+  // When no profile is readable, the newest error is the one reported.
+  await fs.writeFile(files[0], JSON.stringify({ version: 3, samples: [] }));
+  await assert.rejects(readClaudeDesktopUsage(null, options), /format/);
+});
+
 test('Claude uses the newest installed profile and detects an atomic quota update', async t => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'providersbar-claude-'));
   const options = { localAppData: path.join(root, 'local'), roamingAppData: path.join(root, 'roaming'), interval: 20 };

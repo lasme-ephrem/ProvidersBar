@@ -19,6 +19,12 @@ async function updateAppResources(root, portable) {
     for (const name of ['main.cjs', 'preload.cjs', 'lib', 'renderer', 'assets', 'docs', 'README.md', 'CHANGELOG.md']) {
       await fs.cp(path.join(root, name), path.join(stage, name), { recursive: true });
     }
+    // Documents de transparence (vague 3) : expédiés dès qu'ils existent sans
+    // rendre leur absence bloquante pour la fabrication.
+    for (const name of ['PRIVACY.md', 'SECURITY.md']) {
+      await fs.cp(path.join(root, name), path.join(stage, name), { recursive: true })
+        .catch(error => { if (error.code !== 'ENOENT') throw error; });
+    }
     await copyRuntimeDependencies(root, stage);
     const { version } = require(path.join(root, 'package.json'));
     await fs.writeFile(path.join(stage, 'package.json'), JSON.stringify({ name: 'providersbar', productName: 'ProvidersBar', version, main: 'main.cjs' }));

@@ -33,12 +33,12 @@ test('quality precedes renewal; identical model uses earliest known renewal', ()
   const ollama = wallet('ollama', 40, { snapshot: { connectorVersion: 'ollama-monthly-credits-v1', balances: [{currency:'USD', remaining:40}], resetAt:'2026-09-13T12:00:00Z' } });
   let r = recommend([zai, ollama], {}, now);
   assert.equal(r.recommended.providerId, 'ollama');
-  r = recommend([zai, ollama, provider('openai', [w('Codex et Work · Semaine', 1)])], {}, now);
+  r = recommend([zai, ollama, provider('openai', [w('Codex et Work · 5 heures', 100), w('Codex et Work · Semaine', 1)])], {}, now);
   assert.equal(r.recommended.model, 'astra');
 });
 test('Claude Pro enters the subscription queue only when both shared limits are readable', () => {
   const claude=provider('claude',[w('5 heures',88),w('Semaine',91)]);
-  const openai=provider('openai',[w('Codex et Work · Semaine',90)]);
+  const openai=provider('openai',[w('Codex et Work · 5 heures',100),w('Codex et Work · Semaine',90)]);
   let r=recommend([claude,openai],{},now);
   assert.equal(r.recommended.providerId,'claude');
   assert.equal(r.recommended.model,'opus55');
@@ -81,15 +81,39 @@ test('missing Antigravity window is unknown and aggregate never fills another gr
   assert.ok(r.subscriptions.filter(x=>x.providerId==='antigravity').every(x=>x.status==='unknown'));
 });
 test('renewal never assumes a restored quota, even before freshness deadline', () => {
-  const p = provider('openai', [w('Codex et Work · Semaine', 0, new Date(now - 1000).toISOString())]);
+  const p = provider('openai', [w('Codex et Work · 5 heures', 100), w('Codex et Work · Semaine', 0, new Date(now - 1000).toISOString())]);
   assert.equal(recommend([p, wallet('openrouter', 1)], {}, now).mode, 'verify');
-  p.snapshot.quotaWindows = [w('Codex et Work · Semaine', 100)];
+  p.snapshot.quotaWindows = [w('Codex et Work · 5 heures', 100), w('Codex et Work · Semaine', 100)];
   assert.equal(recommend([p, wallet('openrouter', 1)], {}, now).recommended.providerId, 'openai');
 });
+test('OpenAI requires both the five-hour and weekly windows, and never borrows Spark', () => {
+  // A weekly-only report is visible but explicitly incomplete: never "ready".
+  const weeklyOnly = provider('openai', [w('Codex et Work · Semaine', 90)]);
+  let r = recommend([weeklyOnly, wallet('openrouter', 1)], {}, now);
+  assert.equal(r.recommended, null);
+  assert.equal(r.subscriptions.find(x => x.id === 'openai').status, 'unknown');
+  assert.match(r.subscriptions.find(x => x.id === 'openai').reason, /incomplet/i);
+  // A five-hour-only report is incomplete too.
+  const hourlyOnly = provider('openai', [w('Codex et Work · 5 heures', 90)]);
+  r = recommend([hourlyOnly, wallet('openrouter', 1)], {}, now);
+  assert.equal(r.subscriptions.find(x => x.id === 'openai').status, 'unknown');
+  assert.equal(r.mode, 'verify');
+  // Both windows: the most constrained one drives the readiness.
+  const complete = provider('openai', [w('Codex et Work · 5 heures', 80), w('Codex et Work · Semaine', 95)]);
+  r = recommend([complete], {}, now);
+  assert.equal(r.recommended.providerId, 'openai');
+  assert.equal(r.recommended.remaining, 80);
+  // Spark never substitutes for the main Codex quota.
+  const sparkOnly = provider('openai', [w('Spark · Semaine', 100)]);
+  r = recommend([sparkOnly, wallet('openrouter', 1)], {}, now);
+  assert.equal(r.recommended, null);
+  assert.equal(r.mode, 'verify');
+  assert.equal(r.subscriptions.find(x => x.id === 'openai').status, 'unknown');
+});
 test('OpenAI main quota does not borrow Spark allowance and honors a returned hourly limit', () => {
-  const p = provider('openai', [w('Codex et Work · Semaine', 0), w('Spark · Semaine', 100)]);
+  const p = provider('openai', [w('Codex et Work · 5 heures', 100), w('Codex et Work · Semaine', 0), w('Spark · Semaine', 100)]);
   assert.equal(recommend([p, wallet('openrouter', 1)], {}, now).recommended, null);
-  p.snapshot.quotaWindows = [w('Codex et Work · Semaine', 100), w('Codex et Work · 5 heures', 0)];
+  p.snapshot.quotaWindows = [w('Codex et Work · 5 heures', 0), w('Codex et Work · Semaine', 100)];
   assert.equal(recommend([p, wallet('openrouter', 1)], {}, now).recommended, null);
   p.snapshot.quotaWindows = [w('Spark · Semaine', 100)];
   assert.equal(recommend([p, wallet('openrouter', 1)], {}, now).mode, 'verify');
