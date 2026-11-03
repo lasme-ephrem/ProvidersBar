@@ -2,7 +2,13 @@
 
 Application desktop Windows pour suivre les abonnements, quotas et crédits de **dix fournisseurs d’IA**. Un tableau de bord et un widget dans la zone de notification regroupent les ressources restantes, leur fraîcheur et leurs dates de réinitialisation.
 
-**Version 0.3.1 — 3 novembre 2026 :** correctif des connexions Claude et Antigravity (nouveau dossier de données Claude Desktop, découverte du service local Antigravity par processus, erreurs de renouvellement Claude Code distinctes et repli explicite vers Claude Desktop). La refonte 0.3.0 reste la base : fiabilité et sécurité des connexions, redessin accessible, thème système, effacement des données, historique porté à 20 000 relevés, `main.cjs` simplifié et durci. Détails dans [CHANGELOG.md](CHANGELOG.md) et [docs/validation-0.3.1.md](docs/validation-0.3.1.md).
+**Version 0.3.2 — 3 novembre 2026 :** correctif des connexions Ollama et OrcaRouter (nouveau portail Ollama, vérification OrcaRouter sans fenêtre et sans perte de session), après les correctifs 0.3.1 pour Claude et Antigravity. La refonte 0.3.0 reste la base : fiabilité et sécurité des connexions, redessin accessible, thème système, effacement des données, historique porté à 20 000 relevés, `main.cjs` simplifié et durci. Détails dans [CHANGELOG.md](CHANGELOG.md) et [docs/validation-0.3.2.md](docs/validation-0.3.2.md).
+
+## Correctif 0.3.2
+
+- **Ollama** : le portail `ollama.com/settings` a changé de structure (« Usage breakdown », « Free usage 0 % used », badge « Pay as you go »). Le lecteur reconnaît désormais cette page : quota Free restant et solde de crédits achetés (ex. 1,05 USD) sont affichés, sans inventer de crédits mensuels inclus. Les anciennes pages payantes restent prises en charge.
+- **OrcaRouter** : « Vérifier maintenant » fonctionne avec la session déjà enregistrée, **sans exiger l’ouverture de la fenêtre de connexion**, et ne peut plus supprimer une session valide lors d’un simple contrôle. La fenêtre n’est utilisée que pour une connexion neuve ou un changement de compte/espace ; les erreurs d’authentification, de débit ou transitoires sont annoncées clairement et le dernier relevé est conservé. Les boutons génériques d’ouverture/vérification routent correctement OrcaRouter et Ollama.
+- **OpenRouter** : un **découvert** (crédits consommés supérieurs aux crédits achetés, par exemple 45,08 USD utilisés pour 45,00 USD achetés) n’est plus traité comme une réponse invalide. Le solde restant négatif est affiché comme épuisé et la clé de gestion peut être enregistrée ; les réponses réellement incohérentes restent refusées.
 
 ## Correctif 0.3.1
 
@@ -174,7 +180,7 @@ npm run package:release
 npm run release:artifacts
 ```
 
-La distribution propre est créée dans `dist/ProvidersBar-0.3.1-win32-x64/` ; la commande refuse un dossier de release déjà existant. `npm run release:artifacts` produit l'archive ZIP et `dist/SHA256SUMS-0.3.1.txt`, et refuse d'archiver une release contenant un dossier de données personnelles. Le portable personnel reste dans `dist/ProvidersBar-win32-x64/`, à côté de ses données.
+La distribution propre est créée dans `dist/ProvidersBar-0.3.2-win32-x64/` ; la commande refuse un dossier de release déjà existant. `npm run release:artifacts` produit l'archive ZIP et `dist/SHA256SUMS-0.3.2.txt`, et refuse d'archiver une release contenant un dossier de données personnelles. Le portable personnel reste dans `dist/ProvidersBar-win32-x64/`, à côté de ses données.
 
 Les ressources applicatives sont préparées dans un dossier temporaire puis remplacées ensemble : les fichiers retirés des sources ne subsistent pas dans l’installation. `npm run update:portable` conserve `data/` et les sessions, ferme l’ancien processus s’il est joignable en diagnostic, puis nécessite de relancer l’application ; sinon, la quitter manuellement avant la mise à jour. Le packaging inclut les dépendances de production (`proper-lockfile` et ses dépendances) et leurs notices.
 
@@ -182,7 +188,7 @@ L’exécutable **n’est pas signé** et conserve les métadonnées binaires El
 
 ## Limites connues
 
-- **Lectures réelles** : Claude Desktop et le service local Antigravity sont vérifiés sur une machine réelle pour la 0.3.1 (voir [docs/validation-0.3.1.md](docs/validation-0.3.1.md)). Les lectures authentifiées des fournisseurs (clés API, sessions web) restent à rejouer après chaque changement de service.
+- **Lectures réelles** : Claude Desktop, le service local Antigravity, le portail Ollama et le portefeuille OrcaRouter sont vérifiés sur une machine réelle pour la 0.3.2 (voir [docs/validation-0.3.2.md](docs/validation-0.3.2.md)). Les lectures authentifiées des fournisseurs (clés API, sessions web) restent à rejouer après chaque changement de service.
 - Les lecteurs web (Grok, Z.ai, Ollama, bases Antigravity) dépendent des pages et services officiels, qui peuvent changer sans préavis. Un format inconnu produit une erreur, jamais une estimation.
 - Claude Desktop peut suspendre ses mesures ; le fichier local ne fournit pas de dates de reset fiables.
 - L’export JSON n’est pas restaurable depuis l’interface ; la connexion des comptes et des clés doit être refaite.
@@ -198,7 +204,7 @@ L’exécutable **n’est pas signé** et conserve les métadonnées binaires El
 - `scripts/` et `tests/` : fabrication, diagnostic, maintenance et validation.
 - [Architecture, IPC et modèles de données](docs/architecture.md)
 - [Maintenance et procédures de validation](docs/maintenance.md)
-- [Validation de la version 0.3.1](docs/validation-0.3.1.md) · [validation 0.3.0](docs/validation-0.3.0.md) (archive) · [validation 0.2.0](docs/validation-0.2.0.md) (archive)
+- [Validation de la version 0.3.2](docs/validation-0.3.2.md) · [validation 0.3.1](docs/validation-0.3.1.md) (archive) · [validation 0.3.0](docs/validation-0.3.0.md) (archive) · [validation 0.2.0](docs/validation-0.2.0.md) (archive)
 - [Méthode de recommandation](docs/ordre-consommation.md)
 - [Historique des versions](CHANGELOG.md)
 - [Provenance des logos](assets/providers/sources.json)

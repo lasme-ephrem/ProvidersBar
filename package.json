@@ -1,6 +1,6 @@
 {
   "name": "providersbar",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "private": true,
   "description": "Suivi local des usages et abonnements IA pour Windows",
   "main": "main.cjs",

@@ -62,11 +62,14 @@ test('Passed subscription dates expire once; Ollama keeps Free tracking and its 
   assert.equal(expireSubscriptions(rows,new Date(2026,8,30)),false);
   assert.deepEqual(validatePatch({subscriptionStatus:'active',confirmRenewal:true,renewalDate:'2026-10-29'}),{subscriptionStatus:'active',confirmRenewal:true,renewalDate:'2026-10-29'});
 });
-test('OpenRouter balance is credits minus usage, including depleted balances',()=>{
+test('OpenRouter balance is credits minus usage, including a real overdraft',()=>{
   assert.deepEqual(parseResponse('openrouter',{data:{total_credits:100.5,total_usage:25.75}}).balances,[{currency:'USD',remaining:74.75,total:100.5,used:25.75}]);
-  // Un solde négatif signale une incohérence fournisseur : rejet explicite,
-  // jamais un crédit négatif affiché comme une ressource disponible.
-  assert.throws(()=>parseResponse('openrouter',{data:{total_credits:10,total_usage:12}}),/incohérent|négatif/i);
+  // Un découvert réel (usage > crédits) est conservé tel quel : c'est un solde épuisé, pas une incohérence.
+  assert.equal(parseResponse('openrouter',{data:{total_credits:10,total_usage:12}}).balances[0].remaining,-2);
+  const real=parseResponse('openrouter',{data:{total_credits:45,total_usage:45.08283509}}).balances[0];
+  assert.equal(real.remaining,45-45.08283509);
+  // Seule une consommation très au-delà du plausible (découvert > max(total, 1)) est rejetée.
+  assert.throws(()=>parseResponse('openrouter',{data:{total_credits:10,total_usage:25}}),/incohérent/i);
   assert.throws(()=>parseResponse('openrouter',{data:{total_credits:null,total_usage:0}}));
   assert.throws(()=>parseResponse('openrouter',{data:{total_credits:10,total_usage:-3}}));
 });

@@ -1,5 +1,20 @@
 # Historique des versions
 
+## 0.3.2 — 4 novembre 2026
+
+Correctif des connexions Ollama, OrcaRouter et OpenRouter, constatées cassées après la 0.3.0.
+
+### Connexions
+
+- **Ollama** : le portail `ollama.com/settings` a changé de structure (« Usage breakdown », « Free usage N % used », badge « Pay as you go », plus de section « Monthly usage »). Le lecteur reconnaît la nouvelle page : plan Free, quota restant calculé depuis le compteur, solde de crédits achetés lu depuis l’en-tête. Aucun crédit mensuel inclus n’est inventé ; les anciennes pages payantes restent prises en charge. Vérification réelle sur cette machine : `planTier: free`, quota restant 100 %, crédits achetés 1,05 USD.
+- **OrcaRouter** : « Vérifier maintenant » exigeait l’ouverture de la fenêtre de connexion et, en cas d’absence, produisait une fausse erreur d’authentification qui **supprimait la session valide**. La vérification utilise désormais la référence de compte persistée (la fenêtre ne sert qu’à une connexion neuve ou à un changement de compte/espace), tolère les origines `www`/non-`www`, et remonte les erreurs `ORCA_AUTH`/`ORCA_RATE_LIMIT`/`ORCA_TRANSIENT` avec un message actionnable sans perdre le dernier relevé. Les commandes génériques d’ouverture/vérification routent aussi correctement OrcaRouter et Ollama. Vérifié sur une copie isolée : vérification sans fenêtre → portefeuille 27,258416 USD, session intacte ; ouverture réelle → `www.orcarouter.ai/console` puis `/console/overview`, détection OK.
+- **OpenRouter** : un découvert réel (crédits consommés supérieurs aux crédits achetés, observé 45,08283509 USD pour 45,00 USD) était rejeté comme une incohérence, ce qui empêchait l’enregistrement de la clé de gestion. Le solde restant négatif est désormais conservé et affiché comme épuisé ; seules les réponses réellement incohérentes (format invalide, montants négatifs, découvert supérieur au montant acheté ou à 1 USD) sont refusées. Vérifié en réel avec la clé enregistrée : `remaining = -0,08283509 USD`, HTTP 200.
+
+### Qualité
+
+- Tests ajoutés : nouvelle page Ollama (fixture sanitisée, compteurs, cas négatifs), vérification Orca sans fenêtre et matrice de choix de référence, découvert OpenRouter réel et rejet des incohérences.
+- `npm test`, `npm run verify`, les trois smoke tests Electron et `npm run doctor` sont rejoués ; détails et limites dans [docs/validation-0.3.2.md](docs/validation-0.3.2.md).
+
 ## 0.3.1 — 3 novembre 2026
 
 Correctif ciblé des connexions Claude et Antigravity, constatées cassées après la 0.3.0.

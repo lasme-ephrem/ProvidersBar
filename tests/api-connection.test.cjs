@@ -122,8 +122,19 @@ test('The bounded cooldown store keeps at most 100 entries', async () => {
   assert.equal(store.get('deepseek:test-0'), undefined);
 });
 
-test('Negative or inconsistent API balances are rejected instead of displayed', () => {
-  assert.throws(() => parseResponse('openrouter', { data: { total_credits: 5, total_usage: 6 } }), /incohérent/i);
+test('OpenRouter keeps a real overdraft and rejects impossible balances', () => {
+  // Real account observed on 2026-11-03: consumed slightly more than purchased.
+  const real = parseResponse('openrouter', { data: { total_credits: 45, total_usage: 45.08283509 } }).balances;
+  assert.equal(real.length, 1);
+  assert.equal(real[0].currency, 'USD');
+  assert.equal(real[0].total, 45);
+  assert.equal(real[0].used, 45.08283509);
+  assert.ok(Math.abs(real[0].remaining - (-0.08283509)) < 1e-9);
+  assert.deepEqual(parseResponse('openrouter', { data: { total_credits: 10, total_usage: 12 } }).balances, [{ currency: 'USD', remaining: -2, total: 10, used: 12 }]);
+  // Beyond the documented tolerance (overdraft > max(total, 1)) the response is inconsistent.
+  assert.throws(() => parseResponse('openrouter', { data: { total_credits: 10, total_usage: 25 } }), /incohérent/i);
+  assert.throws(() => parseResponse('openrouter', { data: { total_credits: 0, total_usage: 2 } }), /incohérent/i);
+  // Negative or non-finite raw amounts are still invalid.
   assert.throws(() => parseResponse('openrouter', { data: { total_credits: -5, total_usage: 0 } }));
   assert.throws(() => parseResponse('openrouter', { data: { total_credits: 5, total_usage: -1 } }));
   assert.throws(() => parseResponse('runinfra', { object: 'credits', currency: 'usd', balance_cents: -25, available_cents: 0, held_cents: 0 }), /centimes positif/);

@@ -390,15 +390,36 @@ async function openOrcaAccount() {
   orcaDetectionTimer.unref();
   return true;
 }
+// Origines acceptées pour la fenêtre de compte OrcaRouter : le site canonique
+// (www) et sa redirection sans www. La fenêtre est déjà contrainte par
+// `secureAccountWindow` ; cette liste ne sert qu'à décider si le localStorage
+// peut être lu pour récupérer les identifiants numériques.
+const ORCA_ACCOUNT_ORIGINS = new Set([ORCA_ORIGIN, ORCA_ORIGIN.replace('://www.', '://')]);
+
+// Décision pure (aucune dépendance Electron, testée hors application) : la ref
+// persistée suffit à vérifier une session existante sans fenêtre. Celle de la
+// fenêtre n'est retenue que si elle est valide et différente (connexion neuve ou
+// changement de compte / espace de travail).
+function chooseOrcaAccountRef(stored, fromWindow) {
+  const valid = ref => Boolean(ref) && Number.isSafeInteger(ref.userId) && ref.userId > 0
+    && Number.isSafeInteger(ref.workspaceId) && ref.workspaceId > 0;
+  const windowRef = valid(fromWindow) ? fromWindow : null;
+  const storedRef = valid(stored) ? stored : null;
+  if (windowRef && (!storedRef || windowRef.userId !== storedRef.userId || windowRef.workspaceId !== storedRef.workspaceId)) return windowRef;
+  return storedRef || windowRef || null;
+}
 async function readOrcaAccountRef() {
-  if (!orcaLoginWindow || orcaLoginWindow.isDestroyed() || new URL(orcaLoginWindow.webContents.getURL()).origin !== ORCA_ORIGIN) return null;
+  if (!orcaLoginWindow || orcaLoginWindow.isDestroyed()) return null;
+  let origin;
+  try { origin = new URL(orcaLoginWindow.webContents.getURL()).origin; } catch { return null; }
+  if (!ORCA_ACCOUNT_ORIGINS.has(origin)) return null;
   // Only numeric account/workspace identifiers leave the remote page. Passwords,
   // tokens and cookies stay in the isolated browser session.
   return orcaLoginWindow.webContents.executeJavaScript(`(() => {
     try { const user = JSON.parse(localStorage.getItem('user') || 'null');
       return { userId: Number(user?.id), workspaceId: Number(localStorage.getItem('active_workspace_id') || user?.active_workspace_id) };
     } catch { return null; }
-  })()`);
+  })()`).catch(() => null);
 }
 async function verifyOrcaAccount() {
   if (disconnecting.has('orcarouter') || quitting) throw new Error('Déconnexion en cours.');
@@ -407,9 +428,13 @@ async function verifyOrcaAccount() {
   if (busy.has(p.id)) throw new Error('Une synchronisation OrcaRouter est déjà en cours.');
   const work = (async () => {
     try {
-      const ref = await readOrcaAccountRef();
+      // Une session persistée valide se vérifie directement : la fenêtre de
+      // connexion n'est pas requise (elle ne sert qu'à une connexion neuve ou à
+      // un changement de compte / espace de travail).
+      const fromWindow = await readOrcaAccountRef();
+      const ref = chooseOrcaAccountRef(p.accountSession, fromWindow);
       validateAccountRef(ref);
-      orcaConnection = { status: 'verifying', message: 'Connexion détectée. Lecture du portefeuille…' };
+      orcaConnection = { status: 'verifying', message: 'Lecture du portefeuille OrcaRouter…' };
       // Session écrite AVANT la première lecture : un 429 ou une panne transitoire
       // ne doit pas faire croire à une déconnexion (reprise au cycle de 5 minutes).
       const previous = p.accountSession;
@@ -424,13 +449,16 @@ async function verifyOrcaAccount() {
       if (orcaLoginWindow && !orcaLoginWindow.isDestroyed()) orcaLoginWindow.close();
       showMain();
     } catch (error) {
-      // ORCA_AUTH : la session n'est plus valable, l'UI repasse non connectée.
-      // ORCA_RATE_LIMIT / ORCA_TRANSIENT : session conservée, dernier relevé
-      // intact, réessai automatique au cycle suivant.
+      // ORCA_AUTH : la session n'est plus valable, l'UI repasse non connectée et
+      // le message invite à reconnecter. ORCA_RATE_LIMIT / ORCA_TRANSIENT :
+      // session conservée, dernier relevé intact, réessai automatique annoncé.
       if (error.code === 'ORCA_AUTH') delete p.accountSession;
       // Session acceptée mais lecture transitoire : la fenêtre de connexion a
       // rempli son rôle, la reprise se fera en arrière-plan.
       else if (orcaLoginWindow && !orcaLoginWindow.isDestroyed()) orcaLoginWindow.close();
+      if (error.code === 'ORCA_RATE_LIMIT' || error.code === 'ORCA_TRANSIENT') {
+        error.message = `${error.message} Réessai automatique au prochain cycle d’actualisation.`;
+      }
       p.error = error.message;
       await persist();
       orcaConnection = { status: 'error', message: error.message, errorCode: error.code || null };
@@ -664,13 +692,15 @@ function registerIpc() {
     return openOllamaAccount();
   });
   handle('ollama:verify-account', () => verifyOllamaAccount());
-  handle('account:open', async id => { provider(id); if (disconnecting.has(id) || quitting) throw new Error('Déconnexion en cours.'); return id === 'antigravity' ? verifyAntigravity() : id === 'claude' ? verifyClaudeDesktop() : id === 'openai' ? openAiAccount.open() : subscriptionAccounts.open(id); });
+  handle('account:open', async id => { provider(id); if (disconnecting.has(id) || quitting) throw new Error('Déconnexion en cours.'); return id === 'antigravity' ? verifyAntigravity() : id === 'claude' ? verifyClaudeDesktop() : id === 'openai' ? openAiAccount.open() : id === 'orcarouter' ? openOrcaAccount() : id === 'ollama' ? openOllamaAccount() : subscriptionAccounts.open(id); });
   handle('account:verify', async id => {
     provider(id);
     if (disconnecting.has(id) || quitting) throw new Error('Déconnexion en cours.');
     if (id === 'openai') await openAiAccount.read(provider(id).accountSession?.identity);
     else if (id === 'antigravity') await verifyAntigravity();
     else if (id === 'claude') await verifyClaudeDesktop();
+    else if (id === 'orcarouter') await verifyOrcaAccount();
+    else if (id === 'ollama') await verifyOllamaAccount();
     else await subscriptionAccounts.read(id, { background: true, interactive: true });
     return publicState();
   });

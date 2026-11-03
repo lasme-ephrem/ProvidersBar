@@ -33,9 +33,14 @@ test('DeepSeek rejects malformed decimal strings, negative balances and duplicat
   assert.throws(() => parseResponse('openrouter', { data: { total_credits: '0x10', total_usage: 0 } }));
 });
 
-test('OpenRouter never returns a negative remaining balance', () => {
+test('OpenRouter keeps a plausible overdraft and rejects impossible balances', () => {
   assert.deepEqual(parseResponse('openrouter', { data: { total_credits: 10, total_usage: 4 } }).balances, [{ currency: 'USD', remaining: 6, total: 10, used: 4 }]);
+  assert.deepEqual(parseResponse('openrouter', { data: { total_credits: 10, total_usage: 12 } }).balances, [{ currency: 'USD', remaining: -2, total: 10, used: 12 }]);
+  const real = parseResponse('openrouter', { data: { total_credits: 45, total_usage: 45.08283509 } }).balances[0];
+  assert.equal(real.currency, 'USD');
+  assert.ok(Math.abs(real.remaining + 0.08283509) < 1e-9);
   assert.throws(() => parseResponse('openrouter', { data: { total_credits: 4, total_usage: 10 } }), /incohérent/);
+  assert.throws(() => parseResponse('openrouter', { data: { total_credits: 0, total_usage: 2 } }), /incohérent/);
 });
 
 test('OrcaRouter API-key limits are never interpreted as wallet balances, even when plausible', () => {

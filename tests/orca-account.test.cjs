@@ -1,9 +1,70 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { parseWallet, fetchWallet, resetOrcaRateLimit } = require('../lib/orca-account.cjs');
+const fsSync = require('node:fs');
+const path = require('node:path');
+const { parseWallet, fetchWallet, resetOrcaRateLimit, validateAccountRef } = require('../lib/orca-account.cjs');
 const ref = { userId: 12, workspaceId: 34 };
 const account = { success: true, data: { id: 12, active_workspace: { id: 34, wallet_quota: 26600000 }, quota: 999999999 } };
 const status = { success: true, data: { quota_per_unit: 500000 } };
+
+// La décision « session persistée ou fenêtre » vit dans main.cjs sans dépendre
+// d'Electron : elle est extraite de la source et exécutée ici (vérification
+// possible sans fenêtre, y compris après redémarrage).
+function loadMainHelper(name) {
+  const source = fsSync.readFileSync(path.join(__dirname, '..', 'main.cjs'), 'utf8');
+  const marker = `function ${name}(`;
+  const start = source.indexOf(marker);
+  assert.ok(start >= 0, `fonction ${name} introuvable dans main.cjs`);
+  assert.equal(source.lastIndexOf(marker), start, `fonction ${name} définie plusieurs fois dans main.cjs`);
+  const open = source.indexOf('{', start);
+  let depth = 0;
+  let end = -1;
+  for (let index = open; index < source.length; index++) {
+    if (source[index] === '{') depth++;
+    else if (source[index] === '}') {
+      depth--;
+      if (depth === 0) { end = index + 1; break; }
+    }
+  }
+  assert.ok(end > open, `fonction ${name} incomplète dans main.cjs`);
+  // eslint-disable-next-line no-new-func
+  return new Function(`return (${source.slice(start, end)})`)();
+}
+
+test('A persisted OrcaRouter session is verified without any login window', () => {
+  const choose = loadMainHelper('chooseOrcaAccountRef');
+  const stored = { userId: 102647, workspaceId: 102238 };
+  // Relevé réel constaté : la session persistée suffit, aucune fenêtre requise.
+  assert.deepEqual(choose(stored, null), stored);
+  assert.deepEqual(choose(stored, undefined), stored);
+  // Une fenêtre sur la même identité ne change rien : pas de bascule inutile.
+  assert.deepEqual(choose(stored, { userId: 102647, workspaceId: 102238 }), stored);
+  // Connexion neuve : seule la fenêtre fournit une ref.
+  assert.deepEqual(choose(null, { userId: 1, workspaceId: 2 }), { userId: 1, workspaceId: 2 });
+  assert.deepEqual(choose(undefined, { userId: 1, workspaceId: 2 }), { userId: 1, workspaceId: 2 });
+  // Changement de compte ou d'espace de travail : la fenêtre fait foi.
+  assert.deepEqual(choose(stored, { userId: 102647, workspaceId: 102239 }), { userId: 102647, workspaceId: 102239 });
+  assert.deepEqual(choose(stored, { userId: 102648, workspaceId: 102238 }), { userId: 102648, workspaceId: 102238 });
+  // Aucune source valide : aucune ref inventée.
+  assert.equal(choose(null, null), null);
+  assert.equal(choose(undefined, undefined), null);
+  for (const invalid of [{}, { userId: 0, workspaceId: 2 }, { userId: 1.5, workspaceId: 2 }, { userId: 1, workspaceId: -2 }, { userId: '1', workspaceId: 2 }, null]) {
+    assert.equal(choose(invalid, null), null, `ref invalide acceptée : ${JSON.stringify(invalid)}`);
+  }
+  assert.deepEqual(choose({ userId: 0, workspaceId: 2 }, { userId: 3, workspaceId: 4 }), { userId: 3, workspaceId: 4 });
+  // Câblage : verifyOrcaAccount doit choisir à partir de la session persistée.
+  const source = fsSync.readFileSync(path.join(__dirname, '..', 'main.cjs'), 'utf8');
+  assert.match(source, /chooseOrcaAccountRef\(p\.accountSession, fromWindow\)/);
+});
+
+test('No persisted session and no window yields the actionable reconnection error', () => {
+  // Message d'erreur utilisé par verifyOrcaAccount dans ce cas : clair et actionnable.
+  assert.throws(() => validateAccountRef(null), error => error.code === 'ORCA_AUTH' && /reconnecte/i.test(error.message));
+  assert.throws(() => validateAccountRef(undefined), { code: 'ORCA_AUTH' });
+  assert.throws(() => validateAccountRef({ userId: 0, workspaceId: 1 }), { code: 'ORCA_AUTH' });
+  const choose = loadMainHelper('chooseOrcaAccountRef');
+  assert.equal(choose(null, null), null);
+});
 
 test('Wallet uses the selected workspace and provider conversion, not a key or user quota', () => {
   const result = parseWallet(account, status, ref);

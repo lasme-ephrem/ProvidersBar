@@ -1,7 +1,46 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const { parseOllamaCredits, fetchOllamaCredits, SETTINGS_URL, lastKnownUsageCredits, resetOllamaRateLimit } = require('../lib/ollama-account.cjs');
+const fixturePath = path.join(__dirname, 'fixtures', 'ollama-settings-2026-11-03.html');
 const page = (used='12.50', total='60.00') => `<main><h2>Included usage <span>Pro</span></h2><h3>Monthly usage</h3><span>$${used}</span> of <span>$${total}</span> used<div data-time="2026-10-07T12:00:00Z">Resets</div><h3>Extra usage</h3><span>$99.00</span><p>Subscription: $20</p></main>`;
+test('New Ollama portal (November 2026) exposes the Free usage meter and the Pay as you go balance', () => {
+  const html = fs.readFileSync(fixturePath, 'utf8');
+  const now = new Date('2026-11-03T22:40:00Z');
+  const snapshot = parseOllamaCredits(html, now);
+  assert.equal(snapshot.planTier, 'free');
+  assert.equal(snapshot.quotaRemaining, 100);
+  assert.deepEqual(snapshot.usageCredits, { currency: 'USD', remaining: 1.05 });
+  assert.deepEqual(snapshot.balances, []);
+  assert.equal(snapshot.resetAt, null);
+  assert.equal(snapshot.updatedAt, now.toISOString());
+  assert.equal(snapshot.connectorVersion, 'ollama-monthly-credits-v1');
+  assert.equal(snapshot.balanceLabel, 'Usage Free restant');
+  // The page itself never leaks into the snapshot (no account identity/e-mail).
+  assert.equal(JSON.stringify(snapshot).includes('user@example.test'), false);
+});
+
+test('New portal stays strict: explicit percentages only, sign-in detected, no estimate', () => {
+  const html = fs.readFileSync(fixturePath, 'utf8');
+  // The real page with a sign-in marker is an authenticated-session failure, not a format change.
+  assert.throws(() => parseOllamaCredits('<p>Sign in to Ollama</p>' + html), { code: 'OLLAMA_SIGNIN' });
+  // No recognizable Free meter and no monthly section: clear error, never a made-up quota.
+  assert.throws(() => parseOllamaCredits('<main><h1>Usage credits</h1><p>Nothing here</p></main>'), /non reconnus/);
+  // An explicit Free heading without a meter remains a valid Free account, quota unknown.
+  const withoutMeter = parseOllamaCredits('<main><h2>Usage credits <span>Free</span></h2><p>Free usage credits can be used.</p></main>');
+  assert.equal(withoutMeter.planTier, 'free');
+  assert.equal(withoutMeter.quotaRemaining, null);
+  const meter = percent => '<main><h2>Usage credits Pay as you go</h2><span>$1.05</span>'
+    + '<p>Add usage credits to pay as you go</p><h2>Usage breakdown</h2>'
+    + '<span>Free usage</span><span>' + percent + '% used</span></main>';
+  assert.equal(parseOllamaCredits(meter(25)).quotaRemaining, 75);
+  assert.equal(parseOllamaCredits(meter(0)).quotaRemaining, 100);
+  assert.equal(parseOllamaCredits(meter(100)).quotaRemaining, 0);
+  // An out-of-range percentage is not silently turned into a quota.
+  assert.throws(() => parseOllamaCredits(meter(101)), /non reconnus/);
+});
+
 test('Monthly dollar credits are independent of subscription price and extra credits', () => {
   const s = parseOllamaCredits(page());
   assert.deepEqual(s.balances, [{currency:'USD',remaining:47.5,total:60,used:12.5}]);
