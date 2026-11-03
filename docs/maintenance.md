@@ -1,7 +1,7 @@
 # Maintenance
 
 Documentation des commandes réelles de vérification, de l'intégration continue et
-des procédures de maintenance. La version cible est **0.3.2** (branche `refonte/pro`,
+des procédures de maintenance. La version cible est **0.3.3** (branche `refonte/pro`,
 Node.js ≥ 24, Windows x64, Electron 44.x).
 
 ## Validation locale (Definition of Done)

@@ -108,18 +108,20 @@ function syncClaudeWhenDue() {
   syncOne('claude').catch(() => {});
 }
 // Repli explicite Claude Desktop : décision pure, sans dépendance Electron
-// (testée par tests/claude-desktop-usage.test.cjs). La lecture directe ne peut
-// être remplacée que si elle est bloquée par un 429 ou un problème
-// d'authentification ET qu'aucun relevé existant ne serait écrasé.
-function shouldFallbackToClaudeDesktop(code, hasSnapshot) {
-  if (hasSnapshot) return false;
+// (testée par tests/claude-desktop-usage.test.cjs). La lecture directe peut être
+// remplacée quand elle est bloquée par un 429 ou un problème d'authentification
+// ET que le dernier relevé direct est absent ou périmé (> 10 min, seuil de
+// fraîcheur de l'interface) : un relevé périmé n'a rien de valable à préserver.
+function shouldFallbackToClaudeDesktop(code, snapshot, nowMs = Date.now()) {
+  const updatedAt = Date.parse(snapshot?.updatedAt);
+  if (Number.isFinite(updatedAt) && nowMs - updatedAt <= 10 * 60 * 1000) return false;
   if (typeof code !== 'string' || !code) return false;
   // `rate-limit` (quota ou renouvellement limité) et tous les codes `auth-*`,
   // y compris `auth-rate-limit` renvoyé par le renouvellement OAuth.
   return code === 'rate-limit' || code.startsWith('auth-');
 }
 function claudeDesktopGuidance() {
-  return 'Ouvre Claude Code pour renouveler le jeton, ou déconnecte puis reconnecte Claude pour utiliser la lecture Desktop.';
+  return 'Ouvre Claude Desktop (page Utilisation) pour actualiser le relevé ; la lecture directe reprendra après renouvellement du jeton dans Claude Code.';
 }
 async function verifyClaudeDesktop({ enableLive = false } = {}) {
   if (disconnecting.has('claude') || quitting) throw new Error('Déconnexion en cours.');
@@ -141,21 +143,26 @@ async function verifyClaudeDesktop({ enableLive = false } = {}) {
       else { p.snapshot = snapshot; p.error = null; }
       claudeConnection = { status: 'connected', message: direct ? 'Quotas Claude lus directement. Actualisation automatique chaque minute.' : 'Dernier relevé Claude Desktop récupéré. Son heure de mesure reste affichée.' };
     } catch (error) {
-      const blocked = direct && shouldFallbackToClaudeDesktop(error.code, Boolean(p.snapshot));
+      const blocked = direct && shouldFallbackToClaudeDesktop(error.code, p.snapshot);
       if (blocked) {
+        // Bascule explicite et annoncée : le relevé direct est inutilisable et
+        // absent/périmé. On ne change de mode qu'une fois un relevé Desktop
+        // réellement lu : sans donnée à afficher, on conserve le mode direct et
+        // son cooldown (aucune oscillation), avec une consigne actionnable.
+        const previousSession = p.accountSession;
         try {
-          const snapshot = await claudeDesktop.readClaudeDesktopUsage(p.snapshot);
-          // Bascule explicite et annoncée : pas de retour silencieux, mais aucun
-          // relevé n'existe à conserver. Aucune rotation de jeton n'est forcée.
+          const snapshot = await claudeDesktop.readClaudeDesktopUsage(p.snapshot, { allowStale: true });
           p.accountSession = { kind: 'claude-desktop-local' };
           record(p, snapshot);
           p.claudeSync = claudeReader.info();
-          claudeConnection = { status: 'connected', message: 'Lecture directe indisponible (renouvellement du jeton Claude Code limité) ; ProvidersBar utilise le relevé Claude Desktop.' };
+          claudeConnection = { status: 'connected', message: snapshot.stale
+            ? 'Lecture directe indisponible (renouvellement du jeton Claude Code limité) ; ProvidersBar utilise le dernier relevé Claude Desktop connu (relevé ancien).'
+            : 'Lecture directe indisponible (renouvellement du jeton Claude Code limité) ; ProvidersBar utilise le relevé Claude Desktop.' };
           return publicState();
         } catch {
-          // Relevé Desktop aussi indisponible : l'erreur d'origine reste la
-          // référence, enrichie d'une consigne actionnable ; le cooldown du
-          // lecteur direct est conservé par le `finally` ci-dessous.
+          // Relevé Desktop aussi indisponible : conserver mode, snapshot et
+          // cooldown (écrit par le `finally`) et fournir une consigne actionnable.
+          p.accountSession = previousSession;
           const failure = new Error(`${error.message} ${claudeDesktopGuidance()}`);
           failure.code = error.code;
           p.error = failure.message;

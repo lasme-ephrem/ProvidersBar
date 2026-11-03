@@ -1,5 +1,21 @@
 # Historique des versions
 
+## 0.3.3 — 4 novembre 2026
+
+Correctif de la connexion Claude : elle ne reste plus bloquée sur un relevé ancien lorsque la lecture directe échoue.
+
+### Connexions
+
+- **Claude** : si la lecture directe échoue (`rate-limit`, `auth-rate-limit`, `auth-*` — typiquement un jeton Claude Code à renouveler) et que le dernier relevé est absent **ou périmé de plus de 10 minutes**, ProvidersBar bascule désormais **explicitement** vers la lecture Claude Desktop et l’annonce. Auparavant, un ancien snapshot (même vieux de plusieurs jours) bloquait la bascule et le relevé restait figé. Un relevé frais (< 10 minutes) n’est jamais remplacé.
+- **Relevé Desktop en repli** : un échantillon de plus de 45 minutes n’est plus une erreur bloquante dans ce seul cas de repli ; il est enregistré avec son horodatage réel, le drapeau `stale` et la mention « relevé ancien », afin d’afficher la dernière mesure honnête plutôt qu’un relevé de plusieurs jours. Le mode Desktop normal continue d’exiger un relevé de moins de 45 minutes.
+- **Pas d’oscillation** : si le relevé Desktop est momentanément illisible ou absent, le mode Desktop est conservé (snapshot et cooldown intacts, message actionnable), afin que le prochain échantillon écrit par Claude Desktop soit récupéré automatiquement.
+- **Lecture directe** : reste disponible après renouvellement du jeton dans Claude Code (`claude auth login`) et réactivation explicite ; le repli Desktop ne la désactive pas durablement.
+
+### Qualité
+
+- Tests : matrice de décision du repli (relevé absent/périmé/frais × codes d’erreur), seuil exact de 10 minutes, option `allowStale` (> 45 minutes) et non-régression du mode Desktop normal.
+- Documentation : README et `docs/architecture.md` précisent la règle de bascule et l’affichage des relevés Desktop anciens ; nouveau [docs/validation-0.3.3.md](docs/validation-0.3.3.md).
+
 ## 0.3.2 — 4 novembre 2026
 
 Correctif des connexions Ollama, OrcaRouter et OpenRouter, constatées cassées après la 0.3.0.

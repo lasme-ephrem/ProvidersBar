@@ -2,7 +2,12 @@
 
 Application desktop Windows pour suivre les abonnements, quotas et crédits de **dix fournisseurs d’IA**. Un tableau de bord et un widget dans la zone de notification regroupent les ressources restantes, leur fraîcheur et leurs dates de réinitialisation.
 
-**Version 0.3.2 — 3 novembre 2026 :** correctif des connexions Ollama et OrcaRouter (nouveau portail Ollama, vérification OrcaRouter sans fenêtre et sans perte de session), après les correctifs 0.3.1 pour Claude et Antigravity. La refonte 0.3.0 reste la base : fiabilité et sécurité des connexions, redessin accessible, thème système, effacement des données, historique porté à 20 000 relevés, `main.cjs` simplifié et durci. Détails dans [CHANGELOG.md](CHANGELOG.md) et [docs/validation-0.3.2.md](docs/validation-0.3.2.md).
+**Version 0.3.3 — 4 novembre 2026 :** Claude bascule automatiquement vers la lecture Claude Desktop dès que la lecture directe est inutilisable (jeton Claude Code à renouveler) et que le dernier relevé est périmé, au lieu de conserver un relevé vieux de plusieurs jours. La refonte 0.3.0 reste la base, avec les correctifs 0.3.1 (Claude/Antigravity) et 0.3.2 (Ollama/OrcaRouter/OpenRouter). Détails dans [CHANGELOG.md](CHANGELOG.md) et [docs/validation-0.3.3.md](docs/validation-0.3.3.md).
+
+## Correctif 0.3.3
+
+- **Claude** : si la lecture directe échoue (renouvellement du jeton Claude Code limité) et que le dernier relevé date de plus de 10 minutes, ProvidersBar **bascule explicitement** en lecture Claude Desktop et l’annonce, au lieu de rester bloqué sur un ancien relevé. Un relevé frais (< 10 minutes) n’est jamais remplacé. En repli, un relevé Desktop de plus de 45 minutes est affiché avec sa date réelle et la mention « relevé ancien » (jamais présenté comme frais) ; le mode Desktop reste actif pour que le prochain relevé écrit par Claude Desktop soit récupéré automatiquement.
+- **Lecture directe Claude** : reste disponible si tu renouvelles le jeton dans Claude Code (ou via `claude auth login`), puis en réactivant « Activer la lecture directe » ; le repli Desktop ne l’empêche pas.
 
 ## Correctif 0.3.2
 
@@ -19,7 +24,7 @@ Application desktop Windows pour suivre les abonnements, quotas et crédits de *
 ## Ce qui change en 0.3.0
 
 - **Connexions plus fiables** : une session Ollama ou OrcaRouter est conservée dès qu’elle est validée, même si la lecture échoue temporairement ; le cycle d’actualisation réessaie seul au lieu de demander une reconnexion. Les cooldowns 429 des clés API survivent au redémarrage.
-- **Claude jamais bloqué** : si la lecture directe échoue (jeton Claude Code expiré, renouvellement limité ou refusé) **sans aucun relevé disponible**, ProvidersBar bascule explicitement vers le relevé Claude Desktop et l’annonce dans la fiche, au lieu de rester sans données.
+- **Claude jamais bloqué** : si la lecture directe échoue (jeton Claude Code expiré, renouvellement limité ou refusé) alors que le dernier relevé direct est **absent ou périmé (plus de 10 minutes)**, ProvidersBar bascule explicitement vers le relevé Claude Desktop et l’annonce, même si un ancien relevé existe — il est périmé, rien de valable à préserver. Un relevé Desktop de plus de 45 minutes reste affiché avec sa date réelle et signalé comme ancien.
 - **Session navigateur durcie** : les lecteurs de comptes pilotent Chrome/Edge par un **pipe local** (plus de port TCP de débogage) ; la première connexion se fait dans un navigateur ordinaire, sans port de débogage, et les fenêtres de connexion internes n’acceptent qu’une **liste fermée d’origines** (fournisseurs concernés et connexion Google).
 - **Diagnostic intégré** : `npm run doctor` vérifie en lecture seule les prérequis (dossier de données, DPAPI, navigateur, Codex, Claude, Antigravity, accès réseau aux API).
 - **Interface redessinée et accessible** : thèmes clair / sombre / **système**, contrastes AA, navigation jamais masquée, widget avec fraîcheur des relevés et statut d’actualisation réel, version affichée dynamiquement, marque neutre.
@@ -87,7 +92,7 @@ Par défaut, ProvidersBar lit le fichier local `plan-usage-history.json` de Clau
 
 La lecture directe exige l’actualisation automatique. Elle respecte une minute entre lectures, les erreurs temporaires et `Retry-After`. Une erreur conserve le dernier relevé et son heure réelle : aucun retour silencieux vers un fichier Desktop plus ancien tant qu’un relevé direct existe.
 
-Si la lecture directe est bloquée (429 de quota **ou de renouvellement OAuth**, jeton expiré, erreur d’authentification) **et qu’aucun relevé n’est encore disponible**, ProvidersBar bascule explicitement vers le relevé Claude Desktop : la fiche l’annonce (« Lecture directe indisponible (renouvellement du jeton Claude Code limité) ; ProvidersBar utilise le relevé Claude Desktop ») et enregistre ce relevé. Rien n’est écrasé et aucune rotation de jeton n’est forcée. Après renouvellement du jeton dans Claude Code, réactiver la lecture directe si souhaité. Si Claude Desktop n’a pas non plus de relevé lisible, l’erreur d’origine est conservée avec la consigne : ouvrir Claude Code pour renouveler le jeton, ou déconnecter puis reconnecter Claude pour utiliser la lecture Desktop. [Détails du protocole et de la protection des jetons](docs/architecture.md).
+Si la lecture directe est bloquée (429 de quota **ou de renouvellement OAuth**, jeton expiré, erreur d’authentification) **et que le dernier relevé direct est absent ou périmé (plus de 10 minutes)**, ProvidersBar bascule explicitement vers le relevé Claude Desktop, même si un ancien relevé existe : il est périmé, donc rien de valable n’est préservé. La fiche l’annonce (« Lecture directe indisponible (renouvellement du jeton Claude Code limité) ; ProvidersBar utilise le relevé Claude Desktop ») et enregistre ce relevé. Pendant ce repli, un échantillon Claude Desktop de plus de 45 minutes n’est pas rejeté : il est affiché avec sa **date réelle** et un libellé « relevé ancien » (en lecture Desktop normale, un tel échantillon reste une erreur). Si Claude Desktop n’a pas non plus de relevé lisible au moment du repli, ProvidersBar ne change pas de mode sans donnée à afficher : il conserve la lecture courante, le dernier relevé et le délai d’attente, et affiche : « Ouvre Claude Desktop (page Utilisation) pour actualiser le relevé ; la lecture directe reprendra après renouvellement du jeton dans Claude Code. » Le cycle de 5 minutes réessaie (et basculera dès qu’un relevé Desktop sera lisible). Un relevé direct de moins de 10 minutes est conservé : aucune bascule dans ce cas. Aucune rotation de jeton n’est forcée ; après renouvellement du jeton dans Claude Code, réactiver la lecture directe si souhaité. [Détails du protocole et de la protection des jetons](docs/architecture.md).
 
 ## Abonnements, dates et recommandations
 
@@ -180,7 +185,7 @@ npm run package:release
 npm run release:artifacts
 ```
 
-La distribution propre est créée dans `dist/ProvidersBar-0.3.2-win32-x64/` ; la commande refuse un dossier de release déjà existant. `npm run release:artifacts` produit l'archive ZIP et `dist/SHA256SUMS-0.3.2.txt`, et refuse d'archiver une release contenant un dossier de données personnelles. Le portable personnel reste dans `dist/ProvidersBar-win32-x64/`, à côté de ses données.
+La distribution propre est créée dans `dist/ProvidersBar-0.3.3-win32-x64/` ; la commande refuse un dossier de release déjà existant. `npm run release:artifacts` produit l'archive ZIP et `dist/SHA256SUMS-0.3.3.txt`, et refuse d'archiver une release contenant un dossier de données personnelles. Le portable personnel reste dans `dist/ProvidersBar-win32-x64/`, à côté de ses données.
 
 Les ressources applicatives sont préparées dans un dossier temporaire puis remplacées ensemble : les fichiers retirés des sources ne subsistent pas dans l’installation. `npm run update:portable` conserve `data/` et les sessions, ferme l’ancien processus s’il est joignable en diagnostic, puis nécessite de relancer l’application ; sinon, la quitter manuellement avant la mise à jour. Le packaging inclut les dépendances de production (`proper-lockfile` et ses dépendances) et leurs notices.
 
@@ -188,7 +193,7 @@ L’exécutable **n’est pas signé** et conserve les métadonnées binaires El
 
 ## Limites connues
 
-- **Lectures réelles** : Claude Desktop, le service local Antigravity, le portail Ollama et le portefeuille OrcaRouter sont vérifiés sur une machine réelle pour la 0.3.2 (voir [docs/validation-0.3.2.md](docs/validation-0.3.2.md)). Les lectures authentifiées des fournisseurs (clés API, sessions web) restent à rejouer après chaque changement de service.
+- **Lectures réelles** : Claude Desktop, le service local Antigravity, le portail Ollama, le portefeuille OrcaRouter et le solde OpenRouter sont vérifiés sur une machine réelle pour les 0.3.1 à 0.3.3 (voir [docs/validation-0.3.3.md](docs/validation-0.3.3.md)). Les lectures authentifiées des fournisseurs (clés API, sessions web) restent à rejouer après chaque changement de service.
 - Les lecteurs web (Grok, Z.ai, Ollama, bases Antigravity) dépendent des pages et services officiels, qui peuvent changer sans préavis. Un format inconnu produit une erreur, jamais une estimation.
 - Claude Desktop peut suspendre ses mesures ; le fichier local ne fournit pas de dates de reset fiables.
 - L’export JSON n’est pas restaurable depuis l’interface ; la connexion des comptes et des clés doit être refaite.
@@ -204,7 +209,7 @@ L’exécutable **n’est pas signé** et conserve les métadonnées binaires El
 - `scripts/` et `tests/` : fabrication, diagnostic, maintenance et validation.
 - [Architecture, IPC et modèles de données](docs/architecture.md)
 - [Maintenance et procédures de validation](docs/maintenance.md)
-- [Validation de la version 0.3.2](docs/validation-0.3.2.md) · [validation 0.3.1](docs/validation-0.3.1.md) (archive) · [validation 0.3.0](docs/validation-0.3.0.md) (archive) · [validation 0.2.0](docs/validation-0.2.0.md) (archive)
+- [Validation de la version 0.3.3](docs/validation-0.3.3.md) · [validation 0.3.2](docs/validation-0.3.2.md) (archive) · [validation 0.3.1](docs/validation-0.3.1.md) (archive) · [validation 0.3.0](docs/validation-0.3.0.md) (archive) · [validation 0.2.0](docs/validation-0.2.0.md) (archive)
 - [Méthode de recommandation](docs/ordre-consommation.md)
 - [Historique des versions](CHANGELOG.md)
 - [Provenance des logos](assets/providers/sources.json)

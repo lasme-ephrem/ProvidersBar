@@ -6,7 +6,7 @@ const fsSync = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
-// --- Décision de repli Claude (T9) -----------------------------------------
+// --- Décision de repli Claude (T9/T15) --------------------------------------
 // La décision vit dans main.cjs mais ne dépend pas d'Electron : elle est extraite
 // de la source et exécutée ici pour couvrir chaque branche sans lancer l'app.
 function loadMainHelper(name) {
@@ -29,31 +29,79 @@ function loadMainHelper(name) {
   return new Function(`return (${source.slice(start, end)})`)();
 }
 
-test('Claude direct fallback is limited to 429/auth failures with no reading to preserve', () => {
+const FALLBACK_NOW = Date.parse('2026-11-04T00:40:00.000Z');
+const freshSnapshot = { updatedAt: new Date(FALLBACK_NOW - 5 * 60000).toISOString() };
+const staleSnapshot = { updatedAt: new Date(FALLBACK_NOW - 11 * 60000).toISOString() };
+const sixDayOldSnapshot = { updatedAt: new Date(FALLBACK_NOW - 6 * 86400000).toISOString() };
+
+test('Claude direct fallback triggers on 429/auth failures when the last reading is absent or stale', () => {
   const shouldFallback = loadMainHelper('shouldFallbackToClaudeDesktop');
-  for (const code of ['rate-limit', 'auth-rate-limit', 'auth-required', 'auth-unavailable', 'auth-busy', 'auth-save', 'auth-network', 'auth-refused', 'auth-whatever']) {
-    assert.equal(shouldFallback(code, false), true, `repli attendu pour ${code}`);
+  const eligible = ['rate-limit', 'auth-rate-limit', 'auth-required', 'auth-unavailable', 'auth-busy', 'auth-save', 'auth-network', 'auth-refused', 'auth-whatever'];
+  const notEligible = ['network', 'service', 'format', 'API_RATE_LIMIT', 'rate_limit', 'auth', '', null, undefined, 429];
+
+  // 1) Relevé absent (null, undefined, objet sans updatedAt valide) : bascule.
+  for (const absent of [null, undefined, {}, { updatedAt: 'pas une date' }, { updatedAt: null }]) {
+    for (const code of eligible) assert.equal(shouldFallback(code, absent, FALLBACK_NOW), true, `repli attendu ${code} / absent`);
   }
-  // Erreurs transitoires non liées à l'authentification ou au quota : pas de bascule.
-  for (const code of ['network', 'service', 'format', 'API_RATE_LIMIT', 'rate_limit', 'auth', '', null, undefined, 429]) {
-    assert.equal(shouldFallback(code, false), false, `pas de repli attendu pour ${String(code)}`);
+  // 2) Relevé périmé (> 10 min) : bascule, même si un ancien relevé existe.
+  for (const stale of [staleSnapshot, sixDayOldSnapshot]) {
+    for (const code of eligible) assert.equal(shouldFallback(code, stale, FALLBACK_NOW), true, `repli attendu ${code} / périmé`);
   }
-  // Un relevé existant n'est jamais écrasé, même sur un code éligible.
-  assert.equal(shouldFallback('rate-limit', true), false);
-  assert.equal(shouldFallback('auth-rate-limit', true), false);
+  // 3) Relevé frais (< 10 min) : jamais de bascule (comportement T9 conservé).
+  for (const code of [...eligible, ...notEligible]) assert.equal(shouldFallback(code, freshSnapshot, FALLBACK_NOW), false, `pas de bascule si frais (${String(code)})`);
+  // 4) Codes non liés à l'authentification/quota : pas de bascule.
+  for (const code of notEligible) assert.equal(shouldFallback(code, sixDayOldSnapshot, FALLBACK_NOW), false, `pas de repli pour ${String(code)}`);
+  // 5) Seuil exact de 10 minutes.
+  assert.equal(shouldFallback('auth-rate-limit', { updatedAt: new Date(FALLBACK_NOW - 10 * 60000).toISOString() }, FALLBACK_NOW), false);
+  assert.equal(shouldFallback('auth-rate-limit', { updatedAt: new Date(FALLBACK_NOW - 10 * 60000 - 1).toISOString() }, FALLBACK_NOW), true);
+});
+
+test('Claude Desktop stale readings are only returned when allowStale is explicit', async t => {
+  const now = new Date('2026-11-04T00:40:00.000Z');
+  const sample = { t: Date.parse('2026-11-03T23:54:00.000Z'), u: { fh: 0, sd: 62 } }; // 46 min
+  const history = { version: 2, samples: [sample] };
+  // Mode Desktop direct : un échantillon de plus de 45 min reste une erreur.
+  assert.throws(() => parseClaudeDesktopUsage(history, null, now), /45 minutes/);
+  // Repli : la dernière mesure honnête est affichée, datée et marquée ancienne.
+  const stale = parseClaudeDesktopUsage(history, null, now, { allowStale: true });
+  assert.equal(stale.updatedAt, new Date(sample.t).toISOString());
+  assert.equal(stale.stale, true);
+  assert.match(stale.quotaLabel, /relevé ancien/);
+  assert.deepEqual(stale.quotaWindows.map(window => window.remaining), [100, 38]);
+  // Un échantillon frais ne porte pas le drapeau stale.
+  const fresh = parseClaudeDesktopUsage({ version: 2, samples: [{ t: now.getTime() - 60000, u: { fh: 5, sd: 40 } }] }, null, now, { allowStale: true });
+  assert.equal(Object.hasOwn(fresh, 'stale'), false);
+  assert.doesNotMatch(fresh.quotaLabel, /relevé ancien/);
+
+  // Même comportement via le lecteur de fichiers et l'option transmise.
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'providersbar-claude-stale-'));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const profile = path.join(root, 'local', 'Claude-Data', 'claude_pzs8sxrjxfjjc');
+  await fs.mkdir(profile, { recursive: true });
+  await fs.writeFile(path.join(profile, 'plan-usage-history.json'), JSON.stringify(history));
+  const options = { localAppData: path.join(root, 'local'), roamingAppData: path.join(root, 'roaming'), now };
+  await assert.rejects(readClaudeDesktopUsage(null, options), /45 minutes/);
+  const fromFile = await readClaudeDesktopUsage(null, { ...options, allowStale: true });
+  assert.equal(fromFile.stale, true);
+  assert.deepEqual(fromFile.quotaWindows.map(window => window.remaining), [100, 38]);
 });
 
 test('Claude direct fallback announces the switch and keeps an actionable guidance', () => {
   const guidance = loadMainHelper('claudeDesktopGuidance');
   const message = guidance();
+  assert.match(message, /Claude Desktop/);
+  assert.match(message, /page Utilisation/);
   assert.match(message, /Claude Code/);
-  assert.match(message, /déconnecte puis reconnecte/);
-  assert.match(message, /lecture Desktop/);
   const source = fsSync.readFileSync(path.join(__dirname, '..', 'main.cjs'), 'utf8');
   assert.ok(
     source.includes('Lecture directe indisponible (renouvellement du jeton Claude Code limité) ; ProvidersBar utilise le relevé Claude Desktop.'),
     'le message de bascule explicite doit rester câblé dans verifyClaudeDesktop',
   );
+  assert.ok(
+    source.includes('ProvidersBar utilise le dernier relevé Claude Desktop connu (relevé ancien).'),
+    'la variante « relevé ancien » doit rester annoncée dans verifyClaudeDesktop',
+  );
+  assert.ok(source.includes('{ allowStale: true }'), 'le repli doit lire le relevé Desktop avec allowStale');
 });
 
 test('Claude Desktop history supplies only the two remaining plan quotas and preserves known future resets', () => {
