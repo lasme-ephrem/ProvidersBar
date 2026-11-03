@@ -2,11 +2,18 @@
 
 Application desktop Windows pour suivre les abonnements, quotas et crédits de **dix fournisseurs d’IA**. Un tableau de bord et un widget dans la zone de notification regroupent les ressources restantes, leur fraîcheur et leurs dates de réinitialisation.
 
-**Version 0.3.0 — 3 novembre 2026 :** refonte de fiabilité et de sécurité des connexions, redessin accessible du tableau de bord et du widget, thème système, effacement des données, historique porté à 20 000 relevés, `main.cjs` simplifié et durci. Détails dans [CHANGELOG.md](CHANGELOG.md) et [docs/validation-0.3.0.md](docs/validation-0.3.0.md).
+**Version 0.3.1 — 3 novembre 2026 :** correctif des connexions Claude et Antigravity (nouveau dossier de données Claude Desktop, découverte du service local Antigravity par processus, erreurs de renouvellement Claude Code distinctes et repli explicite vers Claude Desktop). La refonte 0.3.0 reste la base : fiabilité et sécurité des connexions, redessin accessible, thème système, effacement des données, historique porté à 20 000 relevés, `main.cjs` simplifié et durci. Détails dans [CHANGELOG.md](CHANGELOG.md) et [docs/validation-0.3.1.md](docs/validation-0.3.1.md).
+
+## Correctif 0.3.1
+
+- **Claude Desktop** : le relevé `plan-usage-history.json` est aussi lu dans le nouveau profil `%LOCALAPPDATA%\Claude-Data\<profil>\` des versions récentes de Claude Desktop, en plus des emplacements historiques. La connexion Claude retrouve donc immédiatement les quotas sans dépendre du renouvellement du jeton Claude Code.
+- **Antigravity** : la découverte du service local n’utilise plus un filtre de sockets défaillant sur certaines machines ; elle interroge les ports **du processus vérifié** (avec repli) et distingue « application fermée » de « service visible mais ports illisibles ». La lecture réelle des fenêtres Gemini, Claude/GPT (et Argon lorsqu’il est exposé par le compte) fonctionne à nouveau.
+- **Claude lecture directe** : un 429 du **renouvellement OAuth** est désormais distinct (`auth-rate-limit`) d’un 429 de l’endpoint d’usage, avec un message actionnable ; le `Retry-After` n’est pas contourné au réveil de veille. Si aucun relevé n’existe, le repli explicite vers Claude Desktop est annoncé au lieu de laisser la fiche vide.
 
 ## Ce qui change en 0.3.0
 
 - **Connexions plus fiables** : une session Ollama ou OrcaRouter est conservée dès qu’elle est validée, même si la lecture échoue temporairement ; le cycle d’actualisation réessaie seul au lieu de demander une reconnexion. Les cooldowns 429 des clés API survivent au redémarrage.
+- **Claude jamais bloqué** : si la lecture directe échoue (jeton Claude Code expiré, renouvellement limité ou refusé) **sans aucun relevé disponible**, ProvidersBar bascule explicitement vers le relevé Claude Desktop et l’annonce dans la fiche, au lieu de rester sans données.
 - **Session navigateur durcie** : les lecteurs de comptes pilotent Chrome/Edge par un **pipe local** (plus de port TCP de débogage) ; la première connexion se fait dans un navigateur ordinaire, sans port de débogage, et les fenêtres de connexion internes n’acceptent qu’une **liste fermée d’origines** (fournisseurs concernés et connexion Google).
 - **Diagnostic intégré** : `npm run doctor` vérifie en lecture seule les prérequis (dossier de données, DPAPI, navigateur, Codex, Claude, Antigravity, accès réseau aux API).
 - **Interface redessinée et accessible** : thèmes clair / sombre / **système**, contrastes AA, navigation jamais masquée, widget avec fraîcheur des relevés et statut d’actualisation réel, version affichée dynamiquement, marque neutre.
@@ -72,7 +79,9 @@ Par défaut, ProvidersBar lit le fichier local `plan-usage-history.json` de Clau
 
 **Connexions → Anthropic Claude → Activer la lecture directe (1 min)** autorise l’utilisation de la connexion Claude Code existante pour lire les quotas Anthropic. Les jetons restent dans le processus principal et dans le fichier officiel Claude Code ; le renouvellement OAuth est effectué par ProvidersBar avec le même transport réseau, sans jamais copier de jeton vers le renderer ou les données de l’application. Une révocation impose une reconnexion dans Claude Code.
 
-La lecture directe exige l’actualisation automatique. Elle respecte une minute entre lectures, les erreurs temporaires et `Retry-After`. Une erreur conserve le dernier relevé et son heure réelle, sans retour silencieux vers un fichier Desktop plus ancien. [Détails du protocole et de la protection des jetons](docs/architecture.md).
+La lecture directe exige l’actualisation automatique. Elle respecte une minute entre lectures, les erreurs temporaires et `Retry-After`. Une erreur conserve le dernier relevé et son heure réelle : aucun retour silencieux vers un fichier Desktop plus ancien tant qu’un relevé direct existe.
+
+Si la lecture directe est bloquée (429 de quota **ou de renouvellement OAuth**, jeton expiré, erreur d’authentification) **et qu’aucun relevé n’est encore disponible**, ProvidersBar bascule explicitement vers le relevé Claude Desktop : la fiche l’annonce (« Lecture directe indisponible (renouvellement du jeton Claude Code limité) ; ProvidersBar utilise le relevé Claude Desktop ») et enregistre ce relevé. Rien n’est écrasé et aucune rotation de jeton n’est forcée. Après renouvellement du jeton dans Claude Code, réactiver la lecture directe si souhaité. Si Claude Desktop n’a pas non plus de relevé lisible, l’erreur d’origine est conservée avec la consigne : ouvrir Claude Code pour renouveler le jeton, ou déconnecter puis reconnecter Claude pour utiliser la lecture Desktop. [Détails du protocole et de la protection des jetons](docs/architecture.md).
 
 ## Abonnements, dates et recommandations
 
@@ -165,7 +174,7 @@ npm run package:release
 npm run release:artifacts
 ```
 
-La distribution propre est créée dans `dist/ProvidersBar-0.3.0-win32-x64/` ; la commande refuse un dossier de release déjà existant. `npm run release:artifacts` produit l'archive ZIP et `dist/SHA256SUMS-0.3.0.txt`, et refuse d'archiver une release contenant un dossier de données personnelles. Le portable personnel reste dans `dist/ProvidersBar-win32-x64/`, à côté de ses données.
+La distribution propre est créée dans `dist/ProvidersBar-0.3.1-win32-x64/` ; la commande refuse un dossier de release déjà existant. `npm run release:artifacts` produit l'archive ZIP et `dist/SHA256SUMS-0.3.1.txt`, et refuse d'archiver une release contenant un dossier de données personnelles. Le portable personnel reste dans `dist/ProvidersBar-win32-x64/`, à côté de ses données.
 
 Les ressources applicatives sont préparées dans un dossier temporaire puis remplacées ensemble : les fichiers retirés des sources ne subsistent pas dans l’installation. `npm run update:portable` conserve `data/` et les sessions, ferme l’ancien processus s’il est joignable en diagnostic, puis nécessite de relancer l’application ; sinon, la quitter manuellement avant la mise à jour. Le packaging inclut les dépendances de production (`proper-lockfile` et ses dépendances) et leurs notices.
 
@@ -173,7 +182,7 @@ L’exécutable **n’est pas signé** et conserve les métadonnées binaires El
 
 ## Limites connues
 
-- **Aucune lecture réelle rejouée pour la 0.3.0** : la validation automatique utilise des réponses simulées. Les lectures réelles de la 0.2.0 restent la référence historique ; refaire `npm run verify:connections` après les changements de connexion (voir [docs/validation-0.3.0.md](docs/validation-0.3.0.md)).
+- **Lectures réelles** : Claude Desktop et le service local Antigravity sont vérifiés sur une machine réelle pour la 0.3.1 (voir [docs/validation-0.3.1.md](docs/validation-0.3.1.md)). Les lectures authentifiées des fournisseurs (clés API, sessions web) restent à rejouer après chaque changement de service.
 - Les lecteurs web (Grok, Z.ai, Ollama, bases Antigravity) dépendent des pages et services officiels, qui peuvent changer sans préavis. Un format inconnu produit une erreur, jamais une estimation.
 - Claude Desktop peut suspendre ses mesures ; le fichier local ne fournit pas de dates de reset fiables.
 - L’export JSON n’est pas restaurable depuis l’interface ; la connexion des comptes et des clés doit être refaite.
@@ -189,7 +198,7 @@ L’exécutable **n’est pas signé** et conserve les métadonnées binaires El
 - `scripts/` et `tests/` : fabrication, diagnostic, maintenance et validation.
 - [Architecture, IPC et modèles de données](docs/architecture.md)
 - [Maintenance et procédures de validation](docs/maintenance.md)
-- [Validation de la version 0.3.0](docs/validation-0.3.0.md) · [validation 0.2.0](docs/validation-0.2.0.md) (archive)
+- [Validation de la version 0.3.1](docs/validation-0.3.1.md) · [validation 0.3.0](docs/validation-0.3.0.md) (archive) · [validation 0.2.0](docs/validation-0.2.0.md) (archive)
 - [Méthode de recommandation](docs/ordre-consommation.md)
 - [Historique des versions](CHANGELOG.md)
 - [Provenance des logos](assets/providers/sources.json)

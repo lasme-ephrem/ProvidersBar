@@ -54,16 +54,39 @@ test('A known bucket whose window changed is degraded with a warning instead of 
  duplicate.response.groups[1].buckets.push({bucketId:'gemini-argon-wtu-weekly',window:'weekly',remainingFraction:.5});
  assert.throws(()=>parseAntigravityQuota(duplicate),/Quotas Antigravity contradictoires/);
 });
-test('Discovery forces UTF-8 output and tolerates scalar ports without re-comparing decoded paths',async()=>{
+test('Discovery forces UTF-8, resolves listeners by PID and tolerates scalar ports',async()=>{
  assert.match(DISCOVERY_COMMAND,/\$OutputEncoding/);
  assert.match(DISCOVERY_COMMAND,/Encoding\]::UTF8/);
  assert.match(DISCOVERY_COMMAND,/ExecutablePath/);
+ // Regression: a global `Get-NetTCPConnection -State Listen` misses listeners
+ // whose OwningProcess is reported as 0 on some Windows builds.
+ assert.doesNotMatch(DISCOVERY_COMMAND,/Get-NetTCPConnection -State Listen/);
+ assert.match(DISCOVERY_COMMAND,/-OwningProcess \$processId/);
+ // Listener detection must not depend on the textual state only.
+ assert.match(DISCOVERY_COMMAND,/RemotePort -eq 0/);
+ // Fallbacks for environments where the NetTCPConnection cmdlet fails.
+ assert.match(DISCOVERY_COMMAND,/MSFT_NetTCPConnection/);
+ assert.match(DISCOVERY_COMMAND,/netstat -ano/);
  const servers=await discoverServers({run:async()=>JSON.stringify({args:'--csrf_token=abcdefghijklmnop1234',ports:9222})});
  assert.deepEqual(servers,[{port:9222,csrf:'abcdefghijklmnop1234'}]);
  const many=await discoverServers({run:async()=>JSON.stringify([{args:'--csrf_token abcdefghijklmnop1234',ports:[9222,9223,9223,0,70000]},{args:'no-token',ports:[9224]},null])});
  assert.deepEqual(many,[{port:9222,csrf:'abcdefghijklmnop1234'},{port:9223,csrf:'abcdefghijklmnop1234'}]);
- await assert.rejects(discoverServers({run:async()=>{throw new Error('private token')}}),error=>!error.message.includes('private token'));
+ // Ports are resolved per PID: fixture of a real per-PID listener output.
+ const byPid=await discoverServers({run:async()=>JSON.stringify({args:'--csrf_token bc938a61-e2fc-49cf-b70d-12d842ba8d9f --https_server_port 0',ports:[53733,49985,61570]})});
+ assert.deepEqual(byPid.map(server=>server.port),[53733,49985,61570]);
+ await assert.rejects(discoverServers({run:async()=>{throw new Error('private token')}}),error=>!error.message.includes('private token')&&error.code==='ANTIGRAVITY_DISCOVERY_FAILED');
  await assert.rejects(discoverServers({run:async()=>'not json'}),/ne peut pas être détecté/);
+});
+test('Discovery distinguishes a missing service from a service without readable ports',async()=>{
+ const missing=await discoverServers({run:async()=>'[]'}).then(()=>null,error=>error);
+ assert.equal(missing&&missing.code,'ANTIGRAVITY_NOT_RUNNING');
+ assert.match(missing.message,/introuvable/);
+ const noPorts=await discoverServers({run:async()=>JSON.stringify({args:'--csrf_token=abcdefghijklmnop1234',ports:[]})}).then(()=>null,error=>error);
+ assert.equal(noPorts&&noPorts.code,'ANTIGRAVITY_NO_PORTS');
+ assert.match(noPorts.message,/ports locaux/);
+ assert.equal(JSON.stringify(noPorts.message).includes('abcdefghijklmnop1234'),false);
+ const noCsrf=await discoverServers({run:async()=>JSON.stringify({args:'no-token',ports:[9222]})}).then(()=>null,error=>error);
+ assert.equal(noCsrf&&noCsrf.code,'ANTIGRAVITY_NO_PORTS');
 });
 test('Local discovery handles a closed app and skips non-HTTP service ports without exposing local tokens',async()=>{
  await assert.rejects(fetchAntigravityQuota({discover:async()=>[]}),/Aucune CLI/);

@@ -1,5 +1,25 @@
 # Historique des versions
 
+## 0.3.1 — 3 novembre 2026
+
+Correctif ciblé des connexions Claude et Antigravity, constatées cassées après la 0.3.0.
+
+### Connexions
+
+- **Claude Desktop** : lecture du relevé `plan-usage-history.json` dans le nouveau profil `%LOCALAPPDATA%\Claude-Data\<profil>\` (versions récentes de Claude Desktop), en plus des deux emplacements historiques. La découverte est bornée à ce seul nom de fichier, le dossier absent est ignoré silencieusement et l’observateur de fichiers suit les nouveaux profils.
+- **Antigravity** : découverte du service local corrigée. Certaines machines renvoient des sockets d’écoute avec `OwningProcess = 0` via `Get-NetTCPConnection -State Listen` ; la détection interroge désormais les ports **du processus vérifié** (avec repli CIM puis `netstat`), filtre les adresses de bouclage et trie `127.0.0.1` en premier. Erreurs distinctes : application introuvable (`ANTIGRAVITY_NOT_RUNNING`) ou service visible mais ports/jeton illisibles (`ANTIGRAVITY_NO_PORTS`). La lecture réelle des fenêtres Gemini et Claude/GPT fonctionne ; le bucket Argon reste suivi lorsqu’il est exposé par le compte.
+- **Claude lecture directe** : un 429 du **renouvellement OAuth** porte désormais le code `auth-rate-limit` avec un message actionnable (ouvrir Claude Code pour renouveler, ou revenir à la lecture Desktop), distinct du 429 de l’endpoint d’usage (`rate-limit`). Le `Retry-After` du renouvellement n’est plus contourné au réveil de veille ; un changement de connexion locale efface toujours le cooldown.
+- **Claude sans relevé** : si la lecture directe échoue (`rate-limit`/`auth-*`) **et** qu’aucun relevé n’existe, bascule explicite et annoncée vers la lecture Claude Desktop ; sinon l’erreur d’origine est conservée avec le relevé existant (aucun retour silencieux).
+
+### Interface
+
+- Le toast affiché après « Activer la lecture directe » tient compte d’une éventuelle bascule vers Claude Desktop et n’annonce plus « lecture directe activée » à tort.
+
+### Qualité
+
+- Tests ajoutés : profils Claude-Data (lecture, observateur, ancienneté), ports Antigravity par PID et erreurs typées, distinction `auth-rate-limit`/`rate-limit`, cooldown de renouvellement non contourné au réveil, décision et consigne du repli Claude Desktop.
+- `npm test` : **238 tests**, `npm run verify` : 69 fichiers, `npm run doctor` : Claude Desktop et Antigravity détectés sur machine réelle ; smokes Electron rejoués (voir [docs/validation-0.3.1.md](docs/validation-0.3.1.md)).
+
 ## 0.3.0 — 3 novembre 2026
 
 Version de refonte : fiabilité des connexions, sécurité du processus et des sessions, redessin accessible, outillage de diagnostic et passe de documentation. Electron **44.10.2** ; `npm audit` et `npm audit --omit=dev` : **0 vulnérabilité**.

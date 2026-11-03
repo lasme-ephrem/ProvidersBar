@@ -236,7 +236,15 @@ async function runAction(action, button) {
       state = await api.enableClaudeLive();
       render();
       if (dialogId) renderDialog();
-      toast('Lecture directe Claude activée.');
+      const claude = state.providers.find(item => item.id === 'claude');
+      // Le main bascule explicitement en lecture Desktop si le renouvellement du
+      // jeton Claude Code est refusé : ne jamais annoncer une lecture directe qui
+      // n'est pas active (le message de bascule reste visible dans la fiche).
+      if (claude?.accountSession?.kind === 'claude-live-local') {
+        toast('Lecture directe Claude activée.');
+      } else {
+        toast('Connexion Claude mise à jour : relevé Claude Desktop utilisé.');
+      }
     } catch (error) {
       const node = document.getElementById('account-account-error');
       if (node) node.textContent = error.message.replace(IPC_ERROR_PREFIX, '');

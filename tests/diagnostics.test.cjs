@@ -3,7 +3,8 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
-const { collectDiagnostics, defaultEndpoints, CRITICAL_IDS, checkEndpoint, checkDataDir, checkClaudeCode } = require('../lib/diagnostics.cjs');
+const { collectDiagnostics, defaultEndpoints, CRITICAL_IDS, checkEndpoint, checkDataDir, checkClaudeCode, checkClaudeDesktop, checkAntigravity } = require('../lib/diagnostics.cjs');
+const { usagePaths, readClaudeDesktopUsage } = require('../lib/claude-desktop-usage.cjs');
 const { formatReport, exitCode, criticalFailures } = require('../scripts/doctor.cjs');
 
 async function fixture(t) {
@@ -61,7 +62,10 @@ test('Diagnostics collects every prerequisite without secrets and without authen
   // All critical prerequisites pass, so the exit code stays 0 even with warnings.
   assert.deepEqual(criticalFailures(items), []);
   assert.equal(exitCode(items), 0);
-  assert.match(formatReport(items), /ProvidersBar 0\.3\.0/);
+  // La version affichée suit package.json : aucun test ne doit coder une
+  // version en dur (les correctifs changent la version).
+  const packageVersion = require('../package.json').version.replace(/\./g, '\\.');
+  assert.match(formatReport(items), new RegExp(`ProvidersBar ${packageVersion}`));
   assert.match(formatReport(items), /avertissements/);
 });
 
@@ -146,6 +150,45 @@ test('Default endpoint list covers every connector and every account origin with
     assert.equal(new URL(endpoint.url).protocol, 'https:');
   }
   assert.deepEqual(CRITICAL_IDS, ['data-dir', 'encryption']);
+});
+
+test('Claude Desktop diagnostic finds the Claude-Data profile and explains an old sample', async t => {
+  const root = await fixture(t);
+  const local = path.join(root, 'local');
+  const roaming = path.join(root, 'roaming');
+  const profile = path.join(local, 'Claude-Data', 'claude_pzs8sxrjxfjjc');
+  await fs.mkdir(profile, { recursive: true });
+  const sampleTime = Date.parse('2026-09-26T00:48:00.000Z');
+  await fs.writeFile(path.join(profile, 'plan-usage-history.json'), JSON.stringify({ version: 2, samples: [{ t: sampleTime, u: { fh: 10, sd: 20 } }] }));
+  const readDesktop = (previous, options) => readClaudeDesktopUsage(previous, { ...options, localAppData: local, roamingAppData: roaming });
+  const fresh = await checkClaudeDesktop({ paths: usagePaths(local, roaming), readDesktop, now: () => new Date(sampleTime + 60000) });
+  assert.equal(fresh.ok, true);
+  assert.match(fresh.detail, /1 fichier/);
+  const stale = await checkClaudeDesktop({ paths: usagePaths(local, roaming), readDesktop, now: () => new Date(sampleTime + 46 * 60000) });
+  assert.equal(stale.ok, false);
+  assert.match(stale.detail, /45 minutes/);
+  assert.match(stale.hint, /page Utilisation/);
+  const absent = await checkClaudeDesktop({ paths: usagePaths(path.join(root, 'absent'), path.join(root, 'absent-roaming')) });
+  assert.equal(absent.ok, false);
+  assert.match(absent.hint, /Claude-Data/);
+});
+
+test('Antigravity diagnostic distinguishes a missing service from unreadable ports', async () => {
+  const detected = await checkAntigravity({ discover: async () => [{ port: 53733, csrf: 'private-csrf-token' }] });
+  assert.equal(detected.ok, true);
+  assert.match(detected.detail, /1 port/);
+  assert.equal(JSON.stringify(detected).includes('private-csrf-token'), false);
+  const noPorts = await checkAntigravity({ discover: async () => { throw Object.assign(new Error('private token'), { code: 'ANTIGRAVITY_NO_PORTS' }); } });
+  assert.equal(noPorts.ok, false);
+  assert.match(noPorts.detail, /ports locaux/);
+  assert.match(noPorts.hint, /rouvre/);
+  assert.equal(JSON.stringify(noPorts).includes('private token'), false);
+  const notRunning = await checkAntigravity({ discover: async () => { throw Object.assign(new Error('private token'), { code: 'ANTIGRAVITY_NOT_RUNNING' }); } });
+  assert.equal(notRunning.ok, false);
+  assert.match(notRunning.detail, /introuvable/);
+  const unknown = await checkAntigravity({ discover: async () => { throw new Error('private token'); } });
+  assert.equal(unknown.ok, false);
+  assert.equal(JSON.stringify(unknown).includes('private token'), false);
 });
 
 test('Doctor formats reports and derives the exit code from critical checks only', () => {

@@ -4,6 +4,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const os = require('node:os');
 const { USAGE_URL, REFRESH_MS, parseClaudeLiveUsage, readLocalConnection, createClaudeLiveReader } = require('../lib/claude-live-usage.cjs');
+const { createClaudeConnection, TOKEN_URL } = require('../lib/claude-connection.cjs');
 
 const stamp = Date.parse('2026-09-30T06:55:00Z');
 const usage = () => ({ five_hour: { utilization: 9, resets_at: '2026-09-30T11:00:00Z' },
@@ -82,10 +83,47 @@ test('429 throttling honors Retry-After and errors never masquerade as fresh mea
     const reader = createClaudeLiveReader({ now: () => new Date(time), readToken: async () => 'test-only',
       fetchImpl: async () => ++calls === 1 ? { status: 429, headers: new Headers({ 'retry-after': header }) } : reply(usage()) });
     await assert.rejects(reader.read(), /limite les lectures/);
+    // A 429 from the usage endpoint keeps the historical "rate-limit" code.
+    assert.equal(reader.info().errorCode, 'rate-limit');
     time += ['0', '999999999999999999999999999999'].includes(header) ? 299999 : 7199999;
     await assert.rejects(reader.read(), /limite les lectures/); assert.equal(calls, 1);
     time++; assert.equal((await reader.read()).updatedAt, new Date(time).toISOString()); assert.equal(calls, 2);
   }
+});
+
+test('A token-refresh 429 surfaces as auth-rate-limit through the reader, distinct from a usage 429', async t => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'providersbar-claude-auth-rate-'));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const credentialPath = path.join(root, '.credentials.json');
+  await fs.writeFile(credentialPath, JSON.stringify({ claudeAiOauth: {
+    accessToken: 'expired-test-access', refreshToken: 'private-refresh-token', expiresAt: stamp - 1000,
+    scopes: ['user:profile'], subscriptionType: 'max',
+  } }));
+  let posts = 0;
+  const connection = createClaudeConnection({ credentialPath, now: () => new Date(stamp), fetchImpl: async (url, request) => {
+    posts++;
+    assert.equal(url, TOKEN_URL);
+    assert.equal(request.method, 'POST');
+    return { status: 429, ok: false, headers: new Headers({ 'retry-after': '7200' }) };
+  } });
+  const reader = createClaudeLiveReader({ now: () => new Date(stamp), readToken: connection.read });
+  await assert.rejects(reader.read(), error => {
+    assert.equal(error.code, 'auth-rate-limit');
+    assert.equal(error.retryAt, stamp + 7200000);
+    assert.match(error.message, /Renouvellement du jeton Claude Code limité/);
+    assert.match(error.message, /Claude Desktop \(Déconnecter puis Connecter\)/);
+    assert.ok(!error.message.includes('private-refresh-token') && !error.message.includes('expired-test-access'));
+    return true;
+  });
+  assert.equal(reader.info().errorCode, 'auth-rate-limit');
+  assert.equal(reader.info().nextAttemptAt, new Date(stamp + 7200000).toISOString());
+  // The server Retry-After is honored for the whole cooldown: no second refresh.
+  await assert.rejects(reader.read(), { code: 'auth-rate-limit' });
+  assert.equal(posts, 1);
+  // The cooldown survives a restart: main.cjs persists claudeSync and restores it.
+  const restored = createClaudeLiveReader({ now: () => new Date(stamp), readToken: async () => { throw new Error('must not be called'); } });
+  restored.restore(reader.info());
+  await assert.rejects(restored.read(), { code: 'auth-rate-limit' });
 });
 
 test('Network and authentication failures keep secrets and response bodies out of errors', async () => {
@@ -150,6 +188,20 @@ test('Cooldown survives restart and wake or credential changes cannot bypass a s
   after.wake(); after.credentialsChanged();
   await assert.rejects(after.read(), /limite les lectures/); assert.equal(calls, 1);
   time += 7200000; await assert.rejects(after.read()); assert.equal(calls, 2);
+});
+
+test('An auth-rate-limit cooldown is not bypassed by wake after a token-refresh 429', async () => {
+  let time = stamp, requests = 0;
+  const reader = createClaudeLiveReader({ now: () => new Date(time), readToken: async () => 'test-only',
+    fetchImpl: async () => { requests++; return reply(usage()); } });
+  reader.restore({ errorCode: 'auth-rate-limit', nextAttemptAt: new Date(time + 7200000).toISOString() });
+  // Le réveil de veille ne doit pas contourner le Retry-After du renouvellement.
+  reader.wake();
+  await assert.rejects(reader.read(), { code: 'auth-rate-limit' });
+  assert.equal(requests, 0);
+  time += 7200001;
+  const snapshot = await reader.read();
+  assert.equal(requests, 1); assert.ok(snapshot.quotaWindows.length > 0);
 });
 
 test('A changed local connection immediately clears authentication cooldown but success caching remains intact', async () => {

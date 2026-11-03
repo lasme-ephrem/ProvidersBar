@@ -1,9 +1,11 @@
-// Smoke Claude 0.3.0 — injection de pannes dans Electron, sans identifiants
-// réels : USERPROFILE pointe vers un faux profil Claude Code isolé, et le
-// transport HTTP du processus principal (session.defaultSession.fetch) est
-// simulé. Couvre : échec initial, persistance du mode direct après redémarrage,
-// panne puis reprise après backoff, affichage utilisé/restant, absence de jeton
-// dans les données ProvidersBar.
+// Smoke Claude 0.3.1 — injection de pannes dans Electron, sans identifiants
+// réels : USERPROFILE, LOCALAPPDATA et APPDATA pointent vers des dossiers isolés
+// (profil Claude Code et relevé Claude Desktop factices), et le transport HTTP
+// du processus principal (session.defaultSession.fetch) est simulé.
+// Couvre : échec initial, persistance du mode direct après redémarrage, panne
+// puis reprise après backoff, repli explicite en lecture Claude Desktop quand le
+// renouvellement du jeton est limité et qu'aucun relevé n'existe, affichage
+// utilisé/restant, absence de jeton dans les données ProvidersBar.
 const { _electron: electron } = require(process.env.PROVIDERSBAR_PLAYWRIGHT || 'playwright');
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
@@ -16,8 +18,8 @@ const TOKEN_URL = 'https://platform.claude.com/v1/oauth/token';
 const USAGE_URL = 'https://api.anthropic.com/api/oauth/usage';
 let desktop;
 
-async function launch(dataDir, home) {
-  const env = { ...process.env, PROVIDERSBAR_DATA_DIR: dataDir, USERPROFILE: home, HOME: home };
+async function launch(dataDir, home, extraEnv = {}) {
+  const env = { ...process.env, PROVIDERSBAR_DATA_DIR: dataDir, USERPROFILE: home, HOME: home, ...extraEnv };
   delete env.ELECTRON_RUN_AS_NODE;
   return electron.launch({
     executablePath: process.env.PROVIDERSBAR_EXECUTABLE || require('electron'),
@@ -54,6 +56,7 @@ async function patchFetch(mode) {
       if (target === data.tokenUrl) {
         globalThis.__claudeRequests.token++;
         if (data.mode === 'deny-token') return { ok: false, status: 400, headers: new Headers(), json: async () => { throw new Error('hidden'); } };
+        if (data.mode === 'rate-limit-token') return { ok: false, status: 429, headers: new Headers({ 'retry-after': '7200' }), json: async () => { throw new Error('hidden'); } };
         return {
           ok: true, status: 200,
           json: async () => ({ access_token: 'fixture-live-access', refresh_token: 'fixture-rotated-refresh', expires_in: 28800, scope: 'user:profile user:inference' }),
@@ -102,6 +105,13 @@ async function main() {
   await fs.mkdir(results, { recursive: true });
   const dataDir = await fs.mkdtemp(path.join(results, 'claude-smoke-'));
   const home = await fs.mkdtemp(path.join(results, 'claude-home-'));
+  // Isolation complète des sources Claude Desktop : sans cela, un relevé réel
+  // dans %LOCALAPPDATA% déclencherait le repli T9 et changerait le scénario
+  // « auth-required sans snapshot ».
+  const isolatedEnv = {
+    LOCALAPPDATA: await fs.mkdtemp(path.join(results, 'claude-localappdata-')),
+    APPDATA: await fs.mkdtemp(path.join(results, 'claude-appdata-')),
+  };
   const initial = createSeed();
   initial.settings.autoRefresh = false;
   await fs.writeFile(path.join(dataDir, 'state.json'), JSON.stringify(initial));
@@ -109,7 +119,7 @@ async function main() {
   // à renouveler, sans jamais toucher au vrai profil de l'utilisateur.
   await writeCredentials(home, credentialDocument({ accessToken: 'fixture-old-access', refreshToken: 'fixture-old-refresh', expiresAt: Date.now() - 60000 }));
 
-  desktop = await launch(dataDir, home);
+  desktop = await launch(dataDir, home, isolatedEnv);
   let page = await desktop.firstWindow();
   await page.waitForSelector('.cards .card');
   await patchFetch('deny-token');
@@ -132,7 +142,7 @@ async function main() {
   await desktop.close(); desktop = null;
 
   // Redémarrage : le mode choisi est conservé, le cooldown d'échec est restauré.
-  desktop = await launch(dataDir, home);
+  desktop = await launch(dataDir, home, isolatedEnv);
   page = await desktop.firstWindow();
   await page.waitForSelector('.cards .card');
   assert.equal((await page.evaluate(() => window.providersBar.getState())).providers.find(p => p.id === 'claude').accountSession.kind, 'claude-live-local');
@@ -189,7 +199,63 @@ async function main() {
   assert.equal(await page.locator('.connection-success').count(), 1);
   await page.screenshot({ path: path.join(results, 'claude-recovered.png') });
   await desktop.close(); desktop = null;
-  console.log('PASS: échec initial auth-required, mode direct persisté, redémarrage, reprise après renouvellement local, panne + backoff + reprise, pourcentages utilisés/restants, aucun jeton persisté dans ProvidersBar.');
+
+  // ------------------------------------------------------------------ *
+  // Repli explicite Claude Desktop (T9) : session live sans snapshot, jeton
+  // expiré dont le renouvellement est limité (auth-rate-limit), relevé Desktop
+  // frais dans un LOCALAPPDATA isolé → bascule Desktop annoncée, sans écraser
+  // de relevé existant, et toast neutre (T11) au lieu de « lecture directe active ».
+  // ------------------------------------------------------------------ *
+  const fallbackDataDir = await fs.mkdtemp(path.join(results, 'claude-fallback-data-'));
+  const fallbackHome = await fs.mkdtemp(path.join(results, 'claude-fallback-home-'));
+  const fallbackEnv = {
+    LOCALAPPDATA: await fs.mkdtemp(path.join(results, 'claude-fallback-localappdata-')),
+    APPDATA: await fs.mkdtemp(path.join(results, 'claude-fallback-appdata-')),
+  };
+  const profileDirectory = path.join(fallbackEnv.LOCALAPPDATA, 'Claude-Data', 'claude_pzs8sxrjxfjjc');
+  await fs.mkdir(profileDirectory, { recursive: true });
+  const desktopSampleAt = Date.now() - 60000;
+  // Fixture alignée sur le relevé réel observé sur cette machine : 5 h 100 %, semaine 38 %.
+  await fs.writeFile(path.join(profileDirectory, 'plan-usage-history.json'), JSON.stringify({
+    version: 2,
+    samples: [{ t: desktopSampleAt, u: { fh: 0, sd: 62 } }],
+  }));
+  const fallbackInitial = createSeed();
+  fallbackInitial.settings.autoRefresh = false;
+  await fs.writeFile(path.join(fallbackDataDir, 'state.json'), JSON.stringify(fallbackInitial));
+  await writeCredentials(fallbackHome, credentialDocument({ accessToken: 'fixture-expired-access', refreshToken: 'fixture-expired-refresh', expiresAt: Date.now() - 60000 }));
+
+  desktop = await launch(fallbackDataDir, fallbackHome, fallbackEnv);
+  page = await desktop.firstWindow();
+  await page.waitForSelector('.cards .card');
+  await patchFetch('rate-limit-token');
+  await page.evaluate(() => openDetail('claude', 'connection'));
+  await page.waitForFunction(() => document.querySelector('dialog')?.open);
+  assert.equal(await page.locator('[data-action="claude-enable-live"]').count(), 1);
+  await page.locator('[data-action="claude-enable-live"]').click();
+  await page.waitForFunction(() => state.providers.find(p => p.id === 'claude').accountSession?.kind === 'claude-desktop-local');
+  const fallback = (await page.evaluate(() => window.providersBar.getState())).providers.find(p => p.id === 'claude');
+  assert.equal(fallback.error, null);
+  assert.equal(fallback.snapshot.source, 'api');
+  assert.deepEqual(fallback.snapshot.quotaWindows.map(window => [window.label, window.remaining]), [['5 heures', 100], ['Semaine', 38]]);
+  assert.equal(fallback.claudeSync.errorCode, 'auth-rate-limit');
+  assert.ok(Number.isFinite(Date.parse(fallback.claudeSync.nextAttemptAt)));
+  // La fiche montre le message de bascule explicite, et le toast est neutre :
+  // jamais « Lecture directe Claude activée » pour un mode Desktop (contrat T11).
+  await page.waitForFunction(() => document.querySelector('.dialog-body')?.innerText.includes('relevé Claude Desktop'));
+  assert.match(await page.locator('.dialog-body').innerText(), /Lecture directe indisponible/);
+  assert.match(await page.locator('.dialog-body').innerText(), /Claude Desktop/);
+  const fallbackToast = await page.locator('#toast').innerText();
+  assert.match(fallbackToast, /Connexion Claude mise à jour|relevé Claude Desktop|Desktop/);
+  assert.doesNotMatch(fallbackToast, /Lecture directe Claude activée/);
+  await page.screenshot({ path: path.join(results, 'claude-desktop-fallback.png') });
+  const fallbackSaved = JSON.parse(await fs.readFile(path.join(fallbackDataDir, 'state.json'), 'utf8')).providers.find(p => p.id === 'claude');
+  assert.equal(fallbackSaved.accountSession.kind, 'claude-desktop-local');
+  assert.deepEqual(fallbackSaved.snapshot.quotaWindows.map(window => window.remaining), [100, 38]);
+  assert.equal(fallbackSaved.claudeSync.errorCode, 'auth-rate-limit');
+  assert.ok(!JSON.stringify(fallbackSaved).includes('fixture-expired'));
+  await desktop.close(); desktop = null;
+  console.log('PASS: échec initial auth-required (Desktop isolé absent), mode direct persisté, redémarrage, reprise après renouvellement local, panne + backoff + reprise, rendu utilisé/restant, repli explicite auth-rate-limit → Claude Desktop (snapshot 100/38, message fiche, toast neutre, claudeSync auth-rate-limit persistant), aucun jeton persisté dans ProvidersBar.');
 }
 
 main().catch(async error => { console.error(error); if (desktop) await desktop.close().catch(() => {}); process.exitCode = 1; });

@@ -1,7 +1,7 @@
 # Maintenance
 
 Documentation des commandes réelles de vérification, de l'intégration continue et
-des procédures de maintenance. La version cible est **0.3.0** (branche `refonte/pro`,
+des procédures de maintenance. La version cible est **0.3.1** (branche `refonte/pro`,
 Node.js ≥ 24, Windows x64, Electron 44.x).
 
 ## Validation locale (Definition of Done)
@@ -54,9 +54,8 @@ Permissions : lecture seule du dépôt. Aucun secret de dépôt n'est nécessair
   sauvegardes, cohérence CHANGELOG/README/`package.json`, absence de marqueur
   `TODO`/`FIXME`/`XXX`/`HACK`, validation que chaque script npm pointe vers un
   fichier existant, contrôle du workflow CI, helpers de `verify-connections`,
-  et documentation de maintenance à jour. Un test de version est volontairement
-  ignoré tant que README/CHANGELOG annoncent encore 0.2.1 : il se réactivera
-  automatiquement quand la vague 3 documentera 0.3.0.
+  et documentation de maintenance à jour. Le test de version est actif :
+  package.json, README et CHANGELOG doivent annoncer la même version.
 - **`tests/packaging.test.cjs`** : packaging sur chemins simulés, sans Electron et
   sans copie du portable de 160 Mo — `scripts/package.cjs --release` (distribution
   versionnée, renommage `ProvidersBar.exe`, dépendances de production imbriquées,

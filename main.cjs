@@ -107,6 +107,20 @@ function syncClaudeWhenDue() {
   if (Date.parse(claudeReader.info().nextAttemptAt) > Date.now()) return;
   syncOne('claude').catch(() => {});
 }
+// Repli explicite Claude Desktop : décision pure, sans dépendance Electron
+// (testée par tests/claude-desktop-usage.test.cjs). La lecture directe ne peut
+// être remplacée que si elle est bloquée par un 429 ou un problème
+// d'authentification ET qu'aucun relevé existant ne serait écrasé.
+function shouldFallbackToClaudeDesktop(code, hasSnapshot) {
+  if (hasSnapshot) return false;
+  if (typeof code !== 'string' || !code) return false;
+  // `rate-limit` (quota ou renouvellement limité) et tous les codes `auth-*`,
+  // y compris `auth-rate-limit` renvoyé par le renouvellement OAuth.
+  return code === 'rate-limit' || code.startsWith('auth-');
+}
+function claudeDesktopGuidance() {
+  return 'Ouvre Claude Code pour renouveler le jeton, ou déconnecte puis reconnecte Claude pour utiliser la lecture Desktop.';
+}
 async function verifyClaudeDesktop({ enableLive = false } = {}) {
   if (disconnecting.has('claude') || quitting) throw new Error('Déconnexion en cours.');
   if (claudeWork) {
@@ -127,6 +141,28 @@ async function verifyClaudeDesktop({ enableLive = false } = {}) {
       else { p.snapshot = snapshot; p.error = null; }
       claudeConnection = { status: 'connected', message: direct ? 'Quotas Claude lus directement. Actualisation automatique chaque minute.' : 'Dernier relevé Claude Desktop récupéré. Son heure de mesure reste affichée.' };
     } catch (error) {
+      const blocked = direct && shouldFallbackToClaudeDesktop(error.code, Boolean(p.snapshot));
+      if (blocked) {
+        try {
+          const snapshot = await claudeDesktop.readClaudeDesktopUsage(p.snapshot);
+          // Bascule explicite et annoncée : pas de retour silencieux, mais aucun
+          // relevé n'existe à conserver. Aucune rotation de jeton n'est forcée.
+          p.accountSession = { kind: 'claude-desktop-local' };
+          record(p, snapshot);
+          p.claudeSync = claudeReader.info();
+          claudeConnection = { status: 'connected', message: 'Lecture directe indisponible (renouvellement du jeton Claude Code limité) ; ProvidersBar utilise le relevé Claude Desktop.' };
+          return publicState();
+        } catch {
+          // Relevé Desktop aussi indisponible : l'erreur d'origine reste la
+          // référence, enrichie d'une consigne actionnable ; le cooldown du
+          // lecteur direct est conservé par le `finally` ci-dessous.
+          const failure = new Error(`${error.message} ${claudeDesktopGuidance()}`);
+          failure.code = error.code;
+          p.error = failure.message;
+          claudeConnection = { status: 'error', message: failure.message, errorCode: failure.code || null };
+          throw failure;
+        }
+      }
       p.error = error.message;
       claudeConnection = { status: 'error', message: error.message, errorCode: error.code || null };
       throw error;

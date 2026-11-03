@@ -330,6 +330,31 @@ axe de graphique et boutons `primary`/`danger`. L'indicateur de focus est ≥ 3:
 - **Export** : bouton `[data-action="export"]` conservé (historique + réglages).
 - **Thème** : select à trois valeurs (`light`, `dark`, `system`).
 
+### 9.1 Repli Claude Desktop après activation de la lecture directe
+
+Depuis T9, `main.cjs` peut basculer explicitement en lecture Claude Desktop quand
+le renouvellement du jeton Claude Code est refusé : l'état retourné par
+`claude:enable-live` contient alors `provider.accountSession.kind =
+'claude-desktop-local'` et `provider.accountConnection.message =
+« Lecture directe indisponible (renouvellement du jeton Claude Code limité) ;
+ProvidersBar utilise le relevé Claude Desktop. »`.
+
+Le renderer (`renderer/app.js`, branche `claude-enable-live` de `runAction`) lit
+cet état après l'appel et applique deux retours distincts :
+
+| État retourné | Toast (rôle `status`, `#toast`) |
+|---|---|
+| lecture directe réellement active (`accountSession.kind === 'claude-live-local'`) | « Lecture directe Claude activée. » (inchangé) |
+| bascule Desktop, tout autre cas | « Connexion Claude mise à jour : relevé Claude Desktop utilisé. » |
+
+Aucun message « lecture directe active » n'est affiché en cas de bascule. La fiche
+Claude rend toujours le message de bascule via
+`provider.accountConnection.message` (paragraphe `role="status"` dans l'onglet
+Connexion) ainsi que « Suivi Claude Desktop activé sur ce PC » dans
+`.connection-success` ; `renderDialog()` est appelé avant le toast pour que la fiche
+soit déjà à jour. Aucun hook DOM nouveau : `[data-action="claude-enable-live"]`,
+`#account-account-error` et `#toast` sont inchangés.
+
 ---
 
 ## 10. Points à mettre à jour dans les scripts (hors périmètre ux-docs)
@@ -357,6 +382,12 @@ axe de graphique et boutons `primary`/`danger`. L'indicateur de focus est ≥ 3:
 7. Aucun autre changement attendu : classes `resource-*`, textes de statut, ids de
    formulaires, actions, `.cards .card`, `.data-table`, `.connection-card`,
    `.strategy-*`, `.quick-row`/`.quick-quota` sont conservés.
+8. **Toast d'activation Claude** : `scripts/smoke.cjs` ne vérifie pas le texte
+   « Lecture directe Claude activée. » (il attend seulement
+   `.connection-success` /chaque minute/ et le passage de `accountSession.kind` à
+   `claude-live-local` sur le chemin direct). Aucune mise à jour obligatoire ;
+   qualite-tests peut ajouter un cas de repli Desktop avec le nouveau toast
+   « Connexion Claude mise à jour : relevé Claude Desktop utilisé. ».
 
 ### `scripts/smoke-resource-status.cjs`
 

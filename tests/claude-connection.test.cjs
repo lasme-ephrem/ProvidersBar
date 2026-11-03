@@ -137,7 +137,16 @@ test('Refresh failures leave the existing credentials intact, honor server coold
       headers: new Headers({ 'retry-after': '7200' }), json: async () => { throw new Error('private response'); } }) });
     await assert.rejects(connection.read(), error => {
       assert.ok(!error.message.includes('private response'));
-      if (status === 429) assert.equal(error.retryAt, stamp + 7200000);
+      if (status === 429) {
+        // The OAuth refresh endpoint is throttled, not the usage endpoint.
+        assert.equal(error.code, 'auth-rate-limit');
+        assert.equal(error.retryAt, stamp + 7200000);
+        assert.match(error.message, /Renouvellement du jeton Claude Code limité/);
+        assert.match(error.message, /Claude Desktop \(Déconnecter puis Connecter\)/);
+        assert.ok(!error.message.includes('old-test-access') && !error.message.includes('old-test-refresh'));
+      } else {
+        assert.equal(error.code, 'auth-network');
+      }
       return true;
     });
     assert.equal(await fs.readFile(file, 'utf8'), original);
@@ -145,6 +154,14 @@ test('Refresh failures leave the existing credentials intact, honor server coold
   const { options } = await fixture(t);
   const connection = createClaudeConnection({ ...options, fetchImpl: async () => { throw new Error('Connexion private-test-refresh'); } });
   await assert.rejects(connection.read(), e => e.code === 'auth-network' && !e.message.includes('private-test-refresh'));
+});
+
+test('A refresh 429 carries a distinct auth-rate-limit code for retry-after seconds and dates', async t => {
+  for (const header of ['7200', new Date(stamp + 7200000).toUTCString()]) {
+    const { options } = await fixture(t);
+    const connection = createClaudeConnection({ ...options, fetchImpl: async () => ({ status: 429, ok: false, headers: new Headers({ 'retry-after': header }) }) });
+    await assert.rejects(connection.read(), error => error.code === 'auth-rate-limit' && error.retryAt === stamp + 7200000 && /ouvre Claude Code/.test(error.message));
+  }
 });
 
 test('Early 401 renewal adopts an already replaced token, avoiding unnecessary rotation', async t => {
