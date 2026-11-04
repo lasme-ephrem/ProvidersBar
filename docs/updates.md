@@ -65,7 +65,7 @@ La commande refuse d'écraser une clé existante.
 ```powershell
 npm run package:release
 npm run release:artifacts
-npm run updater:sign -- --version 0.6.0 --notes "Corrections et mise à jour automatique"
+npm run updater:sign -- --version 0.6.1 --notes "Corrections et mise à jour automatique"
 ```
 
 Le manifeste est écrit dans `dist/latest.json`. Sans `--url`, l'URL GitHub Releases
@@ -74,15 +74,15 @@ du dépôt `lasme-ephrem/ProvidersBar` est utilisée.
 Pour un autre hébergement :
 
 ```powershell
-npm run updater:sign -- --version 0.6.0 --url "https://mon-domaine.example/LasmiumTokensHub-0.6.0-win32-x64.zip" --out dist/latest.json
+npm run updater:sign -- --version 0.6.1 --url "https://mon-domaine.example/LasmiumTokensHub-0.6.1-win32-x64.zip" --out dist/latest.json
 ```
 
 ### Publier
 
 Sur GitHub Releases :
 
-1. créer un tag `v0.6.0` ;
-2. joindre `dist/LasmiumTokensHub-0.6.0-win32-x64.zip` ;
+1. créer un tag `v0.6.1` ;
+2. joindre `dist/LasmiumTokensHub-0.6.1-win32-x64.zip` ;
 3. joindre `dist/latest.json` **sous le nom exact `latest.json`** ;
 4. publier la release.
 
@@ -109,6 +109,7 @@ essais jetables, jamais au dossier de données réel).
 
 - Windows x64 uniquement.
 - Une connexion HTTPS est obligatoire.
+- La version 0.6.0 contenait un défaut d’extraction sur l’entrée racine `./` des archives `tar` ; la 0.6.1 le corrige. Les clients 0.6.0 doivent être mis à jour manuellement une fois.
 - La publication et le certificat Authenticode restent des choix externes : le
   manifeste Ed25519 garantit l'intégrité, pas la réputation SmartScreen.
 - Conserve une copie du ZIP et de la clé privée : la sauvegarde de secours locale

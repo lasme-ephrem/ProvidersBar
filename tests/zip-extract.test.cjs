@@ -30,3 +30,15 @@ test('une archive normale est extraite avec ses sous-dossiers', { skip: process.
     assert.equal(fs.readFileSync(path.join(dest, 'source', 'resources', 'app', 'main.cjs'), 'utf8'), "require('node:path');\n");
   });
 });
+
+test('une entrée racine ./ produite par tar est ignorée sans bloquer l’extraction', { skip: process.platform !== 'win32' }, () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'lasmium-zip-root-entry-'));
+  const zip = path.join(root, 'update.zip');
+  execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command',
+    `Add-Type -AssemblyName System.IO.Compression.FileSystem; $z=[System.IO.Compression.ZipFile]::Open('${zip}','Create'); $z.CreateEntry('./') | Out-Null; $e=$z.CreateEntry('app/main.cjs'); $w=New-Object System.IO.StreamWriter($e.Open()); $w.Write('ok'); $w.Dispose(); $z.Dispose()`]);
+  const dest = path.join(root, 'dest');
+  return extractZip(zip, dest).then(result => {
+    assert.equal(result.files, 1);
+    assert.equal(fs.readFileSync(path.join(dest, 'app', 'main.cjs'), 'utf8'), 'ok');
+  });
+});

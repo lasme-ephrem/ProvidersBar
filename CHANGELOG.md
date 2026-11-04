@@ -1,5 +1,18 @@
 # Historique des versions
 
+## 0.6.1 — 4 novembre 2026
+
+Correctif indispensable à la mise à jour automatique.
+
+- Les archives ZIP produites par `tar -C dossier .` contiennent une entrée
+  racine `./`. Elle est désormais ignorée lors de l'extraction ; sans ce
+  correctif, la 0.6.0 téléchargeait l'archive puis échouait avec
+  « Entrée ZIP invalide ».
+- Validation complète du flux réel : vérification du manifeste publié,
+  téléchargement, extraction de l'archive de release, remplacement et
+  préservation de `data/`.
+- 268 tests, dont un test dédié à l'entrée racine `./`.
+
 ## 0.6.0 — 4 novembre 2026
 
 Version **Maintenance** : mise à jour automatique du portable et canary live.
