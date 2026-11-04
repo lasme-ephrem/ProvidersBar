@@ -18,7 +18,6 @@ contextBridge.exposeInMainWorld('providersBar', {
   syncAll: () => ipcRenderer.invoke('sync:all'),
   syncOne: id => ipcRenderer.invoke('sync:one', id),
   updateSettings: patch => ipcRenderer.invoke('settings:update', patch),
-  updateStrategy: input => ipcRenderer.invoke('strategy:update', input),
   exportData: () => ipcRenderer.invoke('export'),
   getAppInfo: () => ipcRenderer.invoke('app:info'),
   eraseData: () => ipcRenderer.invoke('data:erase'),

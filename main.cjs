@@ -6,7 +6,6 @@
 // Les parcours d'authentification fournisseur (OrcaRouter, Ollama, Claude,
 // OpenAI Codex) restent dans ce fichier ; tout le reste est délégué à lib/.
 const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, nativeTheme, screen, safeStorage, dialog, Notification, session, powerMonitor } = require('electron');
-const usageStrategy = require('./lib/usage-strategy.js');
 const quotaResets = require('./lib/quota-resets.js');
 const fs = require('node:fs/promises');
 const path = require('node:path');
@@ -86,7 +85,7 @@ const cooldowns = {
 // (session.defaultSession.fetch) partagé avec les appels API. Le renouvellement
 // OAuth est créé par la même factory, donc sans globalThis.fetch.
 const claudeReader = claudeLive.createClaudeLiveReader({ fetchImpl: apiFetch });
-let quickDesiredHeight = 700;
+let quickDesiredHeight = 520;
 let orcaLoginWindow;
 let orcaDetectionTimer, orcaVerification;
 let orcaConnection = { status: 'idle', message: '' };
@@ -261,6 +260,8 @@ function windowBackgroundFor(theme) {
 }
 function publicState() {
   const { history, ...visibleState } = state;
+  // L'ordre de consommation a été retiré : aucun `strategy` n'est exposé.
+  delete visibleState.strategy;
   return { ...visibleState, app: publicAppInfo(), historyCount: history.length, historyRevision: history[0]?.id || null, providers: state.providers.map(p => ({ ...p, ...(p.id === 'ollama' && p.snapshot ? { snapshot: { ...p.snapshot, usageCredits: lastKnownUsageCredits(p.snapshot, history) } } : {}), connector: connectionInfo(p.id), connected: isConnected(p), syncing: busy.has(p.id), ...(p.id === 'antigravity' ? { accountConnection: antigravityConnection } : p.id === 'claude' ? { accountConnection: claudeConnection } : p.id === 'openai' ? { accountConnection: openAiAccount.info() } : p.id === 'orcarouter' ? { accountConnection: orcaConnection } : p.id === 'ollama' ? { accountConnection: ollamaConnection } : connectors[p.id]?.browserAccount ? { accountConnection: subscriptionAccounts.info(p.id) } : {}) })), summary: summary(state.providers), desktop: true };
 }
 function broadcast() {
@@ -358,7 +359,7 @@ function positionQuick() {
   if (!tray || !quickWindow || quickWindow.isDestroyed()) return;
   const bounds = tray.getBounds();
   const area = screen.getDisplayNearestPoint({ x: bounds.x, y: bounds.y }).workArea;
-  const size = { width: 400, height: Math.min(quickDesiredHeight, area.height - 16) };
+  const size = { width: 360, height: Math.min(quickDesiredHeight, area.height - 16) };
   const x = Math.max(area.x, Math.min(bounds.x - size.width + bounds.width, area.x + area.width - size.width));
   const y = Math.max(area.y, Math.min(bounds.y - size.height - 8, area.y + area.height - size.height));
   quickWindow.setBounds({ x, y, width: size.width, height: size.height });
@@ -679,15 +680,11 @@ function registerIpc() {
     if (quickDesiredHeight === target) return;
     quickDesiredHeight = target;
     if (tray) positionQuick();
-    else quickWindow.setSize(400, target);
+    else quickWindow.setSize(360, target);
   });
   handle('provider:resets', async (id, input) => {
     const p = provider(id);
     p.manualResets = quotaResets.validate(p, input);
-    await persist(); broadcast(); return publicState();
-  });
-  handle('strategy:update', async input => {
-    state.strategy = usageStrategy.validate(input);
     await persist(); broadcast(); return publicState();
   });
   handle('orca:open-account', openOrcaAccount);
@@ -868,7 +865,7 @@ else {
       mainWindow.on('close', event => { if (!quitting) { event.preventDefault(); mainWindow.hide(); } });
       mainWindow.once('ready-to-show', () => mainWindow.show());
       await mainWindow.loadFile(uiPath);
-      quickWindow = new BrowserWindow({ width: 400, height: Math.min(700, screen.getPrimaryDisplay().workAreaSize.height - 16), show: false, frame: false, resizable: false, skipTaskbar: true, alwaysOnTop: true, backgroundColor: windowBackground, webPreferences });
+      quickWindow = new BrowserWindow({ width: 360, height: Math.min(520, screen.getPrimaryDisplay().workAreaSize.height - 16), show: false, frame: false, resizable: false, skipTaskbar: true, alwaysOnTop: true, backgroundColor: windowBackground, webPreferences });
       secureWindow(quickWindow);
       quickWindow.on('blur', () => quickWindow.hide());
       await quickWindow.loadFile(uiPath, { query: { mode: 'quick' } });

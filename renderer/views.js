@@ -156,7 +156,6 @@ function overview() {
   return heading('TOUT SOUS LES YEUX', 'Tes usages, en un regard.',
     'Quotas, crédits et abonnements. Garde le fil de tes outils IA.', syncButton())
     + stats()
-    + strategyPanel()
     + `<div class="section-heading"><h2>Mes fournisseurs `
     + `<small>${state.providers.length} services</small></h2>`
     + `<p class="section-hint">Ouvre une carte pour la configurer.</p></div>`
@@ -740,99 +739,96 @@ function settingsPage({ version = null, electronVersion = null, packaged = null,
 }
 
 /* ------------------------------------------------------------------ *
- * Widget (fenêtre de notification)
+ * Widget compact : simple liste abonnements puis API (aucune recommandation)
  * ------------------------------------------------------------------ */
-function quickQuota(quota, label) {
-  const value = quota?.remaining;
-  const known = typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 100;
-  // Aucune barre pour une valeur inconnue : le tiret et « Indisponible » suffisent.
-  if (!known) {
-    return '<span class="quick-quota is-unknown" title="Quota indisponible">'
-      + '<span class="quick-quota-text">—</span>'
-      + '<span class="sr-only">Indisponible</span></span>';
-  }
-  const levelName = ResourceLevels.level(value, '%');
-  return `<span class="quick-quota resource-${levelName}" title="${escapeHtml(ResourceLevels.describe(levelName, '%'))}">`
-    + `<span class="quick-quota-text">${value}<small>%</small></span>`
-    + `${meterMarkup(value, label, { compact: true })}</span>`;
+// Résumé compact d'un abonnement : fenêtre la plus contrainte + nombre d'autres.
+function quickQuotaSummary(provider) {
+  const periods = quotaStatusPeriods(provider)
+    .filter(({ quota }) => typeof quota?.remaining === 'number' && Number.isFinite(quota.remaining));
+  if (!periods.length) return null;
+  const tightest = [...periods].sort((a, b) => a.quota.remaining - b.quota.remaining)[0];
+  const remaining = Math.max(0, Math.min(100, tightest.quota.remaining));
+  return {
+    label: quotaPeriodLabel(provider, tightest.key, tightest.label),
+    remaining,
+    levelName: ResourceLevels.level(remaining, '%'),
+    extra: periods.length - 1,
+    details: periods.map(period =>
+      `${quotaPeriodLabel(provider, period.key, period.label)} : ${period.quota.remaining} %`).join(' · '),
+  };
 }
 
-function quickPeriods(group, provider) {
-  return `<span class="quick-periods">${[...group.periods]
-    .sort((a, b) => (a.label === 'Semaine' ? -1 : 1) - (b.label === 'Semaine' ? -1 : 1))
-    .map(period => {
-      const isFable = provider.id === 'claude' && period.key === 'Fable · Semaine';
-      const status = period.quota?.remaining === 0
-        ? `<span class="quick-period-status">`
-        + `${escapeHtml(quotaLimitStatus(provider, period.key, period.label, period.groupName || group.name))}</span>`
-        : '';
-      return `<span class="quick-period${isFable ? ' fable-weekly' : ''}">`
-        + `<span class="quick-period-label">${escapeHtml(quotaPeriodLabel(provider, period.key, period.label))}</span>`
-        + `${quickQuota(period.quota, `${period.groupName || group.name} · ${period.label} : quota restant`)}`
-        + `${status}${resetMarkup(provider, period.key, true)}</span>`;
-    }).join('')}</span>`;
+function quickUnknownValue(title) {
+  return `<span class="quick-value" title="${escapeHtml(title)}">`
+    + '<span class="quick-value-main">—</span>'
+    + '<span class="quick-level">Indisponible</span></span>';
+}
+
+function quickSubscriptionValue(provider) {
+  const summary = quickQuotaSummary(provider);
+  if (!summary) {
+    const reserve = ollamaUsageCredits(provider);
+    return quickUnknownValue(reserve
+      ? `Quota indisponible · réserve supplémentaire ${money(reserve.remaining, 'USD')}`
+      : 'Quota indisponible');
+  }
+  const extra = summary.extra > 0 ? `<span class="quick-extra">+${summary.extra}</span>` : '';
+  return `<span class="quick-value resource-${summary.levelName}" title="${escapeHtml(summary.details)}">`
+    + `<span class="quick-value-label">${escapeHtml(summary.label)}</span>`
+    + `<span class="quick-value-main">${summary.remaining}<small>%</small></span>`
+    + `<span class="quick-level">${escapeHtml(ResourceLevels.shortLabel(summary.levelName))}</span>`
+    + `${extra}</span>`;
+}
+
+function quickApiValue(provider) {
+  const balances = Array.isArray(provider.snapshot?.balances) ? provider.snapshot.balances : [];
+  if (!balances.length) return quickUnknownValue('Solde indisponible');
+  const severity = ['empty', 'critical', 'low', 'healthy'];
+  const rated = balances.map(balance => ({
+    ...balance,
+    levelName: ResourceLevels.level(balance.remaining, balance.currency),
+  }));
+  const known = rated.filter(balance => balance.levelName !== 'unknown');
+  const ranked = known.length ? known : rated;
+  const worst = [...ranked].sort((a, b) =>
+    severity.indexOf(a.levelName) - severity.indexOf(b.levelName))[0];
+  const extra = rated.length > 1 ? `<span class="quick-extra">+${rated.length - 1}</span>` : '';
+  const details = rated.map(balance => money(balance.remaining, balance.currency)).join(' · ');
+  return `<span class="quick-value" title="${escapeHtml(details)}">`
+    + `<span class="resource-value resource-${worst.levelName}">${money(worst.remaining, worst.currency)}</span>`
+    + `<span class="quick-level">${escapeHtml(ResourceLevels.shortLabel(worst.levelName))}</span>`
+    + `${extra}</span>`;
 }
 
 function quickAccountRow(provider) {
   const snapshot = provider.snapshot;
-  const groups = quotaGroups(provider);
   const levelName = providerResourceLevel(provider);
-  const title = `<span class="quick-provider">${logo(provider, true)}`
-    + `<span class="provider-title"><span class="provider-name">${escapeHtml(provider.name)}`
-    + `${ollamaFree(provider) ? ' · Free' : ''}</span>`
-    + `${provider.error ? ' <span class="warning" title="Relevé à vérifier" aria-label="Relevé à vérifier">!</span>' : ''}`
-    + `${levelPill(levelName, provider.type === 'api' ? snapshot?.balances?.[0]?.currency : '%')}`
-    + `</span></span>`;
-  let values;
-  if (provider.id === 'claude' && groups.length > 1) {
-    const rank = key => key === 'Semaine' ? 0 : key === 'Fable · Semaine' ? 1 : key === '5 heures' ? 2 : 3;
-    const periods = groups
-      .flatMap(group => group.periods.map(period => ({
-        ...period,
-        groupName: group.name || (period.key === 'Fable · Semaine' ? 'Fable' : 'Claude'),
-      })))
-      .sort((a, b) => rank(a.key) - rank(b.key));
-    values = quickPeriods({ name: '', periods }, provider);
-  } else if (groups.length > 1) {
-    values = groups.map(group => `<span class="quick-subrow">`
-      + `${group.name ? `<span class="quick-group-label">${escapeHtml(group.name)}</span>` : ''}`
-      + `${quickPeriods(group, provider)}</span>`).join('');
-  } else if (groups.length) {
-    values = quickPeriods(groups[0], provider);
-  } else {
-    const quota = snapshot?.quotaRemaining;
-    const knownQuota = quota !== null && quota !== undefined;
-    values = `<span class="quick-amount">${snapshot?.balances?.length
-      ? snapshot.balances.map(resourceAmount).join(' / ')
-      : knownQuota
-        ? `<span class="resource-value resource-${ResourceLevels.level(quota, '%')}">`
-          + `${quotaDisplay(quota, provider.id)} %</span>`
-        : '—'}</span>`;
-  }
-  const freshness = freshnessMarkup(snapshot?.updatedAt, { compact: true });
-  const extras = provider.id === 'ollama'
-    ? ollamaReserveMarkup(provider, true) + resetMarkup(provider, 'Mois', true)
-    : '';
+  const unverified = resourceUnverified(provider);
+  const value = provider.type === 'api' ? quickApiValue(provider) : quickSubscriptionValue(provider);
+  const details = [];
+  if (snapshot?.updatedAt) details.push(`Dernier relevé : ${fullDateTime(snapshot.updatedAt)}`);
+  if (provider.error) details.push(provider.error);
+  const label = provider.name + (provider.error ? ' · relevé à vérifier' : '');
   return `<button type="button" class="quick-row resource-${levelName}`
-    + `${resourceUnverified(provider) ? ' is-stale' : ''}`
-    + `${groups.length > 1 && provider.id !== 'claude' ? ' grouped' : ''}"`
-    + ` data-provider="${escapeHtml(provider.id)}" data-action="main">`
-    + `${title}<span class="quick-values">${values}${extras}</span>`
-    + `${freshness ? `<span class="quick-freshness">${freshness}</span>` : ''}`
+    + `${unverified ? ' is-stale' : ''}" data-provider="${escapeHtml(provider.id)}" data-action="main"`
+    + ` title="${escapeHtml([label, ...details].join(' — '))}">`
+    + `<span class="quick-provider">${logo(provider, true)}`
+    + `<span class="provider-name">${escapeHtml(provider.name)}${ollamaFree(provider) ? ' · Free' : ''}</span></span>`
+    + `${value}`
+    + `${unverified ? `<span class="quick-stale" aria-label="Relevé à vérifier"`
+      + ` title="Relevé à vérifier">${icon('warning', 12)}</span>` : ''}`
     + `</button>`;
 }
 
-function quickHeader(accounts) {
+function quickHeader({ total, subscriptions, apis }) {
   const autoRefresh = state.settings?.autoRefresh;
-  const refreshText = autoRefresh
-    ? 'Actualisation auto : 5 min · Claude 1 min'
-    : 'Actualisation automatique désactivée';
+  const refreshText = autoRefresh ? 'Auto 5 min · Claude 1 min' : 'Actualisation désactivée';
+  const busy = typeof syncing !== 'undefined' && syncing;
   return `<header class="quick-head">${brand}`
     + `<button type="button" class="icon-button" data-action="sync" aria-label="Synchroniser"`
-    + ` aria-busy="${typeof syncing !== 'undefined' && syncing}"`
-    + ` ${typeof syncing !== 'undefined' && syncing ? 'disabled' : ''}>${icon('refresh', 18)}</button></header>`
-    + `<p class="quick-refresh-status">${icon(autoRefresh ? 'refresh' : 'info', 12)} ${refreshText}</p>`
-    + `<p class="quick-columns"><span>${accounts.length} comptes · restant</span></p>`;
+    + ` aria-busy="${busy}" ${busy ? 'disabled' : ''}>${icon('refresh', 16)}</button></header>`
+    + `<p class="quick-refresh-status">${icon(autoRefresh ? 'refresh' : 'info', 11)} ${refreshText}`
+    + `<span class="quick-count">${total} comptes · ${subscriptions} abonnements · ${apis} API</span></p>`;
 }
 
 /* ------------------------------------------------------------------ *

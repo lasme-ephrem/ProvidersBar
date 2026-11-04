@@ -70,7 +70,7 @@ Permissions : lecture seule du dépôt. Aucun secret de dépôt n'est nécessair
   sans Electron. Ils couvrent les connecteurs et leurs formats, les erreurs et
   timeouts, les migrations, le renouvellement Claude, les verrous multi-processus,
   la sérialisation des credentials, le parsing DOM simulé des comptes, les quotas,
-  les resets, la stratégie et les tests transverses ci-dessus. Ils n'exécutent ni
+  les resets et les tests transverses ci-dessus. Ils n'exécutent ni
   IPC Electron, ni `safeStorage`, ni widget, ni tray.
 - **Smoke tests Electron** : intégration réelle (IPC, chiffrement `safeStorage`,
   persistance après redémarrage, export sans clés, widget, tray, thèmes, sessions
@@ -104,21 +104,14 @@ Les variables facultatives `PROVIDERSBAR_PLAYWRIGHT` et `PROVIDERSBAR_EXECUTABLE
 sélectionnent un module Playwright ou un exécutable Electron externe pour les
 smoke tests.
 
-## Catalogue de recommandations
+## Recommandations de modèle (retirées en 0.3.4)
 
-Les tarifs et modèles de `lib/usage-strategy.js` sont des données datées, pas une
-découverte des droits du compte. Avant de modifier le catalogue, vérifier les
-identifiants exacts, les routes effectivement disponibles, les fenêtres de
-contexte, les tarifs de cache et les promotions dans les sources de
-`docs/ordre-consommation.md`. Mettre à jour `checkedAt`, les sources et les cas
-de test associés. Un score d'une autre version de modèle ou d'indice ne doit pas
-être réutilisé silencieusement.
-
-Les tests `usage-strategy.test.cjs` couvrent les quotas indépendants, la fraîcheur,
-les resets, les portefeuilles partagés, les coûts, les horaires UTC et le
-consentement Contributor. Le smoke test vérifie la configuration par IPC, la
-persistance après redémarrage et la présence du classement dans les deux fenêtres.
-Les appels aux fournisseurs restent simulés.
+La fonctionnalité de recommandation de modèle et d'ordre de consommation a été
+supprimée de l'application en 0.3.4 : plus de catalogue de tarifs embarqué, plus
+d'IPC `strategy:update`, plus de réglage d'ordre. Les inventaires existants sont
+nettoyés par migration (`state.strategy` supprimé). Le tableau de bord et le
+widget se contentent de lister les abonnements et les API. Aucun catalogue ni
+test de stratégie n'est donc plus à maintenir.
 
 ## Connecteurs
 

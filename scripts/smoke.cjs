@@ -100,7 +100,16 @@ async function main() {
   assert.doesNotMatch(workspaceText, /Lasme/);
   assert.equal(await page.locator('.sidebar').evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(234, 240, 233)');
   assert.equal(await page.locator('.cards .card').count(), 10);
-  assert.match(await page.locator('.strategy-panel').innerText(), /Abonnements à vérifier/);
+  // Recommandations/ordre de consommation retirés (T16) : aucun panneau, action ni
+  // texte de stratégie dans le tableau de bord.
+  assert.equal(await page.locator('.strategy-panel, .strategy-current, .strategy-next, .strategy-api, .strategy-details, #strategy-form, [data-action="strategy-settings"]').count(), 0);
+  const overviewText = await page.locator('#main-content').innerText();
+  for (const forbidden of ['Utilise maintenant', 'Abonnements à vérifier', 'API disponibles à utiliser', 'Régler l’ordre', 'Ton ordre d’usage', 'Ordre de consommation']) {
+    assert.equal(overviewText.includes(forbidden), false, `texte de recommandation encore affiché : ${forbidden}`);
+  }
+  assert.equal(await page.evaluate(() => typeof strategyResult), 'undefined');
+  assert.equal(await page.evaluate(() => typeof UsageStrategy), 'undefined');
+  assert.equal(await page.evaluate(async () => 'strategy' in (await window.providersBar.getState())), false);
   const appInfo = await page.evaluate(() => window.providersBar.getAppInfo());
   assert.equal(appInfo.version, packageJson.version);
   assert.match(String(appInfo.electron), /^44\./);
@@ -129,67 +138,15 @@ async function main() {
   await page.locator('[data-nav="overview"]').click();
 
   // ------------------------------------------------------------------ *
-  // Stratégie : configuration par IPC, validation, rendu conditionnel
+  // Recommandations retirées : aucun formulaire ni texte dans les Réglages
   // ------------------------------------------------------------------ *
-  await page.locator('[data-action="strategy-settings"]').click();
-  assert.equal(await page.locator('#strategy-form [name="contributor"]').isChecked(), false);
-  assert.equal(await page.locator('#strategy-form [name="strategyEnabled"]').isChecked(), true);
-  await page.locator('#strategy-model-ollama').selectOption('kimi');
-  await page.locator('#strategy-inputTokens').fill('20000');
-  await page.locator('#strategy-form button[type="submit"]').click();
-  await page.waitForFunction(() => document.querySelector('#toast').textContent === 'Stratégie enregistrée.');
-  const strategyState = await page.evaluate(() => window.providersBar.getState());
-  assert.equal(strategyState.strategy.inputTokens, 20000);
-  assert.equal(strategyState.strategy.subscriptionModels.ollama, 'kimi');
-  assert.equal(strategyState.strategy.contributor, false);
-  await assert.rejects(page.evaluate(() => window.providersBar.updateStrategy({ contributor: 'true' })), /invalide/);
+  await page.locator('[data-nav="settings"]').click();
+  assert.equal(await page.locator('#strategy-form, [data-action="strategy-settings"], .strategy-panel, .strategy-settings').count(), 0);
+  const settingsText = await page.locator('#main-content').innerText();
+  for (const forbidden of ['Ordre de consommation', 'Utilise maintenant', 'Régler l’ordre', 'API disponibles à utiliser', 'Modèles accessibles']) {
+    assert.equal(settingsText.includes(forbidden), false, `texte de recommandation encore affiché dans Réglages : ${forbidden}`);
+  }
   await page.locator('[data-nav="overview"]').click();
-  // Aperçu visuel de la recommandation : fixture renderer uniquement.
-  await page.evaluate(() => {
-    globalThis.strategyVisualOriginal = state;
-    state = structuredClone(state);
-    const stamp = new Date().toISOString(), resetAt = new Date(Date.now() + 86400000).toISOString();
-    for (const p of state.providers) {
-      p.active = ['openai', 'zai', 'antigravity', 'openrouter', 'deepseek', 'runinfra', 'orcarouter'].includes(p.id);
-      p.connected = true; p.error = null;
-      const labels = p.id === 'openai' ? ['Codex et Work · Semaine', 'Codex et Work · 5 heures']
-        : p.id === 'antigravity' ? ['Gemini · Semaine', 'Gemini · 5 heures', 'Claude et GPT · Semaine', 'Claude et GPT · 5 heures', 'Gemini 4 Argon · Semaine']
-          : ['Semaine', '5 heures'];
-      p.snapshot = { source: 'api', updatedAt: stamp, quotaRemaining: 90, balances: p.type === 'api' ? [{ currency: 'USD', remaining: 10 }] : [], quotaWindows: labels.map(label => ({ label, remaining: 90, resetAt })) };
-    }
-    render();
-  });
-  assert.match(await page.locator('.strategy-current').innerText(), /GPT-6 Astra/);
-  assert.equal(await page.locator('.strategy-next li').count(), 3);
-  assert.doesNotMatch(await page.locator('.strategy-panel').innerText(), /undefined|NaN/);
-  await page.screenshot({ path: path.join(results, 'strategy-dashboard.png'), fullPage: true });
-  await page.evaluate(() => { for (const p of state.providers.filter(p => p.type === 'subscription')) for (const w of p.snapshot.quotaWindows) w.remaining = 0; render(); });
-  assert.match(await page.locator('.strategy-current').innerText(), /Aucun abonnement disponible/);
-  assert.doesNotMatch(await page.locator('.strategy-current').innerText(), /OrcaRouter|GLM-5.3 Flash/);
-  assert.match(await page.locator('.strategy-api').innerText(), /API disponibles à utiliser/);
-  assert.match(await page.locator('.strategy-api-providers').innerText(), /restants/);
-  assert.doesNotMatch(await page.locator('.strategy-api-providers').innerText(), /estimés|Flash/);
-  assert.equal(await page.evaluate(() => strategyResult().queue.every(x => x.kind === 'subscription')), true);
-  await page.locator('.strategy-details summary').click();
-  await page.waitForFunction(() => document.querySelector('[data-disclosure="subscriptions"]').open);
-  // L'événement `toggle` est asynchrone : laisser le map de divulgation se mettre
-  // à jour avant de rejouer des diffusions d'état.
-  await page.waitForTimeout(100);
-  await page.evaluate(() => { for (let i = 0; i < 8; i++) receiveState(structuredClone(state)); });
-  assert.equal(await page.locator('[data-disclosure="subscriptions"]').evaluate(el => el.open), true);
-  await page.locator('.strategy-details summary').click();
-  await page.waitForTimeout(100);
-  await page.evaluate(() => receiveState(structuredClone(state)));
-  assert.equal(await page.locator('[data-disclosure="subscriptions"]').evaluate(el => el.open), false);
-  await page.locator('.strategy-details summary').click();
-  await page.waitForTimeout(100);
-  await page.evaluate(() => { render(); render(); });
-  assert.equal(await page.locator('[data-disclosure="subscriptions"]').evaluate(el => el.open), true);
-  assert.match(await page.locator('.strategy-details').innerText(), /Réserves des abonnements actifs/);
-  assert.doesNotMatch(await page.locator('.strategy-details').innerText(), /Modèles API|OrcaRouter|OpenRouter|RunInfra|DeepSeek Platform|Muse Spark|Qwen3.8 Flash/);
-  assert.equal(await page.locator('.strategy-details [data-api-provider]').count(), 0);
-  await page.screenshot({ path: path.join(results, 'strategy-api.png'), fullPage: true });
-  await page.evaluate(() => { state = globalThis.strategyVisualOriginal; delete globalThis.strategyVisualOriginal; render(); });
 
   // ------------------------------------------------------------------ *
   // Navigation, recherche, filtres
@@ -530,67 +487,118 @@ async function main() {
   assert.equal(exportedDocument.version, packageJson.version);
   assert.equal(exportedDocument.inventory.length, 10);
   assert.equal(exportedDocument.history.length, historyCountBeforeExport);
+  // L'ordre de consommation a été retiré : l'export ne contient plus `strategy`.
+  assert.equal('strategy' in exportedDocument, false);
   assert.equal(await page.evaluate(() => typeof window.require), 'undefined');
   assert.equal(await page.evaluate(() => typeof window.process), 'undefined');
 
   // ------------------------------------------------------------------ *
-  // Widget : fraîcheur réelle, statut d'actualisation, hauteur et contenu
+  // Widget compact 360×520 : liste abonnements puis API, sans recommandation
   // ------------------------------------------------------------------ *
-  // Une date manuelle est nécessaire pour vérifier son rendu dans le widget ;
-  // l'éditeur complet de réinitialisations est exercé plus bas via l'UI.
-  await page.evaluate(() => window.providersBar.saveResets('zai', { Semaine: { date: '2099-09-19' } }));
   const quick = desktop.windows().find(w => w.url().includes('mode=quick'));
   assert.ok(quick);
   await quick.waitForSelector('.quick-row');
-  await quick.waitForFunction(() => {
-    const footer = document.querySelector('.quick-footer');
-    return footer && Math.abs(innerHeight - footer.getBoundingClientRect().bottom - 12) < 6;
-  }, null, { timeout: 10000 });
-  assert.ok((await quick.evaluate(() => innerHeight)) <= 900);
+  // Taille par défaut fixée par main.cjs (aucun auto-dimensionnement du renderer).
+  // On mesure la zone de contenu : sur Windows, les bounds externes peuvent
+  // inclure une bordure système d'un à deux pixels.
+  const quickSize = await quick.evaluate(() => ({ width: innerWidth, height: innerHeight }));
+  assert.ok(Math.abs(quickSize.width - 360) <= 4, `largeur de contenu inattendue : ${quickSize.width}`);
+  assert.ok(Math.abs(quickSize.height - 520) <= 4, `hauteur de contenu inattendue : ${quickSize.height}`);
+  const quickBounds = await desktop.evaluate(({ BrowserWindow }) => {
+    const quickWindow = BrowserWindow.getAllWindows().find(w => w.webContents.getURL().includes('mode=quick'));
+    return quickWindow.getBounds();
+  });
+  assert.ok(Math.abs(quickBounds.width - 360) <= 4 && Math.abs(quickBounds.height - 520) <= 4, `taille de fenêtre inattendue : ${JSON.stringify(quickBounds)}`);
   assert.equal(await quick.locator('.quick-row').count(), 10);
-  // T1b : lignes compactes sans chevauchement, hauteur ≥ 36 px (layout figé).
+  // Ordre de l'inventaire : abonnements en tête, puis API (aucun classement).
+  assert.deepEqual(await quick.locator('.quick-row').evaluateAll(rows => rows.map(row => row.dataset.provider)), ['openai', 'claude', 'grok', 'antigravity', 'zai', 'ollama', 'openrouter', 'deepseek', 'runinfra', 'orcarouter']);
+  assert.deepEqual(await quick.locator('.quick-group-title').allTextContents(), ['Abonnements', 'API']);
+  assert.match(await quick.locator('.quick-count').innerText(), /10 comptes · 6 abonnements · 4 API/);
+  assert.match(await quick.locator('.quick-refresh-status').innerText(), /Actualisation désactivée/);
+  // Aucune recommandation/ordre de consommation ni ancien classement dans le widget.
+  assert.equal(await quick.locator('.quick-strategy, .quick-api, .quick-api-providers, [data-api-provider], .quick-columns').count(), 0);
+  const quickText = await quick.locator('.quick-list').innerText();
+  for (const forbidden of ['À utiliser maintenant', 'Utilise maintenant', 'Abonnements à vérifier', 'API disponibles à utiliser', 'Régler l’ordre']) {
+    assert.equal(quickText.includes(forbidden), false, `texte de recommandation encore affiché dans le widget : ${forbidden}`);
+  }
+  // Plus d'âge affiché en permanence : le relevé n'est visible que dans le title,
+  // et l'icône « Relevé à vérifier » n'apparaît que si nécessaire.
+  assert.doesNotMatch(quickText, /il y a|à l’instant|Dernier relevé/);
+  assert.equal(await quick.locator('.quick-quota, .quick-period, .quick-period-status, .quick-resource-status, .meter').count(), 0);
+  // Lignes compactes (~32 px) sans chevauchement et icônes 20×20 visibles.
   const quickRows = await quick.locator('.quick-row').evaluateAll(rows => rows.map(row => {
     const box = row.getBoundingClientRect();
     return { top: box.top, bottom: box.bottom, height: box.height };
   }));
-  for (const rowBox of quickRows) assert.ok(rowBox.height >= 36, `ligne de widget trop basse : ${rowBox.height}px`);
+  for (const rowBox of quickRows) assert.ok(rowBox.height >= 31 && rowBox.height <= 40, `hauteur de ligne inattendue : ${rowBox.height}px`);
   for (let index = 1; index < quickRows.length; index++) {
     assert.ok(quickRows[index].top >= quickRows[index - 1].bottom - 0.5, 'les lignes du widget ne doivent pas se chevaucher');
   }
-  assert.equal(await quick.locator('.quick-quota.is-unknown .meter').count(), 0, 'aucune barre pour un quota inconnu');
-  assert.deepEqual(await quick.locator('.quick-row').evaluateAll(rows => rows.slice(0, 6).map(row => row.dataset.provider)), ['openai', 'claude', 'grok', 'antigravity', 'zai', 'ollama']);
-  assert.equal(await quick.locator('.quick-strategy').count(), 1);
-  assert.equal(await quick.locator('.quick-api').count(), 1);
-  assert.match(await quick.locator('.quick-refresh-status').innerText(), /Actualisation automatique désactivée/);
-  const dashboardRecommendation = await page.evaluate(() => UsageStrategy.recommend(state.providers, state.strategy).recommended?.id);
-  assert.equal(await quick.evaluate(() => UsageStrategy.recommend(state.providers, state.strategy).recommended?.id), dashboardRecommendation);
-  // La fraîcheur est désormais affichée par ligne (inversion de l'ancienne assertion).
-  assert.match(await quick.locator('.quick-list').innerText(), /il y a|à l’instant/);
-  assert.equal(await quick.locator('.quick-freshness .freshness.is-stale').count(), 0);
-  assert.equal(await quick.locator('[aria-label="Relevé à vérifier"]').count(), 0);
-  assert.match(await quick.locator('[data-provider="zai"] .reset-date').first().innerText(), /19\/09\/2099.*manuel/);
-  const initialQuickFit = await quick.locator('.quick-list').evaluate(el => ({ scroll: el.scrollHeight, client: el.clientHeight, window: innerHeight }));
-  assert.equal(initialQuickFit.scroll <= initialQuickFit.client || initialQuickFit.window === 900, true, JSON.stringify(initialQuickFit));
+  const quickIcons = await quick.locator('.quick-provider .logo img').evaluateAll(images => images
+    .filter(image => image.offsetParent !== null)
+    .map(image => ({ width: image.getBoundingClientRect().width, height: image.getBoundingClientRect().height, loaded: image.complete && image.naturalWidth > 0 })));
+  assert.equal(quickIcons.length, 10);
+  for (const providerIcon of quickIcons) {
+    assert.ok(providerIcon.loaded, 'icône de fournisseur non chargée');
+    assert.ok(providerIcon.width >= 18 && providerIcon.width <= 26, `icône non rendue à 20 px : ${providerIcon.width}`);
+    assert.ok(providerIcon.height >= 18 && providerIcon.height <= 26, `icône non rendue à 20 px : ${providerIcon.height}`);
+  }
+  // 10 lignes visibles sans défilement à 360×520.
+  const quickFit = await quick.locator('.quick-list').evaluate(el => ({ scroll: el.scrollHeight, client: el.clientHeight }));
+  assert.ok(quickFit.scroll <= quickFit.client + 1, `le widget défile à 360×520 : ${JSON.stringify(quickFit)}`);
+  assert.ok(await quick.locator('.quick-footer').evaluate(el => el.getBoundingClientRect().bottom <= innerHeight), 'le pied du widget doit rester visible');
+  // La fenêtre du widget est masquée par défaut : la rendre visible pour les
+  // captures (sans voler le focus ni déclencher la fermeture sur blur).
+  await desktop.evaluate(({ BrowserWindow }) => {
+    const quickWindow = BrowserWindow.getAllWindows().find(w => w.webContents.getURL().includes('mode=quick'));
+    quickWindow.webContents.setBackgroundThrottling(false);
+    quickWindow.removeAllListeners('blur');
+    quickWindow.showInactive();
+  });
+  await quick.waitForTimeout(200);
+  await quick.screenshot({ path: path.join(results, 'quick.png') });
+  // Niveau toujours textuel, réserve Ollama rappelée dans le title.
+  const quickLevels = await quick.locator('.quick-level').allTextContents();
+  assert.equal(quickLevels.length, 10);
+  for (const quickLevel of quickLevels) assert.match(quickLevel, /Épuisé|Critique|Bas|Suffisant|Indisponible/);
+  assert.match(await quick.locator('[data-provider="ollama"] .quick-value').getAttribute('title'), /réserve supplémentaire/);
+  // Fournisseurs non suivis absents du widget (expiré non-Ollama), puis restauration.
+  await quick.evaluate(() => {
+    globalThis.widgetOriginalState = state;
+    state = structuredClone(state);
+    state.providers.find(provider => provider.id === 'zai').subscriptionStatus = 'expired';
+    renderQuick();
+  });
+  assert.equal(await quick.locator('[data-provider="zai"]').count(), 0);
+  assert.equal(await quick.locator('.quick-row').count(), 9);
+  await quick.evaluate(() => { state = globalThis.widgetOriginalState; delete globalThis.widgetOriginalState; renderQuick(); });
+  assert.equal(await quick.locator('.quick-row').count(), 10);
+  // Défilement fin uniquement en cas de dépassement : hauteur réduite 360×320.
   await desktop.evaluate(({ BrowserWindow }) => {
     const quickWindow = BrowserWindow.getAllWindows().find(w => w.webContents.getURL().includes('mode=quick'));
     quickWindow.webContents.setBackgroundThrottling(false); quickWindow.removeAllListeners('blur'); quickWindow.showInactive();
+    // resizable=false bloque setSize : rendre temporairement la fenêtre
+    // redimensionnable pour simuler un contenu qui dépasse la hauteur.
+    quickWindow.setResizable(true);
+    quickWindow.setSize(360, 320);
   });
-  await quick.evaluate(() => {
-    // Fixture visuelle dans ce renderer seulement : groupe Antigravity complet.
-    state.providers.find(p => p.id === 'antigravity').snapshot = { balances: [], quotaRemaining: 92, quotaWindows: [
-      { label: 'Gemini · 5 heures', remaining: 92 }, { label: 'Gemini · Semaine', remaining: 98 },
-      { label: 'Claude et GPT · 5 heures', remaining: 100 }, { label: 'Claude et GPT · Semaine', remaining: 100 },
-      { label: 'Gemini 4 Argon · Semaine', remaining: 88 },
-    ] }; renderQuick();
+  await quick.waitForFunction(() => {
+    const list = document.querySelector('.quick-list');
+    return list && list.scrollHeight > list.clientHeight + 1;
+  }, null, { timeout: 10000 });
+  const overflowFit = await quick.locator('.quick-list').evaluate(el => ({ scroll: el.scrollHeight, client: el.clientHeight, overflow: getComputedStyle(el).overflowY }));
+  assert.ok(overflowFit.scroll > overflowFit.client, `la liste devrait défiler à 360×320 : ${JSON.stringify(overflowFit)}`);
+  assert.match(overflowFit.overflow, /auto|scroll/);
+  await quick.screenshot({ path: path.join(results, 'widget-scroll-360x320.png') });
+  await desktop.evaluate(({ BrowserWindow }) => {
+    const quickWindow = BrowserWindow.getAllWindows().find(w => w.webContents.getURL().includes('mode=quick'));
+    quickWindow.setSize(360, 520);
+    quickWindow.setResizable(false);
   });
-  assert.equal(await quick.locator('[data-provider="antigravity"] .quick-quota').count(), 5);
-  assert.equal(await quick.locator('.quick-list').evaluate(el => el.scrollHeight <= el.clientHeight || innerHeight === 900), true);
-  assert.match(await quick.locator('[data-provider="antigravity"]').innerText(), /Claude \/ GPT/);
-  await quick.waitForFunction(() => !document.querySelector('#toast').classList.contains('visible'));
-  const expectedLogos = 10 + await quick.locator('.quick-api-providers [data-api-provider]').count();
-  await quick.waitForFunction(count => [...document.querySelectorAll('.logo img')].length === count && [...document.querySelectorAll('.logo img')].every(img => img.complete && img.naturalWidth > 0), expectedLogos);
-  assert.deepEqual(await quick.locator('[data-provider="antigravity"] .quick-period-label').allTextContents(), ['Hebdo', '5 h', 'Hebdo', '5 h', 'Hebdo']);
-  await quick.screenshot({ path: path.join(results, 'quick.png') });
+  await quick.waitForFunction(() => {
+    const list = document.querySelector('.quick-list');
+    return list && list.scrollHeight <= list.clientHeight + 1;
+  }, null, { timeout: 10000 });
 
   // ------------------------------------------------------------------ *
   // Niveaux de ressources : épuisement et seuils dans les deux surfaces
@@ -615,48 +623,44 @@ async function main() {
     ] } });
     render();
   });
-  // Le widget 0.3.0 n'a pas de statut global redondant : la pastille de niveau
-  // textuelle et les statuts par fenêtre portent l'information.
-  assert.match(await quick.locator('[data-provider="openrouter"]').getAttribute('class'), /resource-empty/);
-  assert.match(await quick.locator('[data-provider="openrouter"]').innerText(), /Épuisé/);
+  // Cartes du tableau de bord : inchangées (statuts par fenêtre).
   assert.match(await page.locator('.card:has([data-open="openrouter"])').innerText(), /Solde épuisé/);
   assert.match(await page.locator('.card:has([data-open="ollama"])').innerText(), /Crédits inclus épuisés · réserve disponible/);
-  assert.match(await quick.locator('[data-provider="ollama"]').innerText(), /Épuisé/);
-  assert.match(await quick.locator('[data-provider="ollama"]').innerText(), /Réserve supplémentaire[\s\S]*2,98/);
   assert.match(await page.locator('.card:has([data-open="ollama"])').innerText(), /Réserve supplémentaire[\s\S]*2,98/);
-  assert.match(await quick.locator('[data-provider="antigravity"]').innerText(), /Limite Gemini · hebdo atteinte/);
-  assert.equal(await quick.locator('[data-provider="antigravity"] .quick-period-status').count(), 1);
+  assert.equal(await page.locator('.card:has([data-open="antigravity"]) .quota-period-status').count(), 1);
+  assert.match(await page.locator('.card:has([data-open="antigravity"]) .quota-period-status').innerText(), /Limite Gemini · hebdo atteinte/);
+  // Widget compact : résumé par fournisseur (.quick-value / .quick-level).
+  assert.match(await quick.locator('[data-provider="openrouter"]').getAttribute('class'), /resource-empty/);
+  assert.match(await quick.locator('[data-provider="openrouter"] .quick-level').innerText(), /Épuisé/);
+  assert.match(await quick.locator('[data-provider="deepseek"] .quick-level').innerText(), /Critique/);
+  assert.match(await quick.locator('[data-provider="runinfra"] .quick-level').innerText(), /Bas/);
+  assert.match(await quick.locator('[data-provider="orcarouter"] .quick-level').innerText(), /Suffisant/);
+  assert.match(await quick.locator('[data-provider="ollama"] .quick-level').innerText(), /Indisponible/);
+  assert.match(await quick.locator('[data-provider="ollama"] .quick-value').getAttribute('title'), /réserve supplémentaire 2,98/);
+  assert.match(await quick.locator('[data-provider="antigravity"] .quick-level').innerText(), /Épuisé/);
+  assert.match(await quick.locator('[data-provider="antigravity"] .quick-value-label').innerText(), /Hebdo/);
+  assert.match(await quick.locator('[data-provider="antigravity"] .quick-value-main').innerText(), /0/);
+  assert.match(await quick.locator('[data-provider="antigravity"] .quick-extra').innerText(), /\+4/);
+  // Le solde négatif reste rouge dans le widget, comme dans la carte.
+  const openrouterNegativeColor = await quick.locator('[data-provider="openrouter"] .quick-value .resource-value').evaluate(el => getComputedStyle(el).color);
+  const openrouterCardColor = await page.locator('.card:has([data-open="openrouter"]) .resource-value').evaluate(el => getComputedStyle(el).color);
+  assert.equal(openrouterNegativeColor, openrouterCardColor);
+  // Aucun ancien hook de widget ni barre de jauge.
+  assert.equal(await quick.locator('.quick-quota, .quick-period, .quick-period-status, .quick-resource-status, .quick-freshness, .meter').count(), 0);
   for (const [id, level] of [['openrouter', 'empty'], ['deepseek', 'critical'], ['runinfra', 'low'], ['orcarouter', 'healthy']]) {
     assert.equal(await quick.locator(`[data-provider="${id}"].resource-${level}`).count(), 1);
     assert.equal(await page.locator(`.card.resource-${level}:has([data-open="${id}"])`).count(), 1);
-    const dashboardColor = await page.locator(`.card:has([data-open="${id}"]) .resource-value`).evaluate(el => getComputedStyle(el).color);
-    assert.equal(await quick.locator(`[data-provider="${id}"] .resource-value`).evaluate(el => getComputedStyle(el).color), dashboardColor);
   }
   // Les niveaux sont écrits en toutes lettres, jamais portés par la couleur seule.
   for (const pill of await page.locator('.level-pill').allTextContents()) {
     assert.match(pill, /Épuisé|Critique|Bas|Suffisant|Disponible|Indisponible/);
   }
-  assert.deepEqual(await quick.locator('[data-provider="antigravity"] .quick-quota').evaluateAll(els => els.map(el => [...el.classList].find(c => c.startsWith('resource-')))), ['resource-empty', 'resource-critical', 'resource-low', 'resource-healthy', 'resource-healthy']);
-  for (const surface of [page, quick]) {
-    const result = await surface.evaluate(() => ({ queue: strategyResult().queue, api: strategyResult().apiProviders }));
-    assert.ok(result.queue.every(x => x.kind === 'subscription'));
-    assert.equal(result.api.some(x => x.providerId === 'openrouter'), false);
-    assert.ok(result.api.every((x, i, all) => i === 0 || all[i - 1].balance >= x.balance));
-  }
-  await quick.waitForFunction(() => {
-    const list = document.querySelector('.quick-list');
-    return list.scrollHeight <= list.clientHeight || innerHeight === 900;
-  });
-  assert.equal(await quick.locator('.quick-list').evaluate(el => getComputedStyle(el).overflowY), 'auto');
+  const resourceQuickFit = await quick.locator('.quick-list').evaluate(el => ({ scroll: el.scrollHeight, client: el.clientHeight }));
+  assert.ok(resourceQuickFit.scroll <= resourceQuickFit.client + 1, `le widget défile avec les niveaux affichés : ${JSON.stringify(resourceQuickFit)}`);
   assert.ok(await quick.locator('.quick-footer').evaluate(el => el.getBoundingClientRect().bottom <= innerHeight));
   await quick.screenshot({ path: path.join(results, 'resource-levels-widget.png') });
   await page.screenshot({ path: path.join(results, 'resource-levels-dashboard.png'), fullPage: true });
   for (const surface of [page, quick]) await surface.evaluate(() => { state = globalThis.resourceOriginalState; ({ page, filter, query } = globalThis.resourceOriginalView); delete globalThis.resourceOriginalState; delete globalThis.resourceOriginalView; render(); });
-  // Retirer du contenu doit réduire la fenêtre, pas créer de zone vide.
-  const fullQuickHeight = await quick.evaluate(() => innerHeight);
-  await quick.evaluate(() => { globalThis.quickSizingState = state; state = { ...state, providers: state.providers.slice(0, 2) }; renderQuick(); });
-  await quick.waitForFunction(previous => innerHeight < previous - 80, fullQuickHeight, { timeout: 10000 });
-  await quick.evaluate(() => { state = globalThis.quickSizingState; delete globalThis.quickSizingState; renderQuick(); });
   await desktop.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find(w => !w.webContents.getURL().includes('mode=quick')).close());
   assert.equal(await desktop.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find(w => !w.webContents.getURL().includes('mode=quick')).isVisible()), false);
   assert.deepEqual(errors, []);
@@ -678,9 +682,9 @@ async function main() {
   assert.equal(loaded.settings.autoRefresh, false);
   assert.equal(loaded.settings.theme, 'light');
   assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), 'light');
-  assert.equal(loaded.strategy.inputTokens, 20000);
-  assert.equal(loaded.strategy.subscriptionModels.ollama, 'kimi');
-  assert.equal(loaded.strategy.contributor, false);
+  assert.equal(loaded.strategy, undefined);
+  const persistedState = JSON.parse(await fs.readFile(path.join(dataDir, 'state.json'), 'utf8'));
+  assert.equal(Object.hasOwn(persistedState, 'strategy'), false);
   assert.equal(loaded.historyCount, historyCountBeforeExport);
   assert.equal((await page.evaluate(() => window.providersBar.getHistory())).length, historyCountBeforeExport);
   assert.ok(Object.keys(loaded.apiCooldowns || {}).length >= 0, 'apiCooldowns doit être un objet persistant');
@@ -729,10 +733,11 @@ async function main() {
   await currentWidget.evaluate(data => receiveState(data), freeState);
   assert.match(await page.evaluate(() => statusBadge({ ...state.providers.find(p => p.id === 'ollama'), error: 'Session absente ou expirée.' })), /Connexion à vérifier/);
   for (const surface of [page, currentWidget]) await surface.waitForFunction(() => state.providers.find(p => p.id === 'ollama').snapshot.usageCredits.remaining === 1.05);
-  for (const container of [currentReserveCard, currentReserveRow]) {
-    assert.match(await container.innerText(), /Réserve supplémentaire[\s\S]*1,05/);
-    assert.equal(await container.locator('.stale').count(), 0);
-  }
+  assert.match(await currentReserveCard.innerText(), /Réserve supplémentaire[\s\S]*1,05/);
+  assert.equal(await currentReserveCard.locator('.ollama-reserve.stale').count(), 0);
+  // Widget compact : pas d'âge permanent ; la réserve Ollama reste dans le title.
+  assert.match(await currentReserveRow.locator('.quick-value').getAttribute('title'), /réserve supplémentaire 1,05/);
+  assert.match(await currentReserveRow.locator('.quick-level').innerText(), /Indisponible/);
   assert.equal(await currentReserveRow.locator('[aria-label="Relevé à vérifier"]').count(), 0);
   await currentReserveCard.screenshot({ path: path.join(results, 'ollama-current-card.png') });
   await desktop.evaluate(({ BrowserWindow }) => {
@@ -747,7 +752,9 @@ async function main() {
   assert.equal(free.snapshot.usageCredits.stale, true);
   assert.equal(free.snapshot.usageCredits.observedAt, latestReserveAt);
   for (const surface of [page, currentWidget]) await surface.waitForFunction(() => state.providers.find(p => p.id === 'ollama').snapshot.usageCredits.stale);
-  for (const container of [currentReserveCard, currentReserveRow]) assert.match(await container.innerText(), /Dernière valeur connue[\s\S]*1,05/);
+  assert.match(await currentReserveCard.innerText(), /Dernière valeur connue[\s\S]*1,05/);
+  assert.match(await currentReserveRow.locator('.quick-value').getAttribute('title'), /1,05/);
+  assert.equal(await currentReserveRow.locator('.quick-stale').count(), 0);
   await assert.rejects(page.evaluate(renewalDate => window.providersBar.updateProvider('ollama', { subscriptionStatus: 'active', renewalDate }), futureDate), /Confirme le renouvellement/);
 
   // ------------------------------------------------------------------ *
@@ -972,7 +979,7 @@ async function main() {
   assert.equal(Array.isArray(erasedState.providers) && erasedState.providers.length, 10);
   assert.deepEqual(erasedState.history, []);
   await desktop.close(); desktop = null;
-  console.log('PASS: marque neutre, thème système, version dynamique, app:info, erase-data, stratégie, inventaire, recherche/filtres, édition, historique, clés chiffrées, course connect/disconnect, reprise transitoire, cooldown persistant, Orca/Ollama (session conservée puis auth invalide), Claude Desktop/direct, lecteurs DOM réels, widget avec fraîcheur, niveaux textuels, tray, redémarrage, Ollama Free, Antigravity, export nettoyé.');
+  console.log('PASS: marque neutre, thème système, version dynamique, app:info, erase-data, recommandations/ordre de consommation retirés (tableau de bord, réglages, widget, export), inventaire 10 fournisseurs, recherche/filtres, édition, historique, clés chiffrées, course connect/disconnect, reprise transitoire, cooldown persistant, Orca/Ollama (session conservée puis auth invalide), Claude Desktop/direct, lecteurs DOM réels, widget compact 360×520 (10 lignes Abonnements+API, 32 px, icônes 20 px, sans défilement ; scroll fin à 320), niveaux textuels, tray, redémarrage, Ollama Free, Antigravity, export nettoyé.');
 }
 
 main().catch(error => { console.error(error); process.exitCode = 1; }).finally(async () => { if (desktop) await desktop.close(); });

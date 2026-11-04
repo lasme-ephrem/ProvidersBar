@@ -8,7 +8,8 @@ const providerAssets=require('../assets/providers/sources.json');
 const providerExtensions={claude:'ico',antigravity:'ico',deepseek:'ico',ollama:'png',openrouter:'png',orcarouter:'png'};
 const routes={'/':'renderer/index.html','/app.js':'renderer/app.js','/styles.css':'renderer/styles.css','/theme.css':'renderer/theme.css','/theme-init.js':'renderer/theme-init.js','/assets/icon.png':'assets/icon.png'};
 routes['/lib/resource-levels.js']='lib/resource-levels.js';
-Object.assign(routes, {'/lib/usage-strategy.js':'lib/usage-strategy.js','/strategy-ui.js':'renderer/strategy-ui.js','/strategy.css':'renderer/strategy.css'});
+// La fonctionnalité de recommandation de modèle a été retirée en 0.3.4 :
+// plus de routes strategy-ui/usage-strategy dans l'aperçu.
 Object.assign(routes, {'/lib/quota-resets.js':'lib/quota-resets.js','/reset-ui.js':'renderer/reset-ui.js'});
 // Renderer refonte 0.3.0 : les vues et helpers sont chargés avant app.js.
 Object.assign(routes, {'/ui-core.js':'renderer/ui-core.js','/views.js':'renderer/views.js'});

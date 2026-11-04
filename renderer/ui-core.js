@@ -39,7 +39,7 @@ function icon(name, size = 18) {
 /* ------------------------------------------------------------------ *
  * 2. Échappement et formatage
  * ------------------------------------------------------------------ */
-const FRESHNESS_MS = 600000; // 10 minutes, aligné sur README et usage-strategy.
+const FRESHNESS_MS = 600000; // 10 minutes, seuil de fraîcheur partagé avec le main.
 
 function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, c => ({

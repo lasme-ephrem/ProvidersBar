@@ -383,25 +383,29 @@ test('docs/maintenance.md documente les commandes et la CI réelles', async () =
 
 // Matrice lue par la revue finale : chaque risque majeur de l'analyse possède
 // soit un test unitaire (npm test), soit un scénario smoke identifié ici.
-test('les smoke tests couvrent les non-régressions critiques de la refonte 0.3.0', async () => {
+test('les smoke tests couvrent les non-régressions critiques de la refonte 0.3', async () => {
   const dashboard = await read('scripts/smoke.cjs');
   const claude = await read('scripts/smoke-claude.cjs');
   const resources = await read('scripts/smoke-resource-status.cjs');
   const dashboardMarkers = [
-    'getAppInfo',          // P0-4 : version dynamique via IPC
+    'getAppInfo',          // version dynamique via IPC
     'erase-data',          // contrat §3.5 : effacement complet
-    'Espace local',        // P0-4 : marque neutre
-    'quick-freshness',     // P1-10 : fraîcheur réelle du widget
-    'apiCooldowns',        // P1-2 : cooldowns 429 persistés
-    'accountSession',      // P0-5/P0-6 : sessions conservées puis invalidées
+    'Espace local',        // marque neutre
+    'quick-group-title',   // widget compact : sections Abonnements/API
+    'quick-value',         // widget compact : résumé par fournisseur
+    'quick-level',         // widget compact : niveau en toutes lettres
+    'scrollHeight',        // widget compact : vérification du non-défilement
+    'setSize(360, 320)',   // widget compact : défilement seulement si dépassement
+    'apiCooldowns',        // cooldowns 429 persistés
+    'accountSession',      // sessions conservées puis invalidées
     'USERPROFILE',         // isolation Claude Code (pas de profil réel)
-    'openOllamaEmail',     // P0-5 : session Ollama écrite avant le fetch
+    'openOllamaEmail',     // session Ollama écrite avant le fetch
     'Couvre P0-5/P0-6',    // traçabilité explicite des scénarios
   ];
   for (const marker of dashboardMarkers) assert.ok(dashboard.includes(marker), `scripts/smoke.cjs doit couvrir « ${marker} ».`);
   const claudeMarkers = ['deny-token', 'offline', 'fixture-live-access', 'Prochaine tentative', 'chaque minute', 'USERPROFILE', 'LOCALAPPDATA', 'APPDATA', 'auth-rate-limit', 'claude-desktop-local'];
   for (const marker of claudeMarkers) assert.ok(claude.includes(marker), `scripts/smoke-claude.cjs doit couvrir « ${marker} ».`);
-  const resourceMarkers = ['state.settings.theme', 'level-pill', 'Toutes les limites atteintes', 'resource-empty'];
+  const resourceMarkers = ['state.settings.theme', 'Toutes les limites atteintes', 'resource-empty', 'quick-value', 'quick-level', 'quick-value-label'];
   for (const marker of resourceMarkers) assert.ok(resources.includes(marker), `scripts/smoke-resource-status.cjs doit couvrir « ${marker} ».`);
   // Aucun smoke ne doit utiliser le vrai profil Claude Code de l'utilisateur.
   assert.match(claude, /USERPROFILE/, 'smoke-claude doit isoler le profil Claude Code');
@@ -427,4 +431,67 @@ test('le repli explicite Claude Desktop est couvert par le smoke Claude', async 
   // Le smoke vérifie explicitement l'absence de l'ancien toast sur une bascule.
   assert.match(claude, /doesNotMatch\(fallbackToast, \/Lecture directe Claude activée\/\)/, 'le toast « Lecture directe » doit être interdit lors d’une bascule Desktop');
   assert.match(claude, /quotaWindows\.map\(window => window\.remaining\), \[100, 38\]/, 'le snapshot Desktop de repli doit être vérifié (100/38)');
+});
+
+// ---------------------------------------------------------------------------
+// T16 : recommandations / ordre de consommation retirés
+// ---------------------------------------------------------------------------
+
+test('la fonctionnalité de recommandation et d’ordre de consommation a été retirée', async () => {
+  // Fichiers dédiés supprimés du dépôt.
+  for (const removed of ['renderer/strategy-ui.js', 'renderer/strategy.css', 'lib/usage-strategy.js', 'tests/usage-strategy.test.cjs']) {
+    assert.equal(exists(removed), false, `${removed} ne doit plus exister`);
+  }
+  // Aucun fichier de production ne doit encore charger ou appeler la stratégie.
+  const patterns = [
+    { name: 'require usage-strategy', regex: /require\([^)]*usage-strategy/ },
+    { name: 'script usage-strategy.js', regex: /['"][^'"]*usage-strategy\.js['"]/ },
+    { name: 'script strategy-ui.js', regex: /['"][^'"]*strategy-ui\.js['"]/ },
+    { name: 'style strategy.css', regex: /['"][^'"]*strategy\.css['"]/ },
+    { name: 'global UsageStrategy', regex: /\bUsageStrategy\b/ },
+    { name: 'appel strategyResult', regex: /\bstrategyResult\s*\(/ },
+    { name: 'appel updateStrategy', regex: /\bupdateStrategy\s*\(/ },
+    { name: 'canal strategy:update', regex: /strategy:update/ },
+    { name: 'action strategy-settings', regex: /strategy-settings/ },
+    { name: 'sélecteur .strategy-*', regex: /\.strategy-(?:panel|current|next|api|details|form|settings)\b/ },
+    { name: 'id strategy-*', regex: /id="strategy-/ },
+  ];
+  const findings = [];
+  for (const file of await productionFiles()) {
+    const content = await read(file);
+    for (const pattern of patterns) if (pattern.regex.test(content)) findings.push(`${file} — ${pattern.name}`);
+  }
+  assert.deepEqual(findings, [], `Références de stratégie restantes :\n${findings.join('\n')}`);
+  assert.doesNotMatch(await read('renderer/index.html'), /strategy/i, 'index.html ne doit plus charger la stratégie');
+  assert.doesNotMatch(await read('preload.cjs'), /strategy|updateStrategy/i, 'preload ne doit plus exposer updateStrategy');
+  // L'état public et l'export ne contiennent plus `strategy` (vérifié par le smoke).
+  const dashboard = await read('scripts/smoke.cjs');
+  assert.match(dashboard, /'strategy' in \(await window\.providersBar\.getState\(\)\)/);
+  assert.match(dashboard, /'strategy' in exportedDocument/);
+});
+
+test('le widget compact 360×520 est couvert par les smokes', async () => {
+  const dashboard = await read('scripts/smoke.cjs');
+  const resources = await read('scripts/smoke-resource-status.cjs');
+  const markers = [
+    'quick-group-title',      // sections Abonnements puis API
+    'quick-value',            // résumé par fournisseur
+    'quick-level',            // niveau textuel
+    'quick-value-label',      // fenêtre résumée
+    'quick-count',            // 10 comptes · 6 abonnements · 4 API
+    'scrollHeight',           // non-défilement mesuré
+    '360, 520',               // taille par défaut vérifiée
+    'setSize(360, 320)',      // défilement fin en cas de dépassement
+    'widget-scroll-360x320.png',
+    'quick-stale',            // relevé à vérifier, jamais d'âge permanent
+  ];
+  for (const marker of markers) assert.ok(dashboard.includes(marker), `scripts/smoke.cjs doit couvrir « ${marker} ».`);
+  assert.ok(resources.includes('quick-value'), 'smoke-resource-status doit vérifier le résumé .quick-value');
+  assert.ok(resources.includes('quick-level'), 'smoke-resource-status doit vérifier le niveau textuel');
+  // Les anciens hooks par fenêtre ne sont utilisés que dans des assertions d'absence.
+  assert.match(dashboard, /quick-quota, \.quick-period, \.quick-period-status, \.quick-resource-status/);
+  // Aucun smoke ne pilote l'auto-dimensionnement retiré.
+  for (const script of ['scripts/smoke.cjs', 'scripts/smoke-resource-status.cjs', 'scripts/smoke-claude.cjs']) {
+    assert.doesNotMatch(await read(script), /api\.fitQuick|fitQuick\(/, `${script} ne doit plus piloter la hauteur du widget`);
+  }
 });

@@ -1,8 +1,14 @@
 # ProvidersBar
 
-Application desktop Windows pour suivre les abonnements, quotas et crédits de **dix fournisseurs d’IA**. Un tableau de bord et un widget dans la zone de notification regroupent les ressources restantes, leur fraîcheur et leurs dates de réinitialisation.
+Application desktop Windows pour suivre les abonnements, quotas et crédits de **dix fournisseurs d’IA**. Un tableau de bord et un widget dans la zone de notification regroupent les abonnements et les API avec leurs ressources restantes et leurs dates de réinitialisation.
 
-**Version 0.3.3 — 4 novembre 2026 :** Claude bascule automatiquement vers la lecture Claude Desktop dès que la lecture directe est inutilisable (jeton Claude Code à renouveler) et que le dernier relevé est périmé, au lieu de conserver un relevé vieux de plusieurs jours. La refonte 0.3.0 reste la base, avec les correctifs 0.3.1 (Claude/Antigravity) et 0.3.2 (Ollama/OrcaRouter/OpenRouter). Détails dans [CHANGELOG.md](CHANGELOG.md) et [docs/validation-0.3.3.md](docs/validation-0.3.3.md).
+**Version 0.3.4 — 4 novembre 2026 :** suppression de la fonctionnalité de recommandation de modèle (ordre de consommation) dans l’application et le widget — l’application liste désormais simplement les abonnements et les API — et widget compacté (360 × 520 px, icônes visibles, 10 fournisseurs sans défilement, défilement fin seulement si nécessaire). La refonte 0.3.0 reste la base, avec les correctifs 0.3.1 (Claude/Antigravity), 0.3.2 (Ollama/OrcaRouter/OpenRouter) et 0.3.3 (repli Claude). Détails dans [CHANGELOG.md](CHANGELOG.md) et [docs/validation-0.3.4.md](docs/validation-0.3.4.md).
+
+## Correctif 0.3.4
+
+- **Recommandations supprimées** : plus de panneau « Ton ordre d’usage », de suggestions « Utilise maintenant / Puis », de classement des API ni de réglage d’ordre de consommation. Le tableau de bord et le widget **listent** les abonnements et les API avec leurs soldes ; le catalogue de modèles et tarifs embarqué est retiré (application plus simple, données et code en moins).
+- **Widget compact** : fenêtre **360 × 520 px**, lignes de 32 px, icônes 20 × 20 visibles, liste Abonnements puis API ; les dix fournisseurs tiennent **sans défilement** dans la fenêtre par défaut, le défilement (barre fine de 5 px) n’apparaît que si la fenêtre est réduite ou la police agrandie.
+- **Données** : la stratégie/ordre de consommation est retirée des inventaires existants par migration non destructive ; l’export JSON ne contient plus `strategy` ; l’IPC `strategy:update` et la méthode `updateStrategy` sont supprimés.
 
 ## Correctif 0.3.3
 
@@ -27,7 +33,7 @@ Application desktop Windows pour suivre les abonnements, quotas et crédits de *
 - **Claude jamais bloqué** : si la lecture directe échoue (jeton Claude Code expiré, renouvellement limité ou refusé) alors que le dernier relevé direct est **absent ou périmé (plus de 10 minutes)**, ProvidersBar bascule explicitement vers le relevé Claude Desktop et l’annonce, même si un ancien relevé existe — il est périmé, rien de valable à préserver. Un relevé Desktop de plus de 45 minutes reste affiché avec sa date réelle et signalé comme ancien.
 - **Session navigateur durcie** : les lecteurs de comptes pilotent Chrome/Edge par un **pipe local** (plus de port TCP de débogage) ; la première connexion se fait dans un navigateur ordinaire, sans port de débogage, et les fenêtres de connexion internes n’acceptent qu’une **liste fermée d’origines** (fournisseurs concernés et connexion Google).
 - **Diagnostic intégré** : `npm run doctor` vérifie en lecture seule les prérequis (dossier de données, DPAPI, navigateur, Codex, Claude, Antigravity, accès réseau aux API).
-- **Interface redessinée et accessible** : thèmes clair / sombre / **système**, contrastes AA, navigation jamais masquée, widget avec fraîcheur des relevés et statut d’actualisation réel, version affichée dynamiquement, marque neutre.
+- **Interface redessinée et accessible** : thèmes clair / sombre / **système**, contrastes AA, navigation jamais masquée, widget compact avec statut d’actualisation réel et indicateur de relevé ancien.
 - **Données maîtrisées** : export JSON nettoyé (sans clés, sessions ni identifiants), action **Effacer mes données** avec double confirmation, dossier de données à ACL restreinte, purge automatique des fichiers résiduels.
 
 ## Utiliser l’application
@@ -37,7 +43,7 @@ Lancer **`Lancer ProvidersBar.cmd`** (portable personnel) ou `dist/ProvidersBar-
 1. **Connexions** : connecter les comptes et renseigner les clés API.
 2. **Vue d’ensemble** : cartes par fournisseur, ressources restantes, prochaine réinitialisation.
 3. **Abonnements** : prix, échéances, périodicité et budget mensuel.
-4. **Réglages** : actualisation automatique, notifications, thème (Clair / Sombre / Système), ordre de consommation, version, effacement des données.
+4. **Réglages** : actualisation automatique, notifications, thème (Clair / Sombre / Système), version, effacement des données.
 
 Fermer la fenêtre conserve l’application dans la zone de notification. Un clic sur l’icône ouvre le widget ; clic droit → **Quitter** arrête l’application. L’historique et l’export JSON restent accessibles depuis le tableau de bord.
 
@@ -82,7 +88,7 @@ La lecture automatique Grok fonctionne sans fenêtre Chrome ou Edge, y compris a
 
 Garder **Antigravity App** ouvert ; aucune CLI supplémentaire n’est nécessaire. L’IDE seul ne suffit pas. Le connecteur lit le service local du processus installé et distingue **trois réserves indépendantes** : Gemini, Claude/GPT et **Gemini 4 Argon** (hebdomadaire). Il ne prête à Argon aucune limite de cinq heures ni le quota d’un autre groupe.
 
-Argon apparaît dans les cartes, le widget, les dates et les recommandations. Aucun score de qualité n’est inventé : tant que ce score reste inconnu, le classement place les modèles dotés d’un score avant lui. [Modèles et disponibilité](https://www.antigravity.google/docs/models), [limites des forfaits](https://www.antigravity.google/docs/plans).
+Argon apparaît dans les cartes, le widget et les dates. Aucun score de qualité n’est inventé. [Modèles et disponibilité](https://www.antigravity.google/docs/models), [limites des forfaits](https://www.antigravity.google/docs/plans).
 
 ### Claude
 
@@ -94,15 +100,13 @@ La lecture directe exige l’actualisation automatique. Elle respecte une minute
 
 Si la lecture directe est bloquée (429 de quota **ou de renouvellement OAuth**, jeton expiré, erreur d’authentification) **et que le dernier relevé direct est absent ou périmé (plus de 10 minutes)**, ProvidersBar bascule explicitement vers le relevé Claude Desktop, même si un ancien relevé existe : il est périmé, donc rien de valable n’est préservé. La fiche l’annonce (« Lecture directe indisponible (renouvellement du jeton Claude Code limité) ; ProvidersBar utilise le relevé Claude Desktop ») et enregistre ce relevé. Pendant ce repli, un échantillon Claude Desktop de plus de 45 minutes n’est pas rejeté : il est affiché avec sa **date réelle** et un libellé « relevé ancien » (en lecture Desktop normale, un tel échantillon reste une erreur). Si Claude Desktop n’a pas non plus de relevé lisible au moment du repli, ProvidersBar ne change pas de mode sans donnée à afficher : il conserve la lecture courante, le dernier relevé et le délai d’attente, et affiche : « Ouvre Claude Desktop (page Utilisation) pour actualiser le relevé ; la lecture directe reprendra après renouvellement du jeton dans Claude Code. » Le cycle de 5 minutes réessaie (et basculera dès qu’un relevé Desktop sera lisible). Un relevé direct de moins de 10 minutes est conservé : aucune bascule dans ce cas. Aucune rotation de jeton n’est forcée ; après renouvellement du jeton dans Claude Code, réactiver la lecture directe si souhaité. [Détails du protocole et de la protection des jetons](docs/architecture.md).
 
-## Abonnements, dates et recommandations
+## Abonnements, dates et API
 
-Une échéance dépassée marque l’abonnement **expiré** et le retire du budget et des recommandations. La réactivation demande de confirmer le renouvellement et de fournir une nouvelle échéance future. Ollama continue sous Free à 0 USD avec les ressources réellement lisibles. Une échéance de facturation ne remet jamais un quota à 100 %.
+Une échéance dépassée marque l’abonnement **expiré** et le retire du budget. La réactivation demande de confirmer le renouvellement et de fournir une nouvelle échéance future. Ollama continue sous Free à 0 USD avec les ressources réellement lisibles. Une échéance de facturation ne remet jamais un quota à 100 %.
 
 Chaque limite affiche sa prochaine réinitialisation si elle est fournie. Une date passée demande une nouvelle lecture. Dans la fiche → **Réinitialisations**, ajouter une date manquante, avec heure facultative. Les dates fournisseur restent prioritaires ; les compléments manuels sont identifiés et ne créent aucun relevé de consommation.
 
-**Utilise maintenant**, puis **Puis**, proposent uniquement les abonnements actifs dont les ressources sont confirmées et récentes. Les réserves Antigravity sont indépendantes ; les fenêtres d’une même réserve sont cumulatives. Configurer les modèles et exclusions dans **Réglages → Ordre de consommation**.
-
-Les API disponibles sont affichées séparément, par solde USD positif décroissant. Le catalogue de modèles et tarifs embarqué est daté du **12 septembre 2026**, avec ajout d’Argon en octobre ; il ne se met pas à jour automatiquement. [Méthode, hypothèses et sources](docs/ordre-consommation.md).
+Les abonnements et les API sont simplement listés, avec leurs quotas, soldes et dates. Le widget affiche les abonnements puis les API ; aucune recommandation, aucun classement de modèles et aucun réglage d’ordre de consommation ne sont proposés.
 
 ## Interface et accessibilité
 
@@ -112,7 +116,7 @@ Les API disponibles sont affichées séparément, par solde USD positif décrois
 - **Focus** : restauré après chaque rendu (navigation, filtres, fiches, synchronisation) ; sélection de texte préservée.
 - **ARIA** : navigation nommée, `aria-current`, onglets de fiche `role="tab"`, jauges `role="meter"` avec valeur textuelle, zone `aria-live` pour les annonces, `role="alert"` sur les erreurs de formulaire.
 - **Mouvement** : `prefers-reduced-motion` neutralise les transitions ; `forced-colors` renforce les bordures.
-- **Widget** : chaque ligne affiche la fraîcheur (« à l’instant », « il y a X min ») et « Relevé ancien » au-delà de dix minutes ; le statut d’actualisation reflète le réglage réel (« Actualisation auto : 5 min · Claude 1 min » ou « désactivée »).
+- **Widget** : fenêtre compacte **360 × 520 px**, listes **Abonnements** puis **API** avec icônes, niveau textuel et résumé ; les dix fournisseurs tiennent sans défilement (barre fine de 5 px seulement si la fenêtre est réduite) ; l’indicateur « Relevé à vérifier » apparaît au-delà de dix minutes et le statut d’actualisation reflète le réglage réel (« Actualisation auto : 5 min · Claude 1 min » ou « désactivée »).
 - **Version** : affichée dynamiquement depuis l’IPC `app:info` (`app.getVersion()`), jamais codée en dur.
 
 ## Données et confidentialité
@@ -123,7 +127,7 @@ Les API disponibles sont affichées séparément, par solde USD positif décrois
 | Développement | `.local/` |
 | Tests isolés et captures | `test-results/` |
 
-`PROVIDERSBAR_DATA_DIR` permet de choisir un autre dossier. Les données incluent l’inventaire, l’historique, les réglages, la stratégie, les profils de connexion et `credentials.json`.
+`PROVIDERSBAR_DATA_DIR` permet de choisir un autre dossier. Les données incluent l’inventaire, l’historique, les réglages, les profils de connexion et `credentials.json`.
 
 - **Clés API** : chiffrées avec Electron `safeStorage` et Windows DPAPI, liées à l’utilisateur Windows. Aucune clé n’est renvoyée au renderer ni incluse dans l’export.
 - **Dossier de données** : à chaque démarrage, son héritage ACL est retiré et seuls l’utilisateur courant et `SYSTEM` y ont accès (`icacls`). Un échec produit un avertissement, jamais un blocage.
@@ -185,7 +189,7 @@ npm run package:release
 npm run release:artifacts
 ```
 
-La distribution propre est créée dans `dist/ProvidersBar-0.3.3-win32-x64/` ; la commande refuse un dossier de release déjà existant. `npm run release:artifacts` produit l'archive ZIP et `dist/SHA256SUMS-0.3.3.txt`, et refuse d'archiver une release contenant un dossier de données personnelles. Le portable personnel reste dans `dist/ProvidersBar-win32-x64/`, à côté de ses données.
+La distribution propre est créée dans `dist/ProvidersBar-0.3.4-win32-x64/` ; la commande refuse un dossier de release déjà existant. `npm run release:artifacts` produit l'archive ZIP et `dist/SHA256SUMS-0.3.4.txt`, et refuse d'archiver une release contenant un dossier de données personnelles. Le portable personnel reste dans `dist/ProvidersBar-win32-x64/`, à côté de ses données.
 
 Les ressources applicatives sont préparées dans un dossier temporaire puis remplacées ensemble : les fichiers retirés des sources ne subsistent pas dans l’installation. `npm run update:portable` conserve `data/` et les sessions, ferme l’ancien processus s’il est joignable en diagnostic, puis nécessite de relancer l’application ; sinon, la quitter manuellement avant la mise à jour. Le packaging inclut les dépendances de production (`proper-lockfile` et ses dépendances) et leurs notices.
 
@@ -193,24 +197,23 @@ L’exécutable **n’est pas signé** et conserve les métadonnées binaires El
 
 ## Limites connues
 
-- **Lectures réelles** : Claude Desktop, le service local Antigravity, le portail Ollama, le portefeuille OrcaRouter et le solde OpenRouter sont vérifiés sur une machine réelle pour les 0.3.1 à 0.3.3 (voir [docs/validation-0.3.3.md](docs/validation-0.3.3.md)). Les lectures authentifiées des fournisseurs (clés API, sessions web) restent à rejouer après chaque changement de service.
+- **Lectures réelles** : Claude Desktop, le service local Antigravity, le portail Ollama, le portefeuille OrcaRouter et le solde OpenRouter sont vérifiés sur une machine réelle (voir [docs/validation-0.3.4.md](docs/validation-0.3.4.md)). Les lectures authentifiées des fournisseurs (clés API, sessions web) restent à rejouer après chaque changement de service.
 - Les lecteurs web (Grok, Z.ai, Ollama, bases Antigravity) dépendent des pages et services officiels, qui peuvent changer sans préavis. Un format inconnu produit une erreur, jamais une estimation.
 - Claude Desktop peut suspendre ses mesures ; le fichier local ne fournit pas de dates de reset fiables.
 - L’export JSON n’est pas restaurable depuis l’interface ; la connexion des comptes et des clés doit être refaite.
-- Les prix et modèles recommandés sont un catalogue embarqué et daté, pas une découverte des droits réels du compte.
+- L’application liste les abonnements et les API ; elle ne classe plus les modèles et n’embarque plus de catalogue de prix.
 - L’audit d’accessibilité est statique (structure ARIA et contrastes calculés) ; un essai avec lecteur d’écran (NVDA, Narrator) reste recommandé.
 - Windows x64 uniquement ; Node.js n’est requis que pour le développement et le packaging.
 
 ## Structure et documentation
 
-- `main.cjs` et `preload.cjs` : processus principal (fenêtres, IPC, orchestration) et pont IPC limité (24 canaux `invoke`).
-- `lib/` : stockage (`data-store.cjs`), sécurité des fenêtres et des données (`window-security.cjs`), export nettoyé (`privacy-export.cjs`), diagnostic (`diagnostics.cjs`), connecteurs, quotas et recommandations.
+- `main.cjs` et `preload.cjs` : processus principal (fenêtres, IPC, orchestration) et pont IPC limité (23 canaux `invoke`).
+- `lib/` : stockage (`data-store.cjs`), sécurité des fenêtres et des données (`window-security.cjs`), export nettoyé (`privacy-export.cjs`), diagnostic (`diagnostics.cjs`), connecteurs et quotas.
 - `renderer/` : shell, vues, helpers UI, thèmes et réglages ; contrat dans [renderer/CONTRAT-UI.md](renderer/CONTRAT-UI.md).
 - `scripts/` et `tests/` : fabrication, diagnostic, maintenance et validation.
 - [Architecture, IPC et modèles de données](docs/architecture.md)
 - [Maintenance et procédures de validation](docs/maintenance.md)
-- [Validation de la version 0.3.3](docs/validation-0.3.3.md) · [validation 0.3.2](docs/validation-0.3.2.md) (archive) · [validation 0.3.1](docs/validation-0.3.1.md) (archive) · [validation 0.3.0](docs/validation-0.3.0.md) (archive) · [validation 0.2.0](docs/validation-0.2.0.md) (archive)
-- [Méthode de recommandation](docs/ordre-consommation.md)
+- [Validation de la version 0.3.4](docs/validation-0.3.4.md) · [validation 0.3.3](docs/validation-0.3.3.md) (archive) · [validation 0.3.2](docs/validation-0.3.2.md) (archive) · [validation 0.3.1](docs/validation-0.3.1.md) (archive) · [validation 0.3.0](docs/validation-0.3.0.md) (archive) · [validation 0.2.0](docs/validation-0.2.0.md) (archive)
 - [Historique des versions](CHANGELOG.md)
 - [Provenance des logos](assets/providers/sources.json)
 

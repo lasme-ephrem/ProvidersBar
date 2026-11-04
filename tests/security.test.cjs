@@ -285,7 +285,7 @@ test('l’export IPC ne sérialise jamais l’état brut et reste sans identité
   for (const sentinel of ['sha256-identite-test', 'identite-nested', '102647', '102238', 'empreinte']) {
     assert.equal(serialized.includes(sentinel), false, `l’export ne doit pas contenir ${sentinel}`);
   }
-  assert.deepEqual(Object.keys(exported).sort(), ['app', 'exportedAt', 'history', 'inventory', 'manualResets', 'settings', 'strategy', 'version']);
+  assert.deepEqual(Object.keys(exported).sort(), ['app', 'exportedAt', 'history', 'inventory', 'manualResets', 'settings', 'version']);
   // L'état source n'est jamais modifié par l'export.
   assert.equal(state.providers.find(provider => provider.id === 'openai').accountSession.identity, 'sha256-identite-test');
 });

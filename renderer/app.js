@@ -1,7 +1,7 @@
 /* ProvidersBar — état, événements et boucle de rendu (renderer).
- * Chargé après ui-core.js, reset-ui.js, usage-strategy.js, strategy-ui.js et views.js.
+ * Chargé après ui-core.js, reset-ui.js et views.js.
  * Globals conservés pour le smoke et le diagnostic : state, page, filter, query,
- * render, receiveState, renderQuick, statusBadge, strategyResult.
+ * render, receiveState, renderQuick, statusBadge.
  */
 'use strict';
 
@@ -20,8 +20,6 @@ let historyLoading = false;
 let historyError = '';
 let erasePending = false;
 let eraseTimer = null;
-let quickResizeFrame = null;
-let quickSizeObserver = null;
 
 let api = window.providersBar;
 const quick = new URLSearchParams(location.search).get('mode') === 'quick';
@@ -62,7 +60,7 @@ function render() {
             electronVersion: appInfo?.electron || null,
             packaged: typeof appInfo?.packaged === 'boolean' ? appInfo.packaged : null,
             erasePending,
-          }) + strategySettings();
+          });
   const content = (state.desktop ? '' : PREVIEW_BANNER) + pageContent;
   document.getElementById('app').innerHTML = shell(content, page);
   if (!focusInsideDialog && !restoreFocus(token) && scrollPosition) {
@@ -92,56 +90,33 @@ function openDetail(id, tab = 'info') {
 }
 
 /* ------------------------------------------------------------------ *
- * Widget (fenêtre de notification)
+ * Widget (fenêtre de notification) — liste compacte, sans recommandation
  * ------------------------------------------------------------------ */
-function fitQuickContent() {
-  if (!quick || typeof api.fitQuick !== 'function') return;
-  clearTimeout(quickResizeFrame);
-  quickResizeFrame = setTimeout(() => {
-    const panel = document.querySelector('.quick');
-    const list = panel?.querySelector('.quick-list');
-    if (!panel || !list) return;
-    const outerHeight = element => {
-      const styles = getComputedStyle(element);
-      return element.getBoundingClientRect().height
-        + parseFloat(styles.marginTop) + parseFloat(styles.marginBottom);
-    };
-    const rows = [...list.children];
-    const gap = parseFloat(getComputedStyle(list).rowGap) || 0;
-    const listHeight = rows.reduce((sum, element) => sum + outerHeight(element), 0)
-      + Math.max(0, rows.length - 1) * gap;
-    const styles = getComputedStyle(panel);
-    const height = [...panel.children].filter(element => element !== list)
-      .reduce((sum, element) => sum + outerHeight(element), listHeight)
-      + parseFloat(styles.paddingTop) + parseFloat(styles.paddingBottom);
-    api.fitQuick(Math.ceil(height) + 2).catch(() => {});
-  });
-}
-
 function renderQuick() {
   if (!state) return;
   applyTheme(state.settings?.theme || 'light');
   document.body.classList.add('quick-mode');
-  const accounts = state.providers.filter(provider =>
-    !(provider.type === 'subscription'
-      && provider.subscriptionStatus === 'expired'
-      && !ollamaFree(provider)));
+  const subscriptions = state.providers.filter(provider =>
+    provider.type === 'subscription' && isTracked(provider));
+  const apis = state.providers.filter(provider =>
+    provider.type === 'api' && isTracked(provider));
   const token = captureFocus();
+  const body = subscriptions.length || apis.length
+    ? `${subscriptions.length
+      ? `<p class="quick-group-title">Abonnements</p>${subscriptions.map(quickAccountRow).join('')}`
+      : ''}${apis.length
+      ? `<p class="quick-group-title">API</p>${apis.map(quickAccountRow).join('')}`
+      : ''}`
+    : '<p class="hint quick-empty">Aucun compte à afficher.</p>';
   document.getElementById('app').innerHTML = '<main class="quick">'
-    + quickHeader(accounts)
-    + strategyWidget()
-    + `<div class="quick-list">${accounts.length
-      ? accounts.map(quickAccountRow).join('')
-      : '<p class="hint quick-empty">Aucun compte à afficher.</p>'}</div>`
+    + quickHeader({
+      total: subscriptions.length + apis.length,
+      subscriptions: subscriptions.length,
+      apis: apis.length,
+    })
+    + `<div class="quick-list">${body}</div>`
     + '<footer class="quick-footer"><button type="button" class="text-button" data-action="main">'
-    + `Ouvrir le tableau de bord ${icon('arrow', 14)}</button></footer></main>`;
-  if (!quickSizeObserver) quickSizeObserver = new ResizeObserver(() => fitQuickContent());
-  quickSizeObserver.disconnect();
-  for (const element of document.querySelectorAll(
-    '.quick-head, .quick-refresh-status, .quick-columns, .quick-strategy, .quick-api, .quick-row, .quick-footer')) {
-    quickSizeObserver.observe(element);
-  }
-  fitQuickContent();
+    + `Ouvrir le tableau de bord ${icon('arrow', 12)}</button></footer></main>`;
   restoreFocus(token);
 }
 
@@ -331,12 +306,6 @@ async function runAction(action, button) {
     }
     return;
   }
-  if (action === 'strategy-settings') {
-    page = 'settings';
-    render();
-    document.getElementById('strategy-form')?.scrollIntoView({ block: 'start' });
-    return;
-  }
   if (action === 'disconnect') {
     button.disabled = true;
     try {
@@ -493,21 +462,6 @@ document.addEventListener('submit', async event => {
       form.reset();
       renderDialog();
       toast('Compte connecté. Le solde a été récupéré.');
-    }
-    if (form.id === 'strategy-form') {
-      state = await api.updateStrategy({
-        enabled: data.has('strategyEnabled'),
-        contributor: data.has('contributor'),
-        inputTokens: num('inputTokens'),
-        outputTokens: num('outputTokens'),
-        cachePercent: num('cachePercent'),
-        subscriptionModels: Object.fromEntries(
-          UsageStrategy.buckets.map(bucket => [bucket.id, get(`model:${bucket.id}`)])),
-        disabledRoutes: UsageStrategy.routes
-          .filter(route => !data.has(`route:${route.id}`))
-          .map(route => route.id),
-      });
-      toast('Stratégie enregistrée.');
     }
     if (form.id === 'settings-form') {
       state = await api.updateSettings({

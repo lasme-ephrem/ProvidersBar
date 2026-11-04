@@ -1,5 +1,21 @@
 # Historique des versions
 
+## 0.3.4 — 4 novembre 2026
+
+Simplification produit demandée : suppression de la fonctionnalité de recommandation de modèle et widget compact.
+
+### Produit et interface
+
+- **Recommandations supprimées** partout : panneau « Ton ordre d’usage » du tableau de bord, suggestions « Utilise maintenant / Puis », classement des API, configuration d’ordre de consommation des Réglages et section de recommandation du widget. Le tableau de bord et le widget **listent** désormais les abonnements et les API avec leurs quotas, soldes et dates.
+- **Fichiers retirés** : `lib/usage-strategy.js` (moteur et catalogue de tarifs), `renderer/strategy-ui.js`, `renderer/strategy.css`, tests associés, `docs/ordre-consommation.md`. L’IPC `strategy:update` et la méthode `updateStrategy` sont supprimés (23 canaux IPC).
+- **Widget compact** : fenêtre par défaut **360 × 520 px** (au lieu de 400 × 700), lignes de 32 px, icônes 20 × 20 visibles, en-tête réduit, listes **Abonnements** puis **API** ; les dix fournisseurs tiennent **sans défilement** dans la fenêtre par défaut, avec une barre de défilement fine de 5 px seulement en cas de dépassement (fenêtre réduite ou police agrandie). Aucun élément coupé, focus et ARIA conservés.
+- **Données** : migration non destructive qui retire `state.strategy` des inventaires existants (y compris l’ancienne configuration de modèles Gemini) ; l’état public et l’export JSON ne contiennent plus `strategy`.
+
+### Qualité et documentation
+
+- Tests supprimés/adaptés : `tests/usage-strategy.test.cjs` retiré, tests de migration (suppression de `strategy`), d’export (sans `strategy`), de sécurité et de qualité mis à jour ; smokes réécrits pour vérifier l’absence de recommandations et le widget compact 360 × 520 (10 lignes visibles sans défilement, icônes 20 px, défilement fin par redimensionnement).
+- Documentation : README, `docs/architecture.md`, `docs/maintenance.md` mis à jour ; nouveau [docs/validation-0.3.4.md](docs/validation-0.3.4.md).
+
 ## 0.3.3 — 4 novembre 2026
 
 Correctif de la connexion Claude : elle ne reste plus bloquée sur un relevé ancien lorsque la lecture directe échoue.

@@ -63,7 +63,7 @@ test('Removing unused providers preserves remaining subscriptions, remaining bal
   assert.deepEqual(original, before);
   assert.equal(removeUnusedProviders(result.state).changed, false);
 });
-test('Removing Gemini web preserves other accounts and strategy preferences', () => {
+test('Removing Gemini web preserves other accounts and drops the obsolete strategy engine', () => {
   const state=createSeed();
   state.providers.push({id:'gemini',accountSession:{kind:'subscription-browser'},snapshot:{quotaRemaining:100}});
   state.history=[{providerId:'gemini',quotaRemaining:100},{providerId:'antigravity',quotaRemaining:72}];
@@ -73,25 +73,42 @@ test('Removing Gemini web preserves other accounts and strategy preferences', ()
   assert.equal(result.state.providers.length,10);
   assert.deepEqual(result.state.providers,before.providers.filter(p=>p.id!=='gemini'));
   assert.deepEqual(result.state.history,[before.history[1]]);
-  assert.equal(result.state.strategy.inputTokens,4321);
-  assert.deepEqual(result.state.strategy.disabledRoutes,['openrouter:luna']);
-  assert.equal(result.state.strategy.subscriptionModels.ollama,'kimi');
-  assert.equal(result.state.strategy.subscriptionModels.gemini,undefined);
+  // La fonctionnalité d'ordre de consommation est retirée : le champ disparaît.
+  assert.equal(Object.hasOwn(result.state,'strategy'),false);
+  assert.deepEqual(result.state.settings,before.settings);
   assert.equal(removeUnusedProviders(result.state).changed,false);
   assert.deepEqual(state,before);
 });
-test('Adding Claude to older inventory preserves account settings, history and strategy', () => {
+test('Obsolete recommendation strategy is dropped non-destructively from existing inventories', () => {
+  const state=createSeed();
+  state.providers.find(p=>p.id==='openai').notes='Conservé';
+  state.history=[{id:'h1',providerId:'openai',quotaRemaining:80}];
+  // Forme historique complète, y compris un modèle Gemini devenu caduc.
+  state.strategy={enabled:true,contributor:false,inputTokens:20000,outputTokens:2000,cachePercent:10,disabledRoutes:['openrouter:luna'],subscriptionModels:{gemini:'geminiFlash',openai:'astra'}};
+  const before=structuredClone(state), result=removeUnusedProviders(state);
+  assert.equal(result.changed,true);
+  assert.equal(Object.hasOwn(result.state,'strategy'),false);
+  // Rien d'autre n'est modifié : inventaire, historique, réglages et champs libres.
+  assert.deepEqual(result.state.providers,before.providers);
+  assert.deepEqual(result.state.history,before.history);
+  assert.deepEqual(result.state.settings,before.settings);
+  assert.deepEqual(result.state.apiCooldowns,before.apiCooldowns);
+  assert.equal(result.state.providers.find(p=>p.id==='openai').notes,'Conservé');
+  assert.equal(Object.hasOwn(result.state,'strategy'),false);
+  assert.equal(removeUnusedProviders(result.state).changed,false);
+  assert.deepEqual(state,before);
+});
+test('Adding Claude to older inventory preserves account settings, history and unknown fields', () => {
   const state=createSeed();
   state.providers=state.providers.filter(p=>p.id!=='claude');
   state.providers.find(p=>p.id==='zai').subscriptionStatus='expired';
   state.history=[{providerId:'zai',quotaRemaining:21}];
-  state.strategy={subscriptionModels:{openai:'astra'}};
   const before=structuredClone(state), result=addClaude(state);
   assert.equal(result.changed,true);
   assert.equal(result.state.providers.length,10);
   assert.deepEqual(result.state.providers.filter(p=>p.id!=='claude'),before.providers);
   assert.deepEqual(result.state.history,before.history);
-  assert.deepEqual(result.state.strategy,before.strategy);
+  assert.deepEqual(result.state.settings,before.settings);
   assert.equal(addClaude(result.state).changed,false);
 });
 

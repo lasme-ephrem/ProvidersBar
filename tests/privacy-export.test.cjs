@@ -33,7 +33,8 @@ test('privacy export exposes the documented structure without sessions, identiti
   const before = structuredClone(state);
   const exported = sanitizeStateForExport(state, { version: '0.3.0', app: 'ProvidersBar', exportedAt: '2026-11-03T20:30:00.000Z' });
 
-  assert.deepEqual(Object.keys(exported).sort(), ['app', 'exportedAt', 'history', 'inventory', 'manualResets', 'settings', 'strategy', 'version']);
+  assert.deepEqual(Object.keys(exported).sort(), ['app', 'exportedAt', 'history', 'inventory', 'manualResets', 'settings', 'version']);
+  assert.equal(Object.hasOwn(exported, 'strategy'), false, 'le moteur d’ordre de consommation retiré n’est plus exporté');
   assert.equal(exported.app, 'ProvidersBar');
   assert.equal(exported.version, '0.3.0');
   assert.equal(exported.exportedAt, '2026-11-03T20:30:00.000Z');
@@ -57,7 +58,7 @@ test('privacy export exposes the documented structure without sessions, identiti
   assert.deepEqual(state, before);
 });
 
-test('privacy export keeps inventory fields, settings and strategy and tolerates legacy states', () => {
+test('privacy export keeps inventory fields and settings and tolerates legacy states', () => {
   const state = fixtureState();
   const exported = sanitizeStateForExport(state);
   const openai = exported.inventory.find(provider => provider.id === 'openai');
@@ -65,17 +66,17 @@ test('privacy export keeps inventory fields, settings and strategy and tolerates
   assert.equal(openai.plan, '');
   assert.equal(openai.snapshot.quotaRemaining, 42);
   assert.deepEqual(exported.settings, state.settings);
-  assert.deepEqual(exported.strategy, state.strategy);
+  // Un ancien inventaire peut encore porter `strategy` : il n'est pas exporté.
+  assert.equal(Object.hasOwn(exported, 'strategy'), false);
   assert.equal(exported.app, 'ProvidersBar');
   assert.match(exported.exportedAt, /^\d{4}-\d{2}-\d{2}T/);
 
   const legacy = createSeed();
   delete legacy.settings;
-  delete legacy.strategy;
   delete legacy.apiCooldowns;
   const minimal = sanitizeStateForExport(legacy, { version: null });
   assert.equal(minimal.settings, null);
-  assert.equal(minimal.strategy, null);
+  assert.equal(Object.hasOwn(minimal, 'strategy'), false);
   assert.deepEqual(minimal.manualResets, {});
   assert.deepEqual(minimal.history, []);
   assert.equal(minimal.version, null);
