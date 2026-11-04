@@ -73,5 +73,6 @@ test('le script d’installation remplace l’application et préserve data/', {
   execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', scriptPath], { timeout: 20000 });
   assert.equal(fs.readFileSync(path.join(target, 'resources', 'app', 'main.cjs'), 'utf8'), 'new-main');
   assert.equal(fs.readFileSync(path.join(target, 'data', 'state.json'), 'utf8'), 'précieux');
+  assert.ok(fs.existsSync(path.join(target, 'data', 'updates', 'install.started')));
   assert.ok(fs.readdirSync(path.join(target, 'resources')).some(name => name.startsWith('app.rollback-')));
 });

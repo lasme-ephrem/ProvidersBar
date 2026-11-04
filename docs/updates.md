@@ -65,7 +65,7 @@ La commande refuse d'écraser une clé existante.
 ```powershell
 npm run package:release
 npm run release:artifacts
-npm run updater:sign -- --version 0.6.3 --notes "Corrections et mise à jour automatique"
+npm run updater:sign -- --version 0.6.4 --notes "Corrections et mise à jour automatique"
 ```
 
 Le manifeste est écrit dans `dist/latest.json`. Sans `--url`, l'URL GitHub Releases
@@ -74,15 +74,15 @@ du dépôt `lasme-ephrem/ProvidersBar` est utilisée.
 Pour un autre hébergement :
 
 ```powershell
-npm run updater:sign -- --version 0.6.3 --url "https://mon-domaine.example/LasmiumTokensHub-0.6.3-win32-x64.zip" --out dist/latest.json
+npm run updater:sign -- --version 0.6.4 --url "https://mon-domaine.example/LasmiumTokensHub-0.6.4-win32-x64.zip" --out dist/latest.json
 ```
 
 ### Publier
 
 Sur GitHub Releases :
 
-1. créer un tag `v0.6.3` ;
-2. joindre `dist/LasmiumTokensHub-0.6.3-win32-x64.zip` ;
+1. créer un tag `v0.6.4` ;
+2. joindre `dist/LasmiumTokensHub-0.6.4-win32-x64.zip` ;
 3. joindre `dist/latest.json` **sous le nom exact `latest.json`** ;
 4. publier la release.
 
@@ -109,7 +109,7 @@ essais jetables, jamais au dossier de données réel).
 
 - Windows x64 uniquement.
 - Une connexion HTTPS est obligatoire.
-- Les versions 0.6.0 à 0.6.2 contenaient des défauts d’extraction ou de staging (entrée racine `./`, puis fichiers `.asar`) ; la 0.6.3 les corrige. Les clients 0.6.0/0.6.1 doivent être mis à jour manuellement une fois.
+- Les versions 0.6.0 à 0.6.3 contenaient des défauts d’extraction, de staging ou de démarrage du script (entrée racine `./`, puis fichiers `.asar`) ; la 0.6.4 les corrige. Les clients 0.6.0/0.6.1 doivent être mis à jour manuellement une fois.
 - La publication et le certificat Authenticode restent des choix externes : le
   manifeste Ed25519 garantit l'intégrité, pas la réputation SmartScreen.
 - Conserve une copie du ZIP et de la clé privée : la sauvegarde de secours locale

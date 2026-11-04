@@ -1,5 +1,10 @@
 # Historique des versions
 
+## 0.6.4 — 4 novembre 2026
+
+- Le script d'installation écrit un accusé de démarrage avant d'attendre la fermeture de l'application. L'application attend cet accusé avant de quitter, afin de ne pas tuer un processus PowerShell qui n'aurait pas encore démarré.
+- Validation du flux réel 0.6.0 → 0.6.4.
+
 ## 0.6.3 — 4 novembre 2026
 
 - Le staging de mise à jour vit sous `<portable>/data/updates`, donc à l'intérieur du dossier portable. Le garde-fou l'autorise désormais explicitement tout en refusant tout autre sous-dossier du portable et une cible incluse dans le staging.
