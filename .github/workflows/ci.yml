@@ -38,11 +38,13 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 20
     steps:
+      # Actions épinglées sur leur majeure v7, exécutée sous Node 24 : les v4
+      # reposaient sur Node 20, déprécié sur les runners hébergés.
       - name: Récupérer le dépôt
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Installer Node.js 24
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -50,28 +52,17 @@ jobs:
       - name: Installer les dépendances verrouillées
         run: npm ci
 
-      # `npm run verify` est ajouté par le Lead dans package.json. Le repli sur
-      # scripts/check-syntax.cjs garde la CI utile même si le script manque encore.
-      - name: Vérifier la syntaxe (verify, sinon check-syntax)
-        shell: pwsh
-        run: |
-          $scripts = (Get-Content package.json -Raw | ConvertFrom-Json).scripts
-          if ($scripts.PSObject.Properties.Name -contains 'verify') {
-            npm run verify
-          } else {
-            Write-Host "::warning::npm run verify absent de package.json — repli sur node scripts/check-syntax.cjs"
-            node scripts/check-syntax.cjs
-          }
+      # Les scripts `verify` et `lint` sont déclarés dans package.json : plus de
+      # repli conditionnel. Chaque étape reste une simple commande npm, sans
+      # script PowerShell inline : PowerShell 7 traite les guillemets
+      # typographiques (apostrophes et guillemets courbes) comme des
+      # délimiteurs de chaîne, et une apostrophe courbe dans un Write-Host a
+      # déjà rendu ce job rouge. tests/quality.test.cjs les interdit désormais.
+      - name: Vérifier la syntaxe
+        run: npm run verify
 
-      - name: Linter (si déclaré)
-        shell: pwsh
-        run: |
-          $scripts = (Get-Content package.json -Raw | ConvertFrom-Json).scripts
-          if ($scripts.PSObject.Properties.Name -contains 'lint') {
-            npm run lint
-          } else {
-            Write-Host '::notice::npm run lint absent de package.json — étape ignorée (le Lead l’ajoutera).'
-          }
+      - name: Linter
+        run: npm run lint
 
       - name: Tests unitaires
         run: npm test
@@ -80,7 +71,7 @@ jobs:
       # mais un échec des migrations/packaging peut laisser des traces utiles.
       - name: Conserver les traces de tests en cas d'échec
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: test-results
           path: test-results/
@@ -102,10 +93,10 @@ jobs:
     continue-on-error: true
     steps:
       - name: Récupérer le dépôt
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Installer Node.js 24
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -127,7 +118,7 @@ jobs:
 
       - name: Conserver captures et résultats des smoke tests
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: electron-smoke-results
           path: test-results/

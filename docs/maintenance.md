@@ -7,9 +7,8 @@ Node.js ≥ 24, Windows x64, Electron 44.x).
 ## Validation locale (Definition of Done)
 
 1. Installer les dépendances verrouillées : `npm ci`.
-2. Vérifier la syntaxe : `npm run verify` (ou directement `node scripts/check-syntax.cjs`
-   si le script npm n'est pas encore déclaré). `npm run lint` exécute le même contrôle
-   et doit rester vert.
+2. Vérifier la syntaxe : `npm run verify` (alias de `node scripts/check-syntax.cjs`).
+   `npm run lint` exécute le même contrôle et doit rester vert.
 3. Exécuter `npm test` : suite unitaire déterministe, sans Electron ni réseau.
 4. Diagnostic local des données et de l'environnement : `npm run doctor`
    (`scripts/doctor.cjs`, sans secret). Il vérifie les chemins, les fichiers d'état,
@@ -28,10 +27,11 @@ Node.js ≥ 24, Windows x64, Electron 44.x).
 Workflow Windows unique, déclenché sur `main`, `refonte/**`, les pull requests et
 manuellement. Deux jobs :
 
-- **tests** (`windows-latest`, Node 24, cache npm) : `npm ci`, `npm run verify`
-  (repli automatique sur `node scripts/check-syntax.cjs` si le script npm manque),
-  `npm run lint` s'il est déclaré, `npm test`, puis `npm audit --omit=dev`.
-  Ce job est bloquant.
+- **tests** (`windows-latest`, Node 24, cache npm) : `npm ci`, `npm run verify`,
+  `npm run lint`, `npm test`, puis `npm audit --omit=dev`. Chaque étape est une
+  simple commande npm exécutée par le shell par défaut du runner : les scripts
+  `verify` et `lint` étant déclarés dans `package.json`, les anciens replis
+  conditionnels écrits en PowerShell ont été retirés. Ce job est bloquant.
 - **smoke-electron** : les trois smoke tests Playwright/Electron, **best-effort**
   (`continue-on-error: true`). Ils dépendent d'une session graphique Windows
   interactive et de DPAPI pour le chiffrement : un échec est visible dans Actions,
@@ -41,6 +41,21 @@ manuellement. Deux jobs :
 
 Concurrence : un nouveau push annule la CI précédente sur la même référence.
 Permissions : lecture seule du dépôt. Aucun secret de dépôt n'est nécessaire.
+
+Actions GitHub : `actions/checkout`, `actions/setup-node` et `actions/upload-artifact`
+sont épinglées sur leur majeure v7 (exécutée sous Node 24) dans les trois workflows
+(`ci.yml`, `quality.yml`, `canary-live.yml`) ; les v4 reposaient sur Node 20,
+déprécié sur les runners hébergés.
+
+Règle d'écriture : aucun guillemet typographique (`‘ ’ “ ”`) dans les workflows ni
+dans les scripts PowerShell générés par l'application (`lib/update-install.cjs`,
+`lib/diagnostics.cjs`, `lib/antigravity-account.cjs`). PowerShell 7, shell par défaut
+sur `windows-latest`, traite ces caractères comme des délimiteurs de chaîne : une
+apostrophe courbe dans un `Write-Host` a rendu le job **tests** rouge
+(`ParserError: Missing closing '}'`) et masqué `npm test` et l'audit.
+`tests/quality.test.cjs` vérifie l'absence de ces caractères dans
+`.github/workflows/*.yml` et `tests/update-install.test.cjs` dans le script
+d'installation généré.
 
 ## Scripts de vérification et tests transverses
 

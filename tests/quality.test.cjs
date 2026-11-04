@@ -268,6 +268,19 @@ test('le workflow CI Windows couvre les garde-fous attendus', async () => {
   assert.doesNotMatch(workflow, /\t/, 'Un fichier YAML ne doit pas contenir de tabulation.');
 });
 
+// PowerShell 7, shell par défaut sur windows-latest, traite les guillemets
+// typographiques comme des délimiteurs de chaîne : une apostrophe courbe dans un
+// Write-Host a rendu la CI rouge (« Missing closing '}' in statement block »).
+test('les workflows GitHub ne contiennent aucun guillemet typographique', async () => {
+  const workflows = (await walk('.github/workflows')).filter(file => /\.ya?ml$/i.test(file));
+  assert.ok(workflows.length >= 1, 'Au moins un workflow est attendu dans .github/workflows.');
+  for (const file of workflows) {
+    const content = await read(file);
+    assert.doesNotMatch(content, /[\u2018\u2019\u201C\u201D]/, `${file} contient un guillemet typographique (‘ ’ “ ”).`);
+    assert.doesNotMatch(content, /\t/, `${file} ne doit pas contenir de tabulation.`);
+  }
+});
+
 // ---------------------------------------------------------------------------
 // Outils de diagnostic (verify-connections)
 // ---------------------------------------------------------------------------
