@@ -391,11 +391,14 @@ test('les smoke tests couvrent les non-régressions critiques de la refonte 0.3'
     'getAppInfo',          // version dynamique via IPC
     'erase-data',          // contrat §3.5 : effacement complet
     'Espace local',        // marque neutre
-    'quick-group-title',   // widget compact : sections Abonnements/API
-    'quick-value',         // widget compact : résumé par fournisseur
-    'quick-level',         // widget compact : niveau en toutes lettres
-    'scrollHeight',        // widget compact : vérification du non-défilement
-    'setSize(360, 320)',   // widget compact : défilement seulement si dépassement
+    'quick-group-title',   // widget vertical : sections Abonnements/API
+    'quick-fact',          // widget vertical : une ligne par information
+    'quick-fact-label',    // libellés Hebdo/Horaire/Hebdo Fable/Hebdo Argon
+    'quick-level',         // widget vertical : niveau en toutes lettres
+    'Limite Free',         // Ollama : limite Free visible
+    'Crédits achetés',     // Ollama : réserve de crédits visible
+    'scrollHeight',        // widget vertical : vérification du non-défilement
+    'setSize(360, 320)',   // widget vertical : défilement seulement si dépassement
     'apiCooldowns',        // cooldowns 429 persistés
     'accountSession',      // sessions conservées puis invalidées
     'USERPROFILE',         // isolation Claude Code (pas de profil réel)
@@ -405,7 +408,7 @@ test('les smoke tests couvrent les non-régressions critiques de la refonte 0.3'
   for (const marker of dashboardMarkers) assert.ok(dashboard.includes(marker), `scripts/smoke.cjs doit couvrir « ${marker} ».`);
   const claudeMarkers = ['deny-token', 'offline', 'fixture-live-access', 'Prochaine tentative', 'chaque minute', 'USERPROFILE', 'LOCALAPPDATA', 'APPDATA', 'auth-rate-limit', 'claude-desktop-local'];
   for (const marker of claudeMarkers) assert.ok(claude.includes(marker), `scripts/smoke-claude.cjs doit couvrir « ${marker} ».`);
-  const resourceMarkers = ['state.settings.theme', 'Toutes les limites atteintes', 'resource-empty', 'quick-value', 'quick-level', 'quick-value-label'];
+  const resourceMarkers = ['state.settings.theme', 'Toutes les limites atteintes', 'resource-empty', 'quick-fact', 'quick-level', 'quick-fact-value'];
   for (const marker of resourceMarkers) assert.ok(resources.includes(marker), `scripts/smoke-resource-status.cjs doit couvrir « ${marker} ».`);
   // Aucun smoke ne doit utiliser le vrai profil Claude Code de l'utilisateur.
   assert.match(claude, /USERPROFILE/, 'smoke-claude doit isoler le profil Claude Code');
@@ -470,30 +473,32 @@ test('la fonctionnalité de recommandation et d’ordre de consommation a été 
   assert.match(dashboard, /'strategy' in exportedDocument/);
 });
 
-test('le widget compact 360×520 est couvert par les smokes', async () => {
+test('le widget vertical complet 360×660 est couvert par les smokes', async () => {
   const dashboard = await read('scripts/smoke.cjs');
   const resources = await read('scripts/smoke-resource-status.cjs');
   const markers = [
     'quick-group-title',      // sections Abonnements puis API
-    'quick-value',            // résumé par fournisseur
+    'quick-fact',             // une ligne par fenêtre, aucune masquée
+    'quick-fact-label',       // libellés Hebdo/Horaire/Hebdo Fable/Hebdo Argon
+    'quick-fact-value',       // valeurs colorées par niveau
     'quick-level',            // chip de niveau textuelle
-    'quick-value-label',      // segment le plus contraint
-    'quick-segment',          // second segment (T19)
-    'quick-extra',            // segments masqués comptés
     'quick-count',            // 10 comptes · 6 abonnements · 4 API
     'scrollHeight',           // non-défilement mesuré
-    '360, 520',               // taille par défaut vérifiée
+    '360, 660',               // taille par défaut vérifiée
     'setSize(360, 320)',      // défilement fin en cas de dépassement
     'widget-scroll-360x320.png',
     'quick-stale',            // relevé à vérifier, jamais d'âge permanent
-    '35 && rowBox.height <= 40', // lignes de 36 px (plafond 40)
+    '24 && rowBox.height <= 130', // lignes verticales de hauteur variable
+    'Limite Free',            // Ollama affiché avec sa limite
+    'Crédits achetés',        // Ollama affiché avec sa réserve
+    'Hebdo Argon'
   ];
   for (const marker of markers) assert.ok(dashboard.includes(marker), `scripts/smoke.cjs doit couvrir « ${marker} ».`);
-  assert.ok(resources.includes('quick-value'), 'smoke-resource-status doit vérifier le résumé .quick-value');
+  assert.ok(resources.includes('quick-fact-value'), 'smoke-resource-status doit vérifier les valeurs .quick-fact-value');
   assert.ok(resources.includes('quick-level'), 'smoke-resource-status doit vérifier le niveau textuel');
-  assert.ok(resources.includes('quick-segment'), 'smoke-resource-status doit vérifier les segments T19');
+  assert.ok(resources.includes('quick-fact'), 'smoke-resource-status doit vérifier les informations par fenêtre');
   // Les anciens hooks par fenêtre ne sont utilisés que dans des assertions d'absence.
-  assert.match(dashboard, /quick-quota, \.quick-period, \.quick-period-status, \.quick-resource-status/);
+  assert.match(dashboard, /\.quick-period-status, \.quick-resource-status, \.quick-quota/);
   // Aucun smoke ne pilote l'auto-dimensionnement retiré.
   for (const script of ['scripts/smoke.cjs', 'scripts/smoke-resource-status.cjs', 'scripts/smoke-claude.cjs']) {
     assert.doesNotMatch(await read(script), /api\.fitQuick|fitQuick\(/, `${script} ne doit plus piloter la hauteur du widget`);
@@ -532,9 +537,10 @@ test('la police Inter Variable est empaquetée avec sa licence OFL', async () =>
 test('les libellés segmentés et les chips sont couverts par les smokes', async () => {
   const dashboard = await read('scripts/smoke.cjs');
   const resources = await read('scripts/smoke-resource-status.cjs');
-  const dashboardMarkers = ['Hebdo', 'Horaire', 'Hebdo Fable', 'Hebdo Argon', 'quick-segment-label', 'quick-segment-value', 'level-pill', 'Ressource suffisante', 'Donnée indisponible', 'document.fonts.check', 'tabular-nums', 'InterVariable.woff2', 'LICENSE-Inter.txt'];
+  const dashboardMarkers = ['Hebdo', 'Horaire', 'Hebdo Fable', 'Hebdo Argon', 'quick-fact-label', 'quick-fact-value', 'level-pill', 'Ressource suffisante', 'Donnée indisponible', 'document.fonts.check', 'tabular-nums', 'InterVariable.woff2', 'LICENSE-Inter.txt', 'Limite Free', 'Crédits achetés'];
+  for (const marker of ['USD', 'CNY']) assert.ok(dashboard.includes(marker), `scripts/smoke.cjs doit couvrir les soldes multi-devises « ${marker} ».`);
   for (const marker of dashboardMarkers) assert.ok(dashboard.includes(marker), `scripts/smoke.cjs doit couvrir « ${marker} ».`);
-  const resourceMarkers = ['Limite horaire atteinte', 'Limite hebdo Argon atteinte', 'quickLabel', 'quick-segment', 'quick-value-label'];
+  const resourceMarkers = ['Limite horaire atteinte', 'Limite hebdo Argon atteinte', 'quickLabel', 'quick-fact', 'quick-fact-value'];
   for (const marker of resourceMarkers) assert.ok(resources.includes(marker), `scripts/smoke-resource-status.cjs doit couvrir « ${marker} ».`);
   // Libellés obsolètes : plus aucune attente de statut « 5 h » dans les smokes.
   assert.doesNotMatch(resources, /Limite 5 h atteinte|Limite Gemini 4 Argon · hebdo/, 'statuts « 5 h »/Argon obsolètes dans smoke-resource-status');

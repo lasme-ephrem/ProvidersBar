@@ -121,7 +121,10 @@ et les cinq boutons `[data-nav]` restent visibles et focusables. Seuls
 <div class="dialog-body" id="dialog-panel" role="tabpanel" aria-labelledby="tab-info" tabindex="0">…</div>
 ```
 
-Le widget (fenêtre `?mode=quick`, **360×520** côté Electron) est rendu dans `#app` :
+Le widget (fenêtre `?mode=quick`, **360×660** côté Electron) est rendu dans `#app` :
+chaque fournisseur est une **ligne verticale** — en-tête (logo 20 px, nom, chip de
+niveau) puis une ligne par information (label à gauche, valeur à droite, chiffres
+tabulaires). Aucune information n'est masquée par un compteur « +N ».
 
 ```html
 <main class="quick">
@@ -130,40 +133,48 @@ Le widget (fenêtre `?mode=quick`, **360×520** côté Electron) est rendu dans 
     <span class="quick-count">10 comptes · 6 abonnements · 4 API</span></p>
   <div class="quick-list">
     <p class="quick-group-title">Abonnements</p>
-    <button class="quick-row resource-healthy" data-provider="openai" data-action="main"
-            title="OpenAI GPT — Codex et Work Hebdo : 40 % — Dernier relevé : …">
-      <span class="quick-provider">logo 20 px + <span class="provider-name">OpenAI GPT</span></span>
-      <span class="quick-value resource-healthy" title="Codex et Work Hebdo : 40 % · …">
+    <button class="quick-row quick-row-stacked resource-healthy" data-provider="claude" data-action="main"
+            title="Anthropic Claude — Hebdo : 40 % · Horaire : 80 % · Hebdo Fable : 30 % — Dernier relevé : …">
+      <span class="quick-row-head">
+        <span class="quick-provider">logo 20 px + <span class="provider-name">Anthropic Claude</span></span>
         <span class="level-pill resource-healthy quick-level" title="Ressource suffisante">Suffisant</span>
-        <span class="quick-segments">
-          <span class="quick-segment">
-            <span class="quick-value-label">Hebdo</span>
-            <span class="quick-value-main">40<small>%</small></span>
-          </span>
-          <span class="quick-segment-sep" aria-hidden="true">·</span>
-          <span class="quick-segment">
-            <span class="quick-segment-label">Horaire</span>
-            <span class="quick-segment-value">80<small>%</small></span>
-          </span>
-          <span class="quick-extra">+1</span>
-        </span>
       </span>
-      <span class="sr-only">Codex et Work Hebdo : 40 % · Horaire : 80 % · …</span>
+      <span class="quick-facts">
+        <span class="quick-fact"><span class="quick-fact-label">Hebdo</span>
+          <span class="quick-fact-value resource-healthy">40<small>%</small></span></span>
+        <span class="quick-fact"><span class="quick-fact-label">Horaire</span>
+          <span class="quick-fact-value resource-healthy">80<small>%</small></span></span>
+        <span class="quick-fact"><span class="quick-fact-label">Hebdo Fable</span>
+          <span class="quick-fact-value resource-healthy">30<small>%</small></span></span>
+      </span>
+      <span class="sr-only">…</span>
     </button>
-    … (5 autres abonnements)
+    <button class="quick-row quick-row-stacked resource-healthy" data-provider="ollama" …>
+      <span class="quick-row-head">… Ollama …</span>
+      <span class="quick-facts">
+        <span class="quick-fact">… Limite Free 100 % …</span>
+        <span class="quick-fact">… Crédits achetés 1,05 $US …</span>
+      </span>
+    </button>
+    … (autres abonnements)
     <p class="quick-group-title">API</p>
-    <button class="quick-row resource-low" data-provider="openrouter" data-action="main">
-      <span class="quick-provider">logo + <span class="provider-name">OpenRouter</span></span>
-      <span class="quick-value resource-low" title="74,50 $US">
-        <span class="level-pill resource-low quick-level" title="Bas · ≤ 5 USD">Bas</span>
-        <span class="quick-segments"><span class="resource-value resource-low">74,50 $US</span></span>
+    <button class="quick-row quick-row-stacked resource-low" data-provider="deepseek" …>
+      <span class="quick-row-head">… DeepSeek Platform …</span>
+      <span class="quick-facts">
+        <span class="quick-fact">… USD 10,00 $US …</span>
+        <span class="quick-fact">… CNY 42,50 CNY …</span>
       </span>
     </button>
-    … (3 autres API)
+    … (autres API)
   </div>
   <footer class="quick-footer"><button class="text-button" data-action="main">…</button></footer>
 </main>
 ```
+
+Une information unique (OpenAI, Grok, API mono-solde) est affichée en ligne dans
+l'en-tête avec `.quick-fact-inline` pour garder une ligne basse ; une valeur
+« Indisponible » n'est pas répétée en texte (le chip de niveau suffit). Toutes les
+fenêtres et tous les soldes multi-devises sont visibles, sans agrégation.
 
 Le widget **n'affiche plus de recommandation** : plus de « À utiliser maintenant »,
 de « Puis », de classement ni de section « API disponibles à utiliser » ; c'est une
@@ -214,12 +225,14 @@ Vérifiés par audit statique sur toutes les vues :
 - Réglages : `#settings-form`, `[name="theme"]`, `[name="autoRefresh"]`,
   `[name="notifications"]`, `[name="lowBalance"]`, `[data-action="export"]`,
   `[data-action="erase-data"]` / `[data-action="erase-cancel"]`, `#app-version`.
-- Widget compact : `.quick`, `.quick-head`, `.quick-refresh-status`, `.quick-count`,
-  `.quick-list`, `.quick-group-title`, `.quick-row` (+ `.resource-{level}`),
-  `[data-provider]`, `.quick-provider`, `.provider-name`, `.quick-value`,
-  `.quick-value-label`, `.quick-value-main`, `.quick-level`, `.quick-extra`,
+- Widget vertical : `.quick`, `.quick-head`, `.quick-refresh-status`, `.quick-count`,
+  `.quick-list`, `.quick-group-title`, `.quick-row` (+ `.quick-row-stacked`,
+  `.resource-{level}`), `[data-provider]`, `.quick-row-head`, `.quick-provider`,
+  `.provider-name`, `.quick-facts`, `.quick-fact`, `.quick-fact-label`,
+  `.quick-fact-value`, `.quick-fact-inline`, `.quick-level`,
   `.quick-stale` et `[aria-label="Relevé à vérifier"]` (uniquement sur un relevé
-  réellement ancien), `.quick-footer`.
+  réellement ancien), `.quick-footer`. Plus de `.quick-value`, `.quick-segment`
+  ni `.quick-extra` : toutes les fenêtres sont rendues.
 - Textes conservés mot pour mot quand le smoke les vérifie (hors stratégie) :
   « Expiré · désactivé », « En pause », « Synchronisation… », « Relevé ancien »,
   « Connexion à vérifier », « Quota indisponible », « Free · 0 $ »,
@@ -242,10 +255,10 @@ Vérifiés par audit statique sur toutes les vues :
 | `.strategy-panel`, `.strategy-current`, `.strategy-next`, `.strategy-api`, `.strategy-details`, `[data-disclosure="subscriptions"]` | **supprimés** du tableau de bord | demande utilisateur : plus de suggestion de modèle | `smoke.cjs:103,149,162-192,565-566,641` à supprimer/réécrire |
 | `[data-action="strategy-settings"]`, `#strategy-form`, `#strategy-model-*`, `#strategy-inputTokens`, `[name="contributor"]`, `#strategy-form button[type=submit]` | **supprimés** des Réglages et des actions | plus de panneau d'ordre de consommation | `smoke.cjs:134-145,681-683` et `updateStrategy` à retirer du scénario |
 | `.quick-strategy`, `.quick-api`, `.quick-api-providers`, `[data-api-provider]` | **supprimés** du widget (liste API sans classement) | plus de recommandation/classement | `smoke.cjs:562-566` à supprimer |
-| `.quick-period`, `.quick-period-label`, `.quick-period-status`, `.quick-quota`, `.quick-values`, `.quick-freshness`, `.quick-group-label`, `.quick-ollama-reserve` | **supprimés** ; remplacés par le résumé `.quick-value` par fournisseur (chips + segments) | compaction et lisibilité | `smoke-resource-status.cjs` (statuts par fenêtre) et `smoke.cjs:449,463,468,562-566,589-641` à réécrire |
+| `.quick-period`, `.quick-period-label`, `.quick-period-status`, `.quick-quota`, `.quick-values`, `.quick-freshness`, `.quick-group-label`, `.quick-ollama-reserve` | **supprimés** ; remplacés par `.quick-facts` / `.quick-fact` (une ligne par fenêtre, plus de compteur `+N`) | lisibilité complète : Claude, Antigravity, Ollama et soldes API | `smoke-resource-status.cjs` et `smoke.cjs` réécrits sur `.quick-fact` |
 | `.quick-columns` | `.quick-refresh-status` + `.quick-count` (une seule ligne) | en-tête plus court | non utilisé tel quel par le smoke |
-| Auto-dimensionnement via `fitQuick()`/`ResizeObserver` | **supprimé** : la fenêtre garde sa taille par défaut (360×520) | widget compact stable | `smoke.cjs` 451-452, 464, 511-518, 526 (tests de redimensionnement) à retirer |
-| `.quick-row` en grille 2 lignes | `.quick-row` flex, **36 px** (chip + 2 segments max à droite) | demande utilisateur T19 | `.quick-value-label/main` conservés ; nouveaux `.quick-segment-label/value` ; `.quick-extra` = segments masqués |
+| Auto-dimensionnement via `fitQuick()`/`ResizeObserver` | **supprimé** : la fenêtre garde sa taille par défaut (360×660) | widget vertical complet et stable | `smoke.cjs` vérifie 360×660 et le défilement fin à 320 |
+| `.quick-value` + 2 segments max + `.quick-extra` | **supprimés** : ligne verticale `.quick-row-stacked` avec `.quick-row-head` + `.quick-facts`, une information par fenêtre, `Ollama` (Limite Free + crédits achetés) et tous les soldes API visibles | demande utilisateur : toutes les informations par abonnement | `quick-fact-label/value`, `quick-fact-inline` (information unique), plus de `.quick-extra` |
 | `.shell` | `.app-shell` | grille de page | non utilisé par le smoke |
 | `.workspace` avec « L’atelier de Lasme » + avatar « L » | `.workspace` avec « Espace local » / « Données sur cet appareil » | marque neutre (§3.6) | **`scripts/smoke.cjs:24` doit changer** : `/Lasme/` → `/Espace local/` |
 | `nav button.active`, `.filters button.active`, `.dialog-tabs button.active` | `.is-active` (+ `aria-current`/`aria-selected`) | convention d'état unique | non utilisé par le smoke |

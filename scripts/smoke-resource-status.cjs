@@ -47,7 +47,7 @@ async function main() {
           // Le widget 0.3.0 exprime l'épuisement par la pastille textuelle
           // « Épuisé » ; la carte du tableau de bord garde « Solde épuisé ».
           assert.match(await container.innerText(), /Épuisé/);
-          const color = await container.locator('.resource-value').first().evaluate(el => getComputedStyle(el).color);
+          const color = await container.locator('.resource-value, .quick-fact-value').first().evaluate(el => getComputedStyle(el).color);
           const [r, g, b] = color.match(/[\d.]+/g).map(Number);
           assert.ok(r > g && r > b, `${id}/${currency}/${theme} should be red: ${color}`);
         }
@@ -62,59 +62,68 @@ async function main() {
     openai: [['Codex et Work · Semaine', 'Limite Codex et Work · hebdo atteinte']],
     grok: [['Semaine', 'Limite Grok · hebdo atteinte'], ['Grok Bot · Semaine', 'Limite Grok Bot · hebdo atteinte']],
   };
-  // T19 : .quick-extra compte les segments masqués (2 affichés max, un par
-  // libellé agrégé) — Claude et Antigravity ont 3 catégories, les autres ≤ 2.
-  const extraSegments = { claude: '+1', antigravity: '+1' };
-  const quickLabel = label => label.endsWith('5 heures') ? 'Horaire'
-    : label.includes('Argon') ? 'Hebdo Argon'
-      : label === 'Fable · Semaine' ? 'Hebdo Fable'
-        : 'Hebdo';
+  // Libellé exact tel que rendu par le widget vertical (groupes compris).
+  const quickLabel = label => {
+    if (label === 'Fable · Semaine') return 'Hebdo Fable';
+    const parts = label.split(' · ');
+    const period = parts.pop();
+    const group = parts.join(' · ');
+    const periodLabel = period === 'Semaine' ? 'Hebdo' : period === '5 heures' ? 'Horaire' : period;
+    if (group === 'Gemini 4 Argon') return 'Hebdo Argon';
+    if (group === 'Codex et Work') return periodLabel;
+    if (group) return (group === 'Claude et GPT' ? 'Claude / GPT' : group) + ' · ' + periodLabel;
+    return periodLabel;
+  };
+  const factLabels = id => row(id).locator('.quick-fact-label').allTextContents();
   for (const [id, windows] of Object.entries(windowSets)) {
     for (const [exhausted, expected] of windows) {
       await fixture(id, { quotaRemaining: 0, quotaWindows: windows.map(([label]) => ({ label, remaining: label === exhausted ? 0 : 100 })) });
       assert.deepEqual(await card(id).locator('.quota-period-status').allTextContents(), [expected]);
-      // Widget compact : un seul résumé par fournisseur (fenêtre la plus contrainte).
-      assert.equal(await row(id).locator('.quick-period-status').count(), 0);
-      // La classe de ligne reflète le niveau agrégé (les fenêtres non épuisées
-      // comptent) ; le résumé .quick-value reflète la fenêtre la plus contrainte.
+      // Widget vertical : une information par fenêtre, aucune masquée par « +N ».
+      const labels = await factLabels(id);
+      assert.equal(labels.length, windows.length, `le widget doit afficher toutes les fenêtres de ${id}`);
+      const expectedLabel = quickLabel(exhausted);
+      assert.ok(labels.some(label => label === expectedLabel || label.endsWith(' · ' + expectedLabel)), `${id}: libellé ${expectedLabel} absent de ${labels.join(', ')}`);
+      const facts = await row(id).locator('.quick-fact').evaluateAll(items => items.map(item => ({
+        label: item.querySelector('.quick-fact-label')?.textContent || '',
+        value: item.querySelector('.quick-fact-value')?.textContent || '',
+        classes: item.querySelector('.quick-fact-value')?.className || '',
+      })));
+      const exhaustedFact = facts.find(fact => fact.label === quickLabel(exhausted))
+        || facts.find(fact => fact.label.endsWith(' · ' + quickLabel(exhausted)));
+      assert.ok(exhaustedFact, `${id}: information Widget introuvable pour ${exhausted}`);
+      assert.match(exhaustedFact.classes, /resource-empty/);
+      assert.match(exhaustedFact.value, /^0\s*%$/);
+      // Le chip de ligne reflète le niveau agrégé : une seule fenêtre épuisée ne
+      // rend pas toute la ligne « Épuisé » si une autre reste suffisante.
       const rowClass = await row(id).getAttribute('class');
       if (windows.length === 1) assert.match(rowClass, /resource-empty/);
       else assert.doesNotMatch(rowClass, /resource-empty/);
-      assert.match(await row(id).locator('.quick-value').getAttribute('class'), /resource-empty/);
-      assert.match(await row(id).locator('.quick-level').innerText(), /Épuisé/);
-      assert.match(await row(id).locator('.quick-value-main').innerText(), /0/);
-      const expectedLabel = quickLabel(exhausted);
-      assert.equal(await row(id).locator('.quick-value-label').innerText(), expectedLabel);
-      if (extraSegments[id]) assert.equal(await row(id).locator('.quick-extra').innerText(), extraSegments[id]);
-      else assert.equal(await row(id).locator('.quick-extra').count(), 0);
-      // Second segment T19 : deux segments affichés dès deux libellés agrégés.
-      const categories = new Set(windows.map(([label]) => quickLabel(label))).size;
-      assert.equal(await row(id).locator('.quick-segment').count(), categories >= 2 ? 2 : 1);
     }
     await fixture(id, { quotaWindows: windows.map(([label]) => ({ label, remaining: 0 })) });
     const expected = windows.length > 1 ? 'Toutes les limites atteintes' : 'Limite atteinte';
     assert.equal(await card(id).locator('.resource-status').innerText(), expected);
-    // Le widget n'affiche pas de statut global redondant : résumé + niveau textuel.
     assert.match(await row(id).getAttribute('class'), /resource-empty/);
     assert.match(await row(id).locator('.quick-level').innerText(), /Épuisé/);
-    assert.equal(await row(id).locator('.resource-status, .quick-resource-status').count(), 0);
+    const allFactClasses = await row(id).locator('.quick-fact-value').evaluateAll(items => items.map(item => item.className));
+    for (const classes of allFactClasses) assert.match(classes, /resource-empty/);
   }
   await fixture('grok', { usageKind: 'x-subscription-shared', quotaWindows: [{ label: 'Semaine', remaining: 40 }] });
   assert.equal(await card('grok').locator('.quota-period').count(), 1);
-  assert.equal(await row('grok').locator('.quick-value-label').innerText(), 'Hebdo');
+  assert.deepEqual(await factLabels('grok'), ['Grok / Bot / Cursor · Hebdo']);
   assert.match(await row('grok').locator('.quick-level').innerText(), /Suffisant/);
   assert.match(await card('grok').innerText(), /Grok \/ Bot \/ Cursor/);
-  // Les deux fenêtres partagées Claude épuisées ne doivent pas étiqueter Fable sur la carte.
   await fixture('claude', { quotaWindows: [{ label: 'Semaine', remaining: 0 }, { label: '5 heures', remaining: 0 }, { label: 'Fable · Semaine', remaining: 100 }] });
   assert.equal(await card('claude').locator('.resource-status').count(), 0);
-  // Le widget résume sur la fenêtre la plus contrainte (Semaine 0 %) : « Épuisé »,
-  // tandis que la ligne reste au niveau agrégé des fenêtres (Fable 100 %).
+  const claudeFacts = await row('claude').locator('.quick-fact').evaluateAll(items => items.map(item => ({
+    label: item.querySelector('.quick-fact-label')?.textContent || '',
+    classes: item.querySelector('.quick-fact-value')?.className || '',
+  })));
+  assert.deepEqual(claudeFacts.map(fact => fact.label), ['Hebdo', 'Horaire', 'Hebdo Fable']);
+  assert.match(claudeFacts[0].classes, /resource-empty/);
+  assert.match(claudeFacts[1].classes, /resource-empty/);
+  assert.match(claudeFacts[2].classes, /resource-healthy/);
   assert.doesNotMatch(await row('claude').getAttribute('class'), /resource-empty/);
-  assert.match(await row('claude').locator('.quick-value').getAttribute('class'), /resource-empty/);
-  assert.equal(await row('claude').locator('.quick-value-label').innerText(), 'Hebdo');
-  assert.equal(await row('claude').locator('.quick-segment-label').innerText(), 'Horaire');
-  assert.match(await row('claude').locator('.quick-segment-value').innerText(), /0/);
-  assert.match(await row('claude').locator('.quick-level').innerText(), /Épuisé/);
   // Situation exacte signalée, conservée dans les captures.
   await fixture('claude', { quotaWindows: [{ label: 'Semaine', remaining: 18 }, { label: 'Fable · Semaine', remaining: 0 }, { label: '5 heures', remaining: 100 }] });
   await fixture('openrouter', { balances: [{ currency: 'USD', remaining: -0.08 }] });
@@ -123,6 +132,6 @@ async function main() {
   await dashboard.screenshot({ path: path.join(results, 'resource-status-dashboard.png'), fullPage: true });
   await widget.screenshot({ path: path.join(results, 'resource-status-widget.png') });
   assert.deepEqual(errors, []);
-  console.log('PASS: negative balances red for all 4 APIs in USD/EUR/CNY and both themes; per-window quota statuses on dashboard cards (Hebdo/Horaire/Hebdo Argon) ; widget compact segmenté (.quick-value/.quick-value-label/.quick-segment*/.quick-level) sans statut par fenêtre ; global status only when every displayed limit is exhausted ; dashboard and widget.');
+  console.log('PASS: negative balances red for all 4 APIs in USD/EUR/CNY and both themes; per-window quota statuses on dashboard cards (Hebdo/Horaire/Hebdo Argon) ; widget vertical complet (une ligne par fenêtre, aucune masquée, fact-values colorées, chip agrégé) ; global status only when every displayed limit is exhausted ; dashboard and widget.');
 }
 main().catch(error => { console.error(error); process.exitCode = 1; }).finally(async () => { if (desktop) await desktop.close(); });

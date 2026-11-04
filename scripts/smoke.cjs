@@ -538,16 +538,16 @@ async function main() {
     }
   } catch { /* dist absent : validation limitée au dépôt */ }
   // Taille par défaut fixée par main.cjs (aucun auto-dimensionnement du renderer).
-  // On mesure la zone de contenu : sur Windows, les bounds externes peuvent
-  // inclure une bordure système d'un à deux pixels.
+  // Le widget vertical complet est plus haut (660 px) mais reste plus compact que
+  // l'ancien 400×700 et affiche toutes les fenêtres sans défilement.
   const quickSize = await quick.evaluate(() => ({ width: innerWidth, height: innerHeight }));
   assert.ok(Math.abs(quickSize.width - 360) <= 4, `largeur de contenu inattendue : ${quickSize.width}`);
-  assert.ok(Math.abs(quickSize.height - 520) <= 4, `hauteur de contenu inattendue : ${quickSize.height}`);
+  assert.ok(Math.abs(quickSize.height - 660) <= 4, `hauteur de contenu inattendue : ${quickSize.height}`);
   const quickBounds = await desktop.evaluate(({ BrowserWindow }) => {
     const quickWindow = BrowserWindow.getAllWindows().find(w => w.webContents.getURL().includes('mode=quick'));
     return quickWindow.getBounds();
   });
-  assert.ok(Math.abs(quickBounds.width - 360) <= 4 && Math.abs(quickBounds.height - 520) <= 4, `taille de fenêtre inattendue : ${JSON.stringify(quickBounds)}`);
+  assert.ok(Math.abs(quickBounds.width - 360) <= 4 && Math.abs(quickBounds.height - 660) <= 4, `taille de fenêtre inattendue : ${JSON.stringify(quickBounds)}`);
   assert.equal(await quick.locator('.quick-row').count(), 10);
   // Ordre de l'inventaire : abonnements en tête, puis API (aucun classement).
   assert.deepEqual(await quick.locator('.quick-row').evaluateAll(rows => rows.map(row => row.dataset.provider)), ['openai', 'claude', 'grok', 'antigravity', 'zai', 'ollama', 'openrouter', 'deepseek', 'runinfra', 'orcarouter']);
@@ -563,13 +563,14 @@ async function main() {
   // Plus d'âge affiché en permanence : le relevé n'est visible que dans le title,
   // et l'icône « Relevé à vérifier » n'apparaît que si nécessaire.
   assert.doesNotMatch(quickText, /il y a|à l’instant|Dernier relevé/);
-  assert.equal(await quick.locator('.quick-quota, .quick-period, .quick-period-status, .quick-resource-status, .meter').count(), 0);
-  // Lignes compactes de 36 px (plafond 40) sans chevauchement, icônes 20×20 visibles.
+  // Aucun ancien hook de segments plafonnés : le widget vertical affiche tout.
+  assert.equal(await quick.locator('.quick-value, .quick-segments, .quick-segment, .quick-extra, .quick-value-main, .quick-period-status, .quick-resource-status, .quick-quota, .meter').count(), 0);
+  // Lignes verticales de hauteur variable : entête + une ligne par information.
   const quickRows = await quick.locator('.quick-row').evaluateAll(rows => rows.map(row => {
     const box = row.getBoundingClientRect();
     return { top: box.top, bottom: box.bottom, height: box.height };
   }));
-  for (const rowBox of quickRows) assert.ok(rowBox.height >= 35 && rowBox.height <= 40, `hauteur de ligne inattendue (36 px attendu) : ${rowBox.height}px`);
+  for (const rowBox of quickRows) assert.ok(rowBox.height >= 24 && rowBox.height <= 130, `hauteur de ligne inattendue : ${rowBox.height}px`);
   for (let index = 1; index < quickRows.length; index++) {
     assert.ok(quickRows[index].top >= quickRows[index - 1].bottom - 0.5, 'les lignes du widget ne doivent pas se chevaucher');
   }
@@ -579,12 +580,12 @@ async function main() {
   assert.equal(quickIcons.length, 10);
   for (const providerIcon of quickIcons) {
     assert.ok(providerIcon.loaded, 'icône de fournisseur non chargée');
-    assert.ok(providerIcon.width >= 18 && providerIcon.width <= 26, `icône non rendue à 20 px : ${providerIcon.width}`);
-    assert.ok(providerIcon.height >= 18 && providerIcon.height <= 26, `icône non rendue à 20 px : ${providerIcon.height}`);
+    assert.ok(providerIcon.width >= 14 && providerIcon.width <= 22, `icône non rendue à ~18 px : ${providerIcon.width}`);
+    assert.ok(providerIcon.height >= 14 && providerIcon.height <= 22, `icône non rendue à ~18 px : ${providerIcon.height}`);
   }
-  // 10 lignes visibles sans défilement à 360×520.
+  // 10 lignes et toutes les informations visibles sans défilement à 360×660.
   const quickFit = await quick.locator('.quick-list').evaluate(el => ({ scroll: el.scrollHeight, client: el.clientHeight }));
-  assert.ok(quickFit.scroll <= quickFit.client + 1, `le widget défile à 360×520 : ${JSON.stringify(quickFit)}`);
+  assert.ok(quickFit.scroll <= quickFit.client + 1, `le widget défile à 360×660 : ${JSON.stringify(quickFit)}`);
   assert.ok(await quick.locator('.quick-footer').evaluate(el => el.getBoundingClientRect().bottom <= innerHeight), 'le pied du widget doit rester visible');
   // La fenêtre du widget est masquée par défaut : la rendre visible pour les
   // captures (sans voler le focus ni déclencher la fermeture sur blur).
@@ -596,7 +597,7 @@ async function main() {
   });
   await quick.waitForTimeout(200);
   await quick.screenshot({ path: path.join(results, 'quick.png') });
-  // Niveau toujours textuel, réserve Ollama rappelée dans le title.
+  // Niveau toujours textuel, une information par fenêtre, aucun « +N ».
   const quickLevels = await quick.locator('.quick-level').allTextContents();
   assert.equal(quickLevels.length, 10);
   for (const quickLevel of quickLevels) assert.match(quickLevel, /Épuisé|Critique|Bas|Suffisant|Indisponible/);
@@ -609,10 +610,10 @@ async function main() {
     assert.match(chip.classes, /resource-(?:empty|critical|low|healthy|unknown)/);
     assert.match(chip.title, /Ressource suffisante|Bas · ≤|Critique · ≤|Ressource épuisée|Donnée indisponible/);
   }
-  assert.match(await quick.locator('[data-provider="ollama"] .quick-value').getAttribute('title'), /réserve supplémentaire/);
+  assert.ok(await quick.locator('[data-provider="ollama"] .quick-fact').count() >= 1, 'Ollama doit afficher ses informations dans le widget');
   // ------------------------------------------------------------------ *
-  // T19 : libellés segmentés (Hebdo/Horaire/Hebdo Fable/Hebdo Argon), chips,
-  // fenêtre absente sans ligne « — », segments du widget.
+  // T19/T21 : libellés segmentés (Hebdo/Horaire/Hebdo Fable/Hebdo Argon),
+  // toutes les fenêtres visibles, Ollama et API complets.
   // ------------------------------------------------------------------ *
   for (const surface of [page, quick]) await surface.evaluate(() => {
     globalThis.t19OriginalState = state;
@@ -639,6 +640,17 @@ async function main() {
         { label: '5 heures', remaining: 50 },
       ] },
     });
+    Object.assign(state.providers.find(p => p.id === 'ollama'), {
+      active: true, connected: true, error: null, subscriptionStatus: 'active',
+      snapshot: { source: 'api', updatedAt: stamp, connectorVersion: 'ollama-monthly-credits-v1', planTier: 'free',
+        balances: [], quotaRemaining: 100, resetAt: null, usageCredits: { currency: 'USD', remaining: 1.05 } },
+    });
+    Object.assign(state.providers.find(p => p.id === 'deepseek'), {
+      active: true, connected: true, error: null,
+      snapshot: { source: 'api', updatedAt: stamp, balances: [
+        { currency: 'USD', remaining: 10 }, { currency: 'CNY', remaining: 42.5 },
+      ] },
+    });
     page = 'overview'; filter = 'all'; query = '';
     render();
   });
@@ -661,25 +673,21 @@ async function main() {
     assert.match(chip.text, /Épuisé|Critique|Bas|Suffisant|Indisponible/);
     assert.match(chip.title, /Ressource suffisante|Bas · ≤|Critique · ≤|Ressource épuisée|Donnée indisponible/);
   }
-  // Widget : segment le plus contraint, second segment, compteur de segments masqués.
-  const claudeValue = quick.locator('[data-provider="claude"] .quick-value');
-  assert.equal(await claudeValue.locator('.quick-value-label').innerText(), 'Hebdo Fable');
-  assert.match(await claudeValue.locator('.quick-value-main').innerText(), /30/);
-  assert.equal(await claudeValue.locator('.quick-segment-label').innerText(), 'Hebdo');
-  assert.match(await claudeValue.locator('.quick-segment-value').innerText(), /40/);
-  assert.equal(await claudeValue.locator('.quick-extra').innerText(), '+1');
-  assert.equal(await quick.locator('[data-provider="claude"] .quick-level').innerText(), 'Suffisant');
-  const argonValue = quick.locator('[data-provider="antigravity"] .quick-value');
-  assert.equal(await argonValue.locator('.quick-value-label').innerText(), 'Hebdo Argon');
-  assert.match(await argonValue.locator('.quick-value-main').innerText(), /60/);
-  assert.equal(await argonValue.locator('.quick-segment-label').innerText(), 'Hebdo');
-  assert.match(await argonValue.locator('.quick-segment-value').innerText(), /70/);
-  assert.equal(await argonValue.locator('.quick-extra').innerText(), '+1');
-  const zaiValue = quick.locator('[data-provider="zai"] .quick-value');
-  assert.equal(await zaiValue.locator('.quick-value-label').innerText(), 'Horaire');
-  assert.match(await zaiValue.locator('.quick-value-main').innerText(), /50/);
-  assert.equal(await zaiValue.locator('.quick-segment-label').count(), 0, 'aucun second segment inventé');
-  assert.equal(await zaiValue.locator('.quick-extra').count(), 0);
+  // Widget vertical : toutes les fenêtres, aucun « +N », Ollama et API complets.
+  const widgetFacts = async id => quick.locator(`[data-provider="${id}"] .quick-fact`).evaluateAll(items => items.map(item => ({
+    label: item.querySelector('.quick-fact-label')?.textContent || '',
+    value: item.querySelector('.quick-fact-value')?.textContent || '',
+  })));
+  assert.deepEqual((await widgetFacts('claude')).map(fact => fact.label), ['Hebdo', 'Horaire', 'Hebdo Fable']);
+  assert.deepEqual((await widgetFacts('claude')).map(fact => fact.value.replace(/\s/g, '')), ['40%', '80%', '30%']);
+  assert.deepEqual((await widgetFacts('antigravity')).map(fact => fact.label),
+    ['Gemini · Hebdo', 'Gemini · Horaire', 'Claude / GPT · Hebdo', 'Claude / GPT · Horaire', 'Hebdo Argon']);
+  assert.deepEqual((await widgetFacts('zai')).map(fact => fact.label), ['Horaire']);
+  assert.deepEqual((await widgetFacts('ollama')).map(fact => fact.label), ['Limite Free', 'Crédits achetés']);
+  assert.match((await widgetFacts('ollama'))[0].value, /100\s*%/);
+  assert.match((await widgetFacts('ollama'))[1].value, /1,05/);
+  assert.deepEqual((await widgetFacts('deepseek')).map(fact => fact.label), ['USD', 'CNY']);
+  assert.equal(await quick.locator('.quick-extra').count(), 0, 'aucun compteur de segments masqués : tout est affiché');
   assert.doesNotMatch(await quick.locator('.quick-list').innerText(), /\b5 h\b/);
   // Restauration de l'état réel avant les fixtures de niveaux.
   for (const surface of [page, quick]) await surface.evaluate(() => {
@@ -718,7 +726,7 @@ async function main() {
   await quick.screenshot({ path: path.join(results, 'widget-scroll-360x320.png') });
   await desktop.evaluate(({ BrowserWindow }) => {
     const quickWindow = BrowserWindow.getAllWindows().find(w => w.webContents.getURL().includes('mode=quick'));
-    quickWindow.setSize(360, 520);
+    quickWindow.setSize(360, 660);
     quickWindow.setResizable(false);
   });
   await quick.waitForFunction(() => {
@@ -755,26 +763,37 @@ async function main() {
   assert.match(await page.locator('.card:has([data-open="ollama"])').innerText(), /Réserve supplémentaire[\s\S]*2,98/);
   assert.equal(await page.locator('.card:has([data-open="antigravity"]) .quota-period-status').count(), 1);
   assert.match(await page.locator('.card:has([data-open="antigravity"]) .quota-period-status').innerText(), /Limite Gemini · hebdo atteinte/);
-  // Widget compact : résumé par fournisseur (.quick-value / .quick-level).
+  // Widget vertical : une ligne par information, chip de niveau agrégé.
   assert.match(await quick.locator('[data-provider="openrouter"]').getAttribute('class'), /resource-empty/);
   assert.match(await quick.locator('[data-provider="openrouter"] .quick-level').innerText(), /Épuisé/);
   assert.match(await quick.locator('[data-provider="deepseek"] .quick-level').innerText(), /Critique/);
   assert.match(await quick.locator('[data-provider="runinfra"] .quick-level').innerText(), /Bas/);
   assert.match(await quick.locator('[data-provider="orcarouter"] .quick-level').innerText(), /Suffisant/);
-  assert.match(await quick.locator('[data-provider="ollama"] .quick-level').innerText(), /Indisponible/);
-  assert.match(await quick.locator('[data-provider="ollama"] .quick-value').getAttribute('title'), /réserve supplémentaire 2,98/);
-  assert.match(await quick.locator('[data-provider="antigravity"] .quick-level').innerText(), /Épuisé/);
-  assert.match(await quick.locator('[data-provider="antigravity"] .quick-value-label').innerText(), /Hebdo/);
-  assert.match(await quick.locator('[data-provider="antigravity"] .quick-value-main').innerText(), /0/);
-  // Segments T19 : second segment « Horaire 10 % », 1 segment masqué sur 3 catégories.
-  assert.equal(await quick.locator('[data-provider="antigravity"] .quick-segment-label').innerText(), 'Horaire');
-  assert.match(await quick.locator('[data-provider="antigravity"] .quick-segment-value').innerText(), /10/);
-  assert.match(await quick.locator('[data-provider="antigravity"] .quick-extra').innerText(), /\+1/);
+  assert.match(await quick.locator('[data-provider="ollama"] .quick-level').innerText(), /Épuisé/);
+  const ollamaFacts = await quick.locator('[data-provider="ollama"] .quick-fact').evaluateAll(items => items.map(item => ({
+    label: item.querySelector('.quick-fact-label')?.textContent || '',
+    value: item.querySelector('.quick-fact-value')?.textContent || '',
+  })));
+  assert.deepEqual(ollamaFacts.map(fact => fact.label), ['Limite Free', 'Crédits achetés']);
+  assert.match(ollamaFacts[0].value, /0\s*%/);
+  assert.match(ollamaFacts[1].value, /2,98/);
+  // Antigravity : le chip de ligne est le niveau agrégé (Critique), mais chaque
+  // fenêtre épuisée reste lisible dans sa propre ligne (Gemini · Hebdo 0 %).
+  assert.match(await quick.locator('[data-provider="antigravity"] .quick-level').innerText(), /Critique/);
+  const antigravityFacts = await quick.locator('[data-provider="antigravity"] .quick-fact').evaluateAll(items => items.map(item => ({
+    label: item.querySelector('.quick-fact-label')?.textContent || '',
+    value: item.querySelector('.quick-fact-value')?.textContent || '',
+    classes: item.querySelector('.quick-fact-value')?.className || '',
+  })));
+  assert.deepEqual(antigravityFacts.map(fact => fact.label), ['Gemini · Hebdo', 'Gemini · Horaire', 'Claude / GPT · Hebdo', 'Claude / GPT · Horaire', 'Hebdo Argon']);
+  assert.match(antigravityFacts[0].classes, /resource-empty/);
+  assert.match(antigravityFacts[0].value, /0\s*%/);
+  assert.match(antigravityFacts[1].value, /10\s*%/);
   // Libellés exacts de la carte Antigravity (Horaire, Hebdo Argon, jamais « 5 h »).
   assert.deepEqual(await page.locator('.card:has([data-open="antigravity"]) .quota-period-label').allTextContents(), ['Hebdo', 'Horaire', 'Hebdo', 'Horaire', 'Hebdo Argon']);
   assert.doesNotMatch(await page.locator('.card:has([data-open="antigravity"])').innerText(), /\b5 h\b/);
   // Le solde négatif reste rouge dans le widget, comme dans la carte.
-  const openrouterNegativeColor = await quick.locator('[data-provider="openrouter"] .quick-value .resource-value').evaluate(el => getComputedStyle(el).color);
+  const openrouterNegativeColor = await quick.locator('[data-provider="openrouter"] .quick-fact-value').evaluate(el => getComputedStyle(el).color);
   const openrouterCardColor = await page.locator('.card:has([data-open="openrouter"]) .resource-value').evaluate(el => getComputedStyle(el).color);
   assert.equal(openrouterNegativeColor, openrouterCardColor);
   // Aucun ancien hook de widget ni barre de jauge.
@@ -867,8 +886,13 @@ async function main() {
   for (const surface of [page, currentWidget]) await surface.waitForFunction(() => state.providers.find(p => p.id === 'ollama').snapshot.usageCredits.remaining === 1.05);
   assert.match(await currentReserveCard.innerText(), /Réserve supplémentaire[\s\S]*1,05/);
   assert.equal(await currentReserveCard.locator('.ollama-reserve.stale').count(), 0);
-  // Widget compact : pas d'âge permanent ; la réserve Ollama reste dans le title.
-  assert.match(await currentReserveRow.locator('.quick-value').getAttribute('title'), /réserve supplémentaire 1,05/);
+  // Widget vertical : pas d'âge permanent ; la réserve Ollama est une ligne d'information.
+  const reserveFacts = await currentReserveRow.locator('.quick-fact').evaluateAll(items => items.map(item => ({
+    label: item.querySelector('.quick-fact-label')?.textContent || '',
+    value: item.querySelector('.quick-fact-value')?.textContent || '',
+  })));
+  assert.deepEqual(reserveFacts.map(fact => fact.label), ['Limite Free', 'Crédits achetés']);
+  assert.match(reserveFacts[1].value, /1,05/);
   assert.match(await currentReserveRow.locator('.quick-level').innerText(), /Indisponible/);
   assert.equal(await currentReserveRow.locator('[aria-label="Relevé à vérifier"]').count(), 0);
   await currentReserveCard.screenshot({ path: path.join(results, 'ollama-current-card.png') });
@@ -885,7 +909,7 @@ async function main() {
   assert.equal(free.snapshot.usageCredits.observedAt, latestReserveAt);
   for (const surface of [page, currentWidget]) await surface.waitForFunction(() => state.providers.find(p => p.id === 'ollama').snapshot.usageCredits.stale);
   assert.match(await currentReserveCard.innerText(), /Dernière valeur connue[\s\S]*1,05/);
-  assert.match(await currentReserveRow.locator('.quick-value').getAttribute('title'), /1,05/);
+  assert.match((await currentReserveRow.locator('.quick-fact').nth(1).innerText()), /1,05/);
   assert.equal(await currentReserveRow.locator('.quick-stale').count(), 0);
   await assert.rejects(page.evaluate(renewalDate => window.providersBar.updateProvider('ollama', { subscriptionStatus: 'active', renewalDate }), futureDate), /Confirme le renouvellement/);
 
@@ -1111,7 +1135,7 @@ async function main() {
   assert.equal(Array.isArray(erasedState.providers) && erasedState.providers.length, 10);
   assert.deepEqual(erasedState.history, []);
   await desktop.close(); desktop = null;
-  console.log('PASS: marque neutre, thème système, version dynamique, app:info, erase-data, recommandations retirées, inventaire 10 fournisseurs, recherche/filtres, édition, historique, clés chiffrées, course connect/disconnect, reprise transitoire, cooldown persistant, Orca/Ollama (session conservée puis auth invalide), Claude Desktop/direct, lecteurs DOM réels, police Inter Variable (fichiers+OFL+chargement dashboard/widget, tabular-nums), libellés Hebdo/Horaire/Hebdo Fable/Hebdo Argon et chips, widget compact 360×520 (10 lignes 36 px, icônes 20 px, segments, sans défilement ; scroll fin à 320), niveaux textuels, tray, redémarrage, Ollama Free, Antigravity, export nettoyé.');
+  console.log('PASS: marque neutre, thème système, version dynamique, app:info, erase-data, recommandations retirées, inventaire 10 fournisseurs, recherche/filtres, édition, historique, clés chiffrées, course connect/disconnect, reprise transitoire, cooldown persistant, Orca/Ollama (session conservée puis auth invalide), Claude Desktop/direct, lecteurs DOM réels, police Inter Variable (fichiers+OFL+chargement dashboard/widget, tabular-nums), libellés Hebdo/Horaire/Hebdo Fable/Hebdo Argon et chips, widget vertical complet 360×660 (10 lignes, une information par fenêtre, Ollama Free + crédits, soldes multi-devises, sans défilement ; scroll fin à 320), niveaux textuels, tray, redémarrage, Ollama Free, Antigravity, export nettoyé.');
 }
 
 main().catch(error => { console.error(error); process.exitCode = 1; }).finally(async () => { if (desktop) await desktop.close(); });

@@ -85,7 +85,7 @@ const cooldowns = {
 // (session.defaultSession.fetch) partagé avec les appels API. Le renouvellement
 // OAuth est créé par la même factory, donc sans globalThis.fetch.
 const claudeReader = claudeLive.createClaudeLiveReader({ fetchImpl: apiFetch });
-let quickDesiredHeight = 520;
+let quickDesiredHeight = 660;
 let orcaLoginWindow;
 let orcaDetectionTimer, orcaVerification;
 let orcaConnection = { status: 'idle', message: '' };
@@ -122,7 +122,7 @@ function shouldFallbackToClaudeDesktop(code, snapshot, nowMs = Date.now()) {
 function claudeDesktopGuidance() {
   return 'Ouvre Claude Desktop (page Utilisation) pour actualiser le relevé ; la lecture directe reprendra après renouvellement du jeton dans Claude Code.';
 }
-async function verifyClaudeDesktop({ enableLive = false } = {}) {
+async function verifyClaudeDesktop({ enableLive = false, manual = false } = {}) {
   if (disconnecting.has('claude') || quitting) throw new Error('Déconnexion en cours.');
   if (claudeWork) {
     if (!enableLive) return claudeWork;
@@ -131,6 +131,9 @@ async function verifyClaudeDesktop({ enableLive = false } = {}) {
   claudeWork = (async () => {
     const p = provider('claude');
     const direct = enableLive || p.accountSession?.kind === 'claude-live-local';
+    // Action explicite (bouton Vérifier / Connexion) : une reconnexion Claude Code
+    // doit pouvoir être prise en compte sans attendre le cooldown d'un échec passé.
+    if (manual && direct) claudeReader.credentialsChanged();
     claudeConnection = { status: 'verifying', message: direct ? 'Lecture des quotas actuels auprès de Claude…' : 'Lecture du relevé local de Claude Desktop…' };
     // Keep the chosen mode even when the first request fails, including restart.
     p.accountSession = { kind: direct ? 'claude-live-local' : 'claude-desktop-local' };
@@ -696,13 +699,13 @@ function registerIpc() {
     return openOllamaAccount();
   });
   handle('ollama:verify-account', () => verifyOllamaAccount());
-  handle('account:open', async id => { provider(id); if (disconnecting.has(id) || quitting) throw new Error('Déconnexion en cours.'); return id === 'antigravity' ? verifyAntigravity() : id === 'claude' ? verifyClaudeDesktop() : id === 'openai' ? openAiAccount.open() : id === 'orcarouter' ? openOrcaAccount() : id === 'ollama' ? openOllamaAccount() : subscriptionAccounts.open(id); });
+  handle('account:open', async id => { provider(id); if (disconnecting.has(id) || quitting) throw new Error('Déconnexion en cours.'); return id === 'antigravity' ? verifyAntigravity() : id === 'claude' ? verifyClaudeDesktop({ manual: true }) : id === 'openai' ? openAiAccount.open() : id === 'orcarouter' ? openOrcaAccount() : id === 'ollama' ? openOllamaAccount() : subscriptionAccounts.open(id); });
   handle('account:verify', async id => {
     provider(id);
     if (disconnecting.has(id) || quitting) throw new Error('Déconnexion en cours.');
     if (id === 'openai') await openAiAccount.read(provider(id).accountSession?.identity);
     else if (id === 'antigravity') await verifyAntigravity();
-    else if (id === 'claude') await verifyClaudeDesktop();
+    else if (id === 'claude') await verifyClaudeDesktop({ manual: true });
     else if (id === 'orcarouter') await verifyOrcaAccount();
     else if (id === 'ollama') await verifyOllamaAccount();
     else await subscriptionAccounts.read(id, { background: true, interactive: true });
@@ -710,7 +713,7 @@ function registerIpc() {
   });
   // Explicit activation only: never reuse a local credential on migration/startup.
   handle('claude:enable-live', async () => {
-    await verifyClaudeDesktop({ enableLive: true });
+    await verifyClaudeDesktop({ enableLive: true, manual: true });
     return publicState();
   });
   handle('provider:update', async (id, patch) => {
@@ -865,7 +868,7 @@ else {
       mainWindow.on('close', event => { if (!quitting) { event.preventDefault(); mainWindow.hide(); } });
       mainWindow.once('ready-to-show', () => mainWindow.show());
       await mainWindow.loadFile(uiPath);
-      quickWindow = new BrowserWindow({ width: 360, height: Math.min(520, screen.getPrimaryDisplay().workAreaSize.height - 16), show: false, frame: false, resizable: false, skipTaskbar: true, alwaysOnTop: true, backgroundColor: windowBackground, webPreferences });
+      quickWindow = new BrowserWindow({ width: 360, height: Math.min(660, screen.getPrimaryDisplay().workAreaSize.height - 16), show: false, frame: false, resizable: false, skipTaskbar: true, alwaysOnTop: true, backgroundColor: windowBackground, webPreferences });
       secureWindow(quickWindow);
       quickWindow.on('blur', () => quickWindow.hide());
       await quickWindow.loadFile(uiPath, { query: { mode: 'quick' } });

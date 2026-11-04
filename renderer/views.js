@@ -768,104 +768,54 @@ function settingsPage({ version = null, electronVersion = null, packaged = null,
 /* ------------------------------------------------------------------ *
  * Widget compact : simple liste abonnements puis API (aucune recommandation)
  * ------------------------------------------------------------------ */
-// Résumé compact d'un abonnement : segments Hebdo/Horaire les plus contraints.
-function quickQuotaSummary(provider) {
-  const known = quotaStatusPeriods(provider)
-    .filter(({ quota }) => typeof quota?.remaining === 'number' && Number.isFinite(quota.remaining))
-    .map(period => {
-      const remaining = Math.max(0, Math.min(100, period.quota.remaining));
-      return {
-        ...period,
-        displayLabel: quotaPeriodLabel(provider, period.key, period.label),
-        remaining,
-        levelName: ResourceLevels.level(remaining, '%'),
-      };
-    });
-  if (!known.length) return null;
-  // Un seul segment par libellé (ex. plusieurs « Hebdo » Gemini/Claude → le plus bas).
-  const categories = [];
-  for (const period of known) {
-    const category = categories.find(item => item.displayLabel === period.displayLabel);
-    if (!category) {
-      categories.push({ ...period });
-    } else if (period.remaining < category.remaining) {
-      Object.assign(category, {
-        remaining: period.remaining,
-        levelName: period.levelName,
-        groupName: period.groupName,
-      });
-    }
-  }
-  const byConstraint = [...categories].sort((a, b) => a.remaining - b.remaining);
-  const shown = byConstraint.length > 1 ? 2 : 1;
-  return {
-    tightest: byConstraint[0],
-    secondary: byConstraint[1] || null,
-    extra: Math.max(0, categories.length - shown),
-    details: known.map(period =>
-      `${period.groupName ? period.groupName + ' ' : ''}${period.displayLabel} : ${period.remaining} %`).join(' · '),
-  };
+// Widget compact vertical : chaque abonnement affiche TOUTES ses fenêtres et
+// chaque API tous ses soldes. Aucune agrégation ni « +N » ne masque une donnée.
+function quickFact(label, value, levelName) {
+  return { label, value, levelName };
 }
-
+function quickSubscriptionFacts(provider) {
+  if (provider.id === 'ollama') {
+    const facts = [];
+    const quota = provider.snapshot?.quotaRemaining;
+    if (typeof quota === 'number' && Number.isFinite(quota)) {
+      const remaining = Math.max(0, Math.min(100, quota));
+      facts.push(quickFact('Limite Free', remaining + '<small>%</small>', ResourceLevels.level(remaining, '%')));
+    } else if (provider.snapshot) {
+      facts.push(quickFact('Limite Free', 'non communiquée', 'unknown'));
+    }
+    // Réserve de crédits achetés : affichée dès qu'un montant USD valide existe,
+    // quel que soit le connecteur qui l'a produit (clé `usageCredits` du snapshot).
+    const reserve = provider.snapshot?.usageCredits;
+    if (reserve && reserve.currency === 'USD' && typeof reserve.remaining === 'number'
+      && Number.isFinite(reserve.remaining) && reserve.remaining >= 0) {
+      facts.push(quickFact('Crédits achetés', money(reserve.remaining, 'USD'),
+        ResourceLevels.level(reserve.remaining, 'USD')));
+    }
+    return facts.length ? facts : [quickFact('Quota', 'Indisponible', 'unknown')];
+  }
+  const facts = [];
+  for (const period of quotaStatusPeriods(provider)) {
+    const remaining = period.quota?.remaining;
+    if (typeof remaining !== 'number' || !Number.isFinite(remaining)) continue;
+    const clamped = Math.max(0, Math.min(100, remaining));
+    let label = quotaPeriodLabel(provider, period.key, period.label);
+    const group = period.groupName === 'Claude et GPT' ? 'Claude / GPT' : period.groupName;
+    if (group && label !== 'Hebdo Argon' && provider.id === 'antigravity') label = group + ' · ' + label;
+    if (group && group !== 'Grok' && provider.id === 'grok') label = group + ' · ' + label;
+    facts.push(quickFact(label, clamped + '<small>%</small>', ResourceLevels.level(clamped, '%')));
+  }
+  return facts.length ? facts : [quickFact('Quota', 'Indisponible', 'unknown')];
+}
+function quickApiFacts(provider) {
+  const balances = Array.isArray(provider.snapshot?.balances) ? provider.snapshot.balances : [];
+  if (!balances.length) return [quickFact('Solde', 'Indisponible', 'unknown')];
+  return balances.map(balance => quickFact(balance.currency,
+    money(balance.remaining, balance.currency),
+    ResourceLevels.level(balance.remaining, balance.currency)));
+}
 function quickChip(levelName, unit = '%') {
   return levelPill(levelName, unit, 'quick-level');
 }
-
-function quickSegmentsMarkup(summary) {
-  const segment = (period, first) => '<span class="quick-segment">'
-    + `<span class="${first ? 'quick-value-label' : 'quick-segment-label'}">`
-    + `${escapeHtml(period.displayLabel)}</span>`
-    + `<span class="${first ? 'quick-value-main' : 'quick-segment-value'}">`
-    + `${period.remaining}<small>%</small></span></span>`;
-  let html = segment(summary.tightest, true);
-  if (summary.secondary) {
-    html += '<span class="quick-segment-sep" aria-hidden="true">·</span>'
-      + segment(summary.secondary, false);
-  }
-  if (summary.extra > 0) html += `<span class="quick-extra">+${summary.extra}</span>`;
-  return `<span class="quick-segments">${html}</span>`;
-}
-
-function quickUnknownValue(title) {
-  return `<span class="quick-value" title="${escapeHtml(title)}">`
-    + `${quickChip('unknown')}`
-    + '<span class="quick-segments"><span class="quick-value-main">—</span></span></span>';
-}
-
-function quickSubscriptionValue(provider) {
-  const summary = quickQuotaSummary(provider);
-  if (!summary) {
-    const reserve = ollamaUsageCredits(provider);
-    return quickUnknownValue(reserve
-      ? `Quota indisponible · réserve supplémentaire ${money(reserve.remaining, 'USD')}`
-      : 'Quota indisponible');
-  }
-  return `<span class="quick-value resource-${summary.tightest.levelName}"`
-    + ` title="${escapeHtml(summary.details)}">`
-    + `${quickChip(summary.tightest.levelName)}`
-    + `${quickSegmentsMarkup(summary)}</span>`;
-}
-
-function quickApiValue(provider) {
-  const balances = Array.isArray(provider.snapshot?.balances) ? provider.snapshot.balances : [];
-  if (!balances.length) return quickUnknownValue('Solde indisponible');
-  const severity = ['empty', 'critical', 'low', 'healthy'];
-  const rated = balances.map(balance => ({
-    ...balance,
-    levelName: ResourceLevels.level(balance.remaining, balance.currency),
-  }));
-  const known = rated.filter(balance => balance.levelName !== 'unknown');
-  const ranked = known.length ? known : rated;
-  const worst = [...ranked].sort((a, b) =>
-    severity.indexOf(a.levelName) - severity.indexOf(b.levelName))[0];
-  const extra = rated.length > 1 ? `<span class="quick-extra">+${rated.length - 1}</span>` : '';
-  const details = rated.map(balance => money(balance.remaining, balance.currency)).join(' · ');
-  return `<span class="quick-value resource-${worst.levelName}" title="${escapeHtml(details)}">`
-    + `${quickChip(worst.levelName, worst.currency)}`
-    + `<span class="quick-segments"><span class="resource-value resource-${worst.levelName}">`
-    + `${money(worst.remaining, worst.currency)}</span>${extra}</span></span>`;
-}
-
 
 function quickDetailText(provider) {
   if (provider.type === 'api') {
@@ -884,23 +834,38 @@ function quickAccountRow(provider) {
   const snapshot = provider.snapshot;
   const levelName = providerResourceLevel(provider);
   const unverified = resourceUnverified(provider);
-  const value = provider.type === 'api' ? quickApiValue(provider) : quickSubscriptionValue(provider);
+  const facts = provider.type === 'api' ? quickApiFacts(provider) : quickSubscriptionFacts(provider);
   const detailText = quickDetailText(provider);
   const details = [];
   if (detailText) details.push(detailText);
-  if (snapshot?.updatedAt) details.push(`Dernier relevé : ${fullDateTime(snapshot.updatedAt)}`);
+  if (snapshot?.updatedAt) details.push('Dernier relevé : ' + fullDateTime(snapshot.updatedAt));
   if (provider.error) details.push(provider.error);
   const label = provider.name + (provider.error ? ' · relevé à vérifier' : '');
-  return `<button type="button" class="quick-row resource-${levelName}`
-    + `${unverified ? ' is-stale' : ''}" data-provider="${escapeHtml(provider.id)}" data-action="main"`
-    + ` title="${escapeHtml([label, ...details].join(' — '))}">`
-    + `<span class="quick-provider">${logo(provider, true)}`
-    + `<span class="provider-name">${escapeHtml(provider.name)}${ollamaFree(provider) ? ' · Free' : ''}</span></span>`
-    + `${value}`
-    + `${detailText ? `<span class="sr-only">${escapeHtml(detailText)}</span>` : ''}`
-    + `${unverified ? `<span class="quick-stale" aria-label="Relevé à vérifier"`
-      + ` title="Relevé à vérifier">${icon('warning', 12)}</span>` : ''}`
-    + `</button>`;
+  const factMarkup = facts.map(fact => '<span class="quick-fact">'
+    + '<span class="quick-fact-label">' + escapeHtml(fact.label) + '</span>'
+    + '<span class="quick-fact-value resource-' + fact.levelName + '">' + fact.value + '</span></span>').join('');
+  // Une seule information : elle tient en ligne avec le nom, la ligne reste basse.
+  // Un placeholder « Indisponible » n'est pas répété : le chip de niveau suffit.
+  const placeholder = facts.length === 1 && facts[0].levelName === 'unknown'
+    && facts[0].value === 'Indisponible';
+  const inlineFact = facts.length === 1 && !placeholder ? facts[0] : null;
+  return '<button type="button" class="quick-row quick-row-stacked resource-' + levelName
+    + (unverified ? ' is-stale' : '') + '" data-provider="' + escapeHtml(provider.id) + '" data-action="main"'
+    + ' title="' + escapeHtml([label, ...details].join(' — ')) + '">'
+    + '<span class="quick-row-head"><span class="quick-provider">'
+    + logo(provider, true) + '<span class="provider-name">' + escapeHtml(provider.name)
+    + (ollamaFree(provider) ? ' · Free' : '') + '</span></span>'
+    + (inlineFact ? '<span class="quick-fact quick-fact-inline">'
+      + '<span class="quick-fact-label">' + escapeHtml(inlineFact.label) + '</span>'
+      + '<span class="quick-fact-value resource-' + inlineFact.levelName + '">'
+      + inlineFact.value + '</span></span>' : '')
+    + quickChip(levelName)
+    + (unverified ? '<span class="quick-stale" aria-label="Relevé à vérifier" title="Relevé à vérifier">'
+      + icon('warning', 12) + '</span>' : '')
+    + '</span>'
+    + (inlineFact || placeholder ? '' : '<span class="quick-facts">' + factMarkup + '</span>')
+    + (detailText ? '<span class="sr-only">' + escapeHtml(detailText) + '</span>' : '')
+    + '</button>';
 }
 
 function quickHeader({ total, subscriptions, apis }) {

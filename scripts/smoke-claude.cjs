@@ -149,15 +149,32 @@ async function main() {
 
   // Changement de connexion Claude Code (fichier local) : le cooldown d'auth est
   // levé immédiatement, comme le fait le veilleur de credentials de main.cjs.
+  // Le transport simulé est installé AVANT le changement de credentials pour
+  // qu'aucune lecture déclenchée pendant l'attente n'utilise le réseau réel.
+  await patchFetch('success');
   await writeCredentials(home, credentialDocument());
   await page.waitForTimeout(3000);
-  await patchFetch('success');
-  let claudeState;
-  for (let attempt = 0; attempt < 10; attempt++) {
+  let claudeState, lastVerifyError;
+  for (let attempt = 0; attempt < 20; attempt++) {
     try { claudeState = await page.evaluate(() => window.providersBar.verifyAccount('claude')); break; }
-    catch { await page.waitForTimeout(1000); }
+    catch (error) { lastVerifyError = error; await page.waitForTimeout(500); }
   }
-  assert.ok(claudeState, 'la vérification Claude doit réussir après le renouvellement local');
+  if (!claudeState) {
+    const pageDebug = await page.evaluate(() => {
+      const claude = state.providers.find(p => p.id === 'claude');
+      return { session: claude.accountSession, error: claude.error, claudeSync: claude.claudeSync };
+    });
+    const mainDebug = await desktop.evaluate(() => {
+      const req = process.mainModule.require;
+      const cc = req('./lib/claude-connection.cjs');
+      const fs = req('node:fs');
+      const doc = JSON.parse(fs.readFileSync(cc.CREDENTIAL_PATH, 'utf8'));
+      return { path: cc.CREDENTIAL_PATH, expiresAt: doc.claudeAiOauth.expiresAt, now: Date.now(), hasClientId: doc.claudeAiOauth.clientId != null, scopes: doc.claudeAiOauth.scopes };
+    });
+    console.log('DEBUG CLAUDE', JSON.stringify({ pageDebug, mainDebug }));
+  }
+  assert.ok(claudeState, 'la vérification Claude doit réussir après le renouvellement local'
+    + (lastVerifyError ? ` (dernière erreur : ${lastVerifyError.message})` : ' (aucune erreur retournée)'));
   const first = claudeState.providers.find(p => p.id === 'claude');
   assert.equal(first.accountSession.kind, 'claude-live-local');
   assert.equal(first.error, null);

@@ -1,5 +1,22 @@
 # Historique des versions
 
+## 0.3.6 — 4 novembre 2026
+
+Widget vertical complet : toutes les informations de chaque fournisseur sont visibles, sans agrégation ni « +N ».
+
+### Interface
+
+- **Une ligne par information** : le widget n'affiche plus un résumé plafonné à deux segments. Chaque fournisseur est un bloc vertical (logo 20 px, nom, chip de niveau) suivi de ses informations : Claude **Hebdo / Horaire / Hebdo Fable**, Antigravity **Gemini · Hebdo**, **Gemini · Horaire**, **Claude / GPT · Hebdo**, **Claude / GPT · Horaire**, **Hebdo Argon**.
+- **Ollama visible** : « Limite Free » (quota) et « Crédits achetés » (réserve USD) sont désormais affichés, au lieu d'un simple « — » ; un compteur absent est signalé « non communiquée ».
+- **API complètes** : tous les soldes et devises sont listés (DeepSeek USD + CNY, OpenRouter, RunInfra, OrcaRouter), avec la couleur de niveau.
+- **Compacité** : une information unique (OpenAI, Grok, API mono-solde) reste en ligne avec le nom ; fenêtre **360 × 660**, lignes de 28 à 115 px, icônes 18 px, dix fournisseurs visibles sans défilement, barre fine 5 px seulement en cas de dépassement.
+- **Police et segmentation** : Inter Variable, libellés Hebdo/Horaire/Hebdo Fable/Hebdo Argon et chips de statut conservés de la 0.3.5.
+
+### Qualité
+
+- Smokes réécrits pour le widget vertical : toutes les fenêtres (Claude 3, Antigravity 5), Ollama Free + crédits, soldes multi-devises, aucune information masquée, taille 360×660 sans défilement, défilement fin à 320 px ; libellé groupé (`Gemini · Hebdo`, `Grok / Bot / Cursor · Hebdo`) ; smoke Claude stabilisé (transport simulé avant écriture des credentials, 20 tentatives).
+- `docs/validation-0.3.6.md` ; contrat UI mis à jour.
+
 ## 0.3.5 — 4 novembre 2026
 
 Lisibilité des quotas et identité visuelle : segmentation explicite des abonnements, statuts soignés et nouvelle police.

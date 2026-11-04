@@ -2,19 +2,26 @@
 
 Application desktop Windows pour suivre les abonnements, quotas et crédits de **dix fournisseurs d’IA**. Un tableau de bord et un widget dans la zone de notification regroupent les abonnements et les API avec leurs ressources restantes et leurs dates de réinitialisation.
 
-**Version 0.3.5 — 4 novembre 2026 :** segmentation claire des quotas par abonnement (**Hebdo**, **Horaire**, **Hebdo Fable**, **Hebdo Argon**), statuts de ressource soignés (chips avec pastille) et nouvelle police **Inter Variable** empaquetée pour l’application et le widget. La refonte 0.3.0 reste la base, avec les correctifs 0.3.1 à 0.3.4. Détails dans [CHANGELOG.md](CHANGELOG.md) et [docs/validation-0.3.5.md](docs/validation-0.3.5.md).
+**Version 0.3.6 — 4 novembre 2026 :** widget **vertical complet** — chaque abonnement affiche toutes ses fenêtres (Claude : Hebdo/Horaire/Hebdo Fable ; Antigravity : Gemini, Claude/GPT, Hebdo Argon) et **Ollama** affiche sa limite Free et ses crédits achetés ; chaque API affiche tous ses soldes multi-devises. Fenêtre 360 × 660, dix fournisseurs visibles sans défilement. La refonte 0.3.0 et les correctifs 0.3.1 à 0.3.5 restent la base. Détails dans [CHANGELOG.md](CHANGELOG.md) et [docs/validation-0.3.6.md](docs/validation-0.3.6.md).
+
+## Correctif 0.3.6
+
+- **Toutes les informations par ligne** : le widget n'agrège plus les fenêtres et n'affiche plus de compteur « +N ». Chaque abonnement est une ligne verticale (logo, nom, chip de niveau) suivie d'une ligne par information : Claude **Hebdo / Horaire / Hebdo Fable**, Antigravity **Gemini · Hebdo**, **Gemini · Horaire**, **Claude / GPT · Hebdo**, **Claude / GPT · Horaire**, **Hebdo Argon**.
+- **Ollama visible** : « Limite Free » (quota) et « Crédits achetés » (réserve en USD) sont désormais affichés, au lieu d'un simple « — ». Une information unique (OpenAI, Grok, API mono-solde) reste sur la ligne d'en-tête pour garder le widget compact.
+- **API complètes** : tous les soldes sont listés, devise par devise (DeepSeek USD + CNY, RunInfra, OrcaRouter, OpenRouter), avec la couleur de niveau et le détail en infobulle.
+- **Dimensions** : fenêtre **360 × 660**, lignes de 28 à 115 px selon le nombre de fenêtres, icônes 18 px, dix fournisseurs visibles **sans défilement** (barre fine de 5 px seulement si la fenêtre est réduite).
 
 ## Correctif 0.3.5
 
 - **Segmentation des abonnements** : chaque abonnement montre ses fenêtres réellement disponibles — **Hebdo** (semaine) et **Horaire** (5 heures), ou seulement celle qui existe. Claude affiche **Hebdo**, **Horaire** et **Hebdo Fable** ; Antigravity affiche Gemini (Hebdo + Horaire), Claude/GPT (Hebdo + Horaire) et **Argon → Hebdo Argon**. Plus de libellé ambigu « 5 h » ni de ligne vide pour une fenêtre absente.
-- **Widget** : la segmentation est résumée sur deux segments maximum par ligne (les plus contraints), le détail complet restant accessible dans l’infobulle et aux lecteurs d’écran ; les dix fournisseurs restent visibles sans défilement à 360 × 520.
+- **Widget** : la segmentation est résumée sur deux segments maximum par ligne (les plus contraints), le détail complet restant accessible dans l’infobulle et aux lecteurs d’écran ; les dix fournisseurs restent visibles sans défilement à 360 × 520 (porté à 360 × 660 en 0.3.6 pour tout afficher).
 - **Statuts soignés** : les niveaux « Suffisant / Bas / Critique / Épuisé / Indisponible » sont rendus par un chip discret (fond teinté léger, bordure, pastille, texte conservé pour l’accessibilité et le contraste), identique dans les cartes, le widget, la fiche et la légende des Réglages.
 - **Police** : **Inter Variable** (SIL OFL 1.1) est embarquée dans `assets/fonts/` et appliquée au tableau de bord et au widget, avec repli Segoe UI/system-ui et chiffres tabulaires ; aucun téléchargement au lancement.
 
 ## Correctif 0.3.4
 
 - **Recommandations supprimées** : plus de panneau « Ton ordre d’usage », de suggestions « Utilise maintenant / Puis », de classement des API ni de réglage d’ordre de consommation. Le tableau de bord et le widget **listent** les abonnements et les API avec leurs soldes ; le catalogue de modèles et tarifs embarqué est retiré (application plus simple, données et code en moins).
-- **Widget compact** : fenêtre **360 × 520 px**, lignes de 32 à 36 px selon la segmentation, icônes 20 × 20 visibles, liste Abonnements puis API ; les dix fournisseurs tiennent **sans défilement** dans la fenêtre par défaut, le défilement (barre fine de 5 px) n’apparaît que si la fenêtre est réduite ou la police agrandie.
+- **Widget compact** : fenêtre **360 × 520 px** (portée à **360 × 660** en 0.3.6 pour afficher toutes les fenêtres), lignes de 32 à 36 px selon la segmentation, icônes 20 × 20 visibles, liste Abonnements puis API ; les dix fournisseurs tiennent **sans défilement** dans la fenêtre par défaut, le défilement (barre fine de 5 px) n’apparaît que si la fenêtre est réduite ou la police agrandie.
 - **Données** : la stratégie/ordre de consommation est retirée des inventaires existants par migration non destructive ; l’export JSON ne contient plus `strategy` ; l’IPC `strategy:update` et la méthode `updateStrategy` sont supprimés.
 
 ## Correctif 0.3.3
@@ -123,7 +130,7 @@ Les abonnements et les API sont simplement listés, avec leurs quotas, soldes et
 - **Focus** : restauré après chaque rendu (navigation, filtres, fiches, synchronisation) ; sélection de texte préservée.
 - **ARIA** : navigation nommée, `aria-current`, onglets de fiche `role="tab"`, jauges `role="meter"` avec valeur textuelle, zone `aria-live` pour les annonces, `role="alert"` sur les erreurs de formulaire.
 - **Mouvement** : `prefers-reduced-motion` neutralise les transitions ; `forced-colors` renforce les bordures.
-- **Widget** : fenêtre compacte **360 × 520 px**, listes **Abonnements** puis **API** avec icônes, niveau textuel et résumé ; les dix fournisseurs tiennent sans défilement (barre fine de 5 px seulement si la fenêtre est réduite) ; l’indicateur « Relevé à vérifier » apparaît au-delà de dix minutes et le statut d’actualisation reflète le réglage réel (« Actualisation auto : 5 min · Claude 1 min » ou « désactivée »).
+- **Widget** : fenêtre **360 × 660 px**, une ligne verticale par fournisseur avec toutes ses fenêtres (Claude, Antigravity), **Ollama** (limite Free + crédits achetés) et **tous les soldes API** ; icônes 18 px, chip de niveau et valeurs colorées ; les dix fournisseurs tiennent sans défilement (barre fine de 5 px seulement si la fenêtre est réduite ou la police agrandie). Une information unique reste sur la ligne d'en-tête.
 - **Version** : affichée dynamiquement depuis l’IPC `app:info` (`app.getVersion()`), jamais codée en dur.
 
 ## Données et confidentialité
@@ -196,7 +203,7 @@ npm run package:release
 npm run release:artifacts
 ```
 
-La distribution propre est créée dans `dist/ProvidersBar-0.3.5-win32-x64/` ; la commande refuse un dossier de release déjà existant. `npm run release:artifacts` produit l'archive ZIP et `dist/SHA256SUMS-0.3.5.txt`, et refuse d'archiver une release contenant un dossier de données personnelles. Le portable personnel reste dans `dist/ProvidersBar-win32-x64/`, à côté de ses données.
+La distribution propre est créée dans `dist/ProvidersBar-0.3.6-win32-x64/` ; la commande refuse un dossier de release déjà existant. `npm run release:artifacts` produit l'archive ZIP et `dist/SHA256SUMS-0.3.6.txt`, et refuse d'archiver une release contenant un dossier de données personnelles. Le portable personnel reste dans `dist/ProvidersBar-win32-x64/`, à côté de ses données.
 
 Les ressources applicatives sont préparées dans un dossier temporaire puis remplacées ensemble : les fichiers retirés des sources ne subsistent pas dans l’installation. `npm run update:portable` conserve `data/` et les sessions, ferme l’ancien processus s’il est joignable en diagnostic, puis nécessite de relancer l’application ; sinon, la quitter manuellement avant la mise à jour. Le packaging inclut les dépendances de production (`proper-lockfile` et ses dépendances) et leurs notices.
 
@@ -220,7 +227,7 @@ L’exécutable **n’est pas signé** et conserve les métadonnées binaires El
 - `scripts/` et `tests/` : fabrication, diagnostic, maintenance et validation.
 - [Architecture, IPC et modèles de données](docs/architecture.md)
 - [Maintenance et procédures de validation](docs/maintenance.md)
-- [Validation de la version 0.3.5](docs/validation-0.3.5.md) · [validation 0.3.4](docs/validation-0.3.4.md) (archive) · [validation 0.3.3](docs/validation-0.3.3.md) (archive) · [validation 0.3.2](docs/validation-0.3.2.md) (archive) · [validation 0.3.1](docs/validation-0.3.1.md) (archive) · [validation 0.3.0](docs/validation-0.3.0.md) (archive) · [validation 0.2.0](docs/validation-0.2.0.md) (archive)
+- [Validation de la version 0.3.6](docs/validation-0.3.6.md) · [validation 0.3.5](docs/validation-0.3.5.md) (archive) · [validation 0.3.4](docs/validation-0.3.4.md) (archive) · [validation 0.3.3](docs/validation-0.3.3.md) (archive) · [validation 0.3.2](docs/validation-0.3.2.md) (archive) · [validation 0.3.1](docs/validation-0.3.1.md) (archive) · [validation 0.3.0](docs/validation-0.3.0.md) (archive) · [validation 0.2.0](docs/validation-0.2.0.md) (archive)
 - [Historique des versions](CHANGELOG.md)
 - [Provenance des logos](assets/providers/sources.json)
 
