@@ -205,6 +205,92 @@ function statusBadge(provider) {
 }
 
 /* ------------------------------------------------------------------ *
+ * Santé des connexions
+ * ------------------------------------------------------------------ */
+function strategyLabel(strategy) {
+  return {
+    'claude-direct': 'Lecture directe',
+    'claude-desktop': 'Claude Desktop',
+    'openai-codex': 'Codex',
+    'antigravity-local': 'Application locale',
+    'ollama-browser': 'Navigateur',
+    'orca-session': 'Session OrcaRouter',
+    'browser-session': 'Navigateur',
+    'account-session': 'Compte',
+    'api-key': 'Clé API',
+  }[strategy] || 'Automatique';
+}
+
+function healthPresentation(provider) {
+  if (!provider.connected) {
+    return { state: 'idle', label: 'Non connecté', detail: 'Aucune session active pour ce service.' };
+  }
+  const health = provider.health;
+  if (!health) {
+    return { state: 'unknown', label: 'Jamais vérifié', detail: 'Lance une vérification pour établir la santé de cette connexion.' };
+  }
+  const labels = {
+    ok: 'À jour',
+    stale: 'Relevé ancien',
+    auth: 'Reconnexion requise',
+    rate: 'Limité',
+    drift: 'Interface modifiée',
+    down: 'Indisponible',
+    error: 'Erreur',
+    idle: 'Inactif',
+  };
+  const details = {
+    AUTH_REQUIRED: 'La session ou le jeton doit être renouvelé. Reconnecte ce service.',
+    AUTH_EXPIRED: 'La session a expiré. Reconnecte ce service.',
+    AUTH_RATE_LIMITED: 'Le renouvellement d’authentification est temporairement limité ; reprise automatique.',
+    RATE_LIMITED: 'Le fournisseur limite les lectures ; reprise automatique au prochain cycle.',
+    NETWORK: 'Réseau indisponible ; le dernier relevé sain est conservé.',
+    TIMEOUT: 'Délai dépassé ; le dernier relevé sain est conservé.',
+    UPSTREAM: 'Le fournisseur est momentanément indisponible ; reprise automatique.',
+    SCHEMA_DRIFT: 'Réponse valide mais inattendue : aucun faux zéro n’est écrit, le dernier relevé sain est conservé.',
+    PARSER_EMPTY: 'Aucune donnée exploitable dans la page ; le dernier relevé sain est conservé.',
+    CONFLICT: 'Valeurs contradictoires : le dernier relevé sain est conservé.',
+  };
+  const state = labels[health.state] ? health.state : 'error';
+  let detail = details[health.error?.code] || health.error?.message || 'Dernière lecture réussie.';
+  if (state === 'stale') detail = 'La lecture a réussi, mais le relevé date de plus de 10 minutes.';
+  if (state === 'ok' && Array.isArray(health.warnings) && health.warnings.length) detail = health.warnings[0];
+  if (state === 'ok' && !health.error) detail = `Lecture ${strategyLabel(health.strategy)} · aucune anomalie.`;
+  if (health.error?.retryAt) {
+    const retry = new Date(health.error.retryAt);
+    if (Number.isFinite(retry.getTime())) detail += ` Nouvel essai après ${retry.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}.`;
+  }
+  return { state, label: labels[state] || 'Erreur', detail };
+}
+
+function healthPanel() {
+  const providers = state.providers.filter(hasConnector);
+  const connected = providers.filter(provider => provider.connected);
+  const healthy = connected.filter(provider => provider.health?.state === 'ok').length;
+  const rows = providers.map(provider => {
+    const health = provider.health;
+    const presentation = healthPresentation(provider);
+    return `<div class="health-row" data-state="${escapeHtml(presentation.state)}">`
+      + `<span class="health-dot" aria-hidden="true"></span>`
+      + `<div class="health-main"><strong>${escapeHtml(provider.name)}</strong>`
+      + `<span class="health-detail">${escapeHtml(presentation.detail)}</span></div>`
+      + `<span class="health-strategy">${escapeHtml(strategyLabel(health?.strategy))}</span>`
+      + `<span class="health-state">${escapeHtml(presentation.label)}</span>`
+      + `<span class="health-age">${health?.lastSuccessAt ? escapeHtml(relativeAge(health.lastSuccessAt)) : '—'}</span>`
+      + `<button type="button" class="ghost health-test" data-sync="${escapeHtml(provider.id)}"`
+      + `${!provider.connected || provider.syncing ? ' disabled' : ''}>`
+      + `${provider.syncing ? 'Lecture…' : 'Tester'}</button>`
+      + `</div>`;
+  });
+  return `<section class="health-panel" aria-labelledby="health-title">`
+    + `<div class="health-head"><div><p class="eyebrow">DIAGNOSTIC</p>`
+    + `<h2 id="health-title">Santé des connexions</h2>`
+    + `<p class="hint">Chaque lecture est typée : une réponse illisible ne remplace jamais le dernier relevé sain.</p></div>`
+    + `<span class="health-summary"><strong>${healthy}/${connected.length}</strong> à jour</span></div>`
+    + `<div class="health-list">${rows.join('')}</div></section>`;
+}
+
+/* ------------------------------------------------------------------ *
  * Quotas : regroupements et libellés (sémantique conservée)
  * ------------------------------------------------------------------ */
 function quotaGroups(provider) {
@@ -591,6 +677,7 @@ function connections() {
   });
   return heading('SYNCHRONISATION', 'Connecte tes comptes.',
     'Tes soldes et quotas, lus directement auprès des fournisseurs.', syncButton())
+    + healthPanel()
     + `<div class="connection-grid">${cards.join('')}</div>`
     + `<div class="info-box"><p>Les clés sont chiffrées par Windows et ne sont jamais incluses dans `
     + `les exports. Les connexions API lisent les crédits. Les autres fournisseurs utilisent chacun `

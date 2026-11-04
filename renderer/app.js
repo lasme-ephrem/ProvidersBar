@@ -339,6 +339,22 @@ document.addEventListener('click', async event => {
       filter = button.dataset.filter;
       render();
       announce(`${document.querySelectorAll('#provider-cards .card').length} services affichés.`);
+    } else if (button.dataset.sync) {
+      const id = button.dataset.sync;
+      const provider = state.providers.find(item => item.id === id);
+      button.disabled = true;
+      try {
+        state = await api.syncOne(id);
+        const updated = state.providers.find(item => item.id === id);
+        toast(updated?.error
+          ? `${updated.name} : ${updated.error}`
+          : `${updated?.name || 'Connexion'} vérifié${updated?.health?.state === 'ok' ? ' · à jour' : ''}.`);
+        announce('Vérification terminée.');
+      } catch (error) {
+        toast(`${provider?.name || 'Connexion'} : ${String(error.message).replace(IPC_ERROR_PREFIX, '')}`);
+      } finally {
+        render();
+      }
     } else if (button.dataset.open) {
       openDetail(button.dataset.open, button.dataset.tab || 'info');
     } else if (button.dataset.dialogTab) {

@@ -23,7 +23,7 @@ async function launch(dataDir, home, extraEnv = {}) {
   delete env.ELECTRON_RUN_AS_NODE;
   return electron.launch({
     executablePath: process.env.PROVIDERSBAR_EXECUTABLE || require('electron'),
-    args: process.env.PROVIDERSBAR_EXECUTABLE ? [] : [root],
+    args: [...(process.env.PROVIDERSBAR_EXECUTABLE ? [] : [root]), '--no-sandbox', '--disable-gpu'],
     cwd: root, env, timeout: 30000,
   });
 }

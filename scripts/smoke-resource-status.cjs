@@ -11,7 +11,7 @@ async function main() {
   const dataDir = await fs.mkdtemp(path.join(results, 'resource-status-data-'));
   const env = { ...process.env, PROVIDERSBAR_DATA_DIR: dataDir };
   delete env.ELECTRON_RUN_AS_NODE;
-  desktop = await electron.launch({ executablePath: process.env.PROVIDERSBAR_EXECUTABLE || require('electron'), args: process.env.PROVIDERSBAR_EXECUTABLE ? [] : [root], cwd: root, env, timeout: 30000 });
+  desktop = await electron.launch({ executablePath: process.env.PROVIDERSBAR_EXECUTABLE || require('electron'), args: [...(process.env.PROVIDERSBAR_EXECUTABLE ? [] : [root]), '--no-sandbox', '--disable-gpu'], cwd: root, env, timeout: 30000 });
   const dashboard = await desktop.firstWindow();
   await dashboard.waitForSelector('.card');
   // Le widget peut être créé après la fenêtre principale : attendre sa création.

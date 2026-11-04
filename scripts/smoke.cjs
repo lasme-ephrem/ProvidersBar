@@ -26,7 +26,7 @@ async function launch(dataDir, home) {
   delete env.ELECTRON_RUN_AS_NODE;
   return electron.launch({
     executablePath: process.env.PROVIDERSBAR_EXECUTABLE || require('electron'),
-    args: process.env.PROVIDERSBAR_EXECUTABLE ? [] : [root],
+    args: [...(process.env.PROVIDERSBAR_EXECUTABLE ? [] : [root]), '--no-sandbox', '--disable-gpu'],
     cwd: root, env, timeout: 30000,
   });
 }
@@ -170,6 +170,9 @@ async function main() {
   await page.screenshot({ path: path.join(results, 'subscriptions.png'), fullPage: true });
   await page.locator('[data-nav="connections"]').click();
   assert.equal(await page.locator('.connection-card').count(), 10);
+  assert.equal(await page.locator('.health-panel').count(), 1);
+  assert.equal(await page.locator('.health-row').count(), 10);
+  assert.match(await page.locator('.health-panel').innerText(), /Santé des connexions/);
   await page.screenshot({ path: path.join(results, 'connections.png'), fullPage: true });
   await page.locator('[data-nav="overview"]').click();
   await page.locator('#search').fill('deepseek');
@@ -958,7 +961,34 @@ const fontBytes = await fs.readFile(fontFile);
     const connected = await page.evaluate(() => window.lasmium.getState());
     assert.ok(connected.providers.find(p => p.id === id).snapshot.quotaWindows.some(w => w.label.includes('Semaine')), `${id} doit exposer une fenêtre hebdomadaire`);
     assert.equal(connected.providers.find(p => p.id === id).connected, true);
+    assert.equal(connected.providers.find(p => p.id === id).health?.state, 'ok', `${id} doit exposer une santé à jour`);
+    assert.ok(connected.providers.find(p => p.id === id).health?.lastSuccessAt, `${id} doit dater son dernier succès`);
     assert.equal(connected.providers.find(p => p.id === id).snapshot.balances.length, 0);
+    if (id === 'grok') {
+      const before = connected.providers.find(p => p.id === 'grok').snapshot;
+      await desktop.evaluate(() => {
+        const transport = process.mainModule.require('./lib/account-browser.cjs');
+        transport.openSubscriptionBrowser = async () => ({
+          isOpen: () => false,
+          close: async () => {},
+          readSubscriptionPage: async () => ({ authenticated: true, windows: [{ label: 'Semaine', remaining: 150, resetAt: null }] }),
+        });
+      });
+      const drifted = await page.evaluate(() => window.lasmium.syncOne('grok'));
+      const grok = drifted.providers.find(p => p.id === 'grok');
+      assert.equal(grok.snapshot.updatedAt, before.updatedAt, 'une dérive ne doit pas remplacer le dernier relevé');
+      assert.equal(grok.health?.state, 'drift');
+      assert.equal(grok.health?.error?.code, 'SCHEMA_DRIFT');
+      assert.match(grok.health?.error?.message || '', /invalide|conservé/i);
+      await desktop.evaluate(() => {
+        const transport = process.mainModule.require('./lib/account-browser.cjs');
+        transport.openSubscriptionBrowser = async (_dataDir, id) => ({
+          isOpen: () => false,
+          close: async () => {},
+          readSubscriptionPage: async () => ({ authenticated: true, windows: [{ label: '5 heures', remaining: 80, resetAt: null }, { label: 'Semaine', remaining: id === 'openai' ? 62 : 45, resetAt: null }] }),
+        });
+      });
+    }
     if (id === 'openai') assert.equal(connected.providers.find(p => p.id === id).amount, 103);
     if (id !== 'zai') {
       await page.locator('[data-action="disconnect"]').click();
@@ -1154,7 +1184,7 @@ const fontBytes = await fs.readFile(fontFile);
   assert.equal(Array.isArray(erasedState.providers) && erasedState.providers.length, 10);
   assert.deepEqual(erasedState.history, []);
   await desktop.close(); desktop = null;
-  console.log('PASS: marque Lasmium TOKENS-HUB, logo, thèmes clair/sombre/système, version dynamique, app:info, erase-data, recommandations retirées, inventaire 10 fournisseurs, recherche/filtres, édition, historique, clés chiffrées, course connect/disconnect, reprise transitoire, cooldown persistant, Orca/Ollama (session conservée puis auth invalide), Claude Desktop/direct, lecteurs DOM réels, polices Inter + Sora (fichiers+OFL+chargement dashboard/widget, tabular-nums), libellés Hebdo/Horaire/Hebdo Fable/Hebdo Argon et chips, widget vertical Lasmium 360×660 (10 lignes, une information par fenêtre, Ollama Free + crédits, soldes multi-devises, sans défilement ; scroll fin à 320), niveaux textuels, tray, redémarrage, Ollama Free, Antigravity, export nettoyé.');
+  console.log('PASS: marque Lasmium TOKENS-HUB, logo, thèmes clair/sombre/système, version dynamique, app:info, erase-data, recommandations retirées, inventaire 10 fournisseurs, recherche/filtres, édition, historique, clés chiffrées, course connect/disconnect, reprise transitoire, cooldown persistant, Orca/Ollama (session conservée puis auth invalide), Claude Desktop/direct, lecteurs DOM réels, santé des connexions (10 lignes, états typés, dérive SCHEMA_DRIFT sans écraser le dernier relevé), polices Inter + Sora (fichiers+OFL+chargement dashboard/widget, tabular-nums), libellés Hebdo/Horaire/Hebdo Fable/Hebdo Argon et chips, widget vertical Lasmium 360×660 (10 lignes, une information par fenêtre, Ollama Free + crédits, soldes multi-devises, sans défilement ; scroll fin à 320), niveaux textuels, tray, redémarrage, Ollama Free, Antigravity, export nettoyé.');
 }
 
 main().catch(error => { console.error(error); process.exitCode = 1; }).finally(async () => { if (desktop) await desktop.close(); });

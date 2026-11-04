@@ -4,7 +4,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const { createDataStore, HISTORY_LIMIT, STATE_FILE, trimHistory } = require('../lib/data-store.cjs');
 const { createSeed } = require('../lib/seed.cjs');
-const { normalizeThemeSettings, addApiCooldowns } = require('../lib/migrations.cjs');
+const { normalizeThemeSettings, addApiCooldowns, addConnectorHealth } = require('../lib/migrations.cjs');
 
 async function withTestDir(prefix, run) {
   const projectRoot = await fs.realpath(path.resolve(__dirname, '..'));
@@ -186,4 +186,15 @@ test('theme and cooldown migrations are non-destructive and idempotent', () => {
   assert.equal(Object.keys(capped.state.apiCooldowns).length, 100);
   assert.equal(Object.hasOwn(capped.state.apiCooldowns, 'key-149:x'), true);
   assert.equal(Object.hasOwn(capped.state.apiCooldowns, 'key-0:x'), false);
+
+  const health = { providerId: 'claude', state: 'ok', lastSuccessAt: '2026-11-04T00:00:00.000Z' };
+  assert.equal(addConnectorHealth(createSeed()).changed, false);
+  const withoutHealth = { ...createSeed() };
+  delete withoutHealth.connectorHealth;
+  assert.deepEqual(addConnectorHealth(withoutHealth), { changed: true, state: { ...withoutHealth, connectorHealth: {} } });
+  const pollutedHealth = { ...createSeed(), connectorHealth: { claude: health, broken: { state: 'nope' }, empty: null } };
+  const cleanedHealth = addConnectorHealth(pollutedHealth);
+  assert.equal(cleanedHealth.changed, true);
+  assert.deepEqual(cleanedHealth.state.connectorHealth, { claude: health });
+  assert.equal(addConnectorHealth(cleanedHealth.state).changed, false);
 });

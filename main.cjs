@@ -27,6 +27,7 @@ const accountBrowser = require('./lib/account-browser.cjs');
 const { createOpenAiAccount } = require('./lib/openai-account.cjs');
 const openAiTransport = require('./lib/openai-account.cjs');
 const { createSubscriptionController } = require('./lib/subscription-controller.cjs');
+const { assertSnapshot, healthSuccess, healthFailure, publicHealth, strategyFor } = require('./lib/connector-contract.cjs');
 const claudeDesktop = require('./lib/claude-desktop-usage.cjs');
 const claudeLive = require('./lib/claude-live-usage.cjs');
 const { CREDENTIAL_PATH } = require('./lib/claude-connection.cjs');
@@ -142,7 +143,7 @@ async function verifyClaudeDesktop({ enableLive = false, manual = false } = {}) 
       const snapshot = direct ? await claudeReader.read() : await claudeDesktop.readClaudeDesktopUsage(p.snapshot);
       p.accountSession = { kind: direct ? 'claude-live-local' : 'claude-desktop-local' };
       if (p.snapshot?.updatedAt !== snapshot.updatedAt || p.snapshot?.connectorVersion !== snapshot.connectorVersion) record(p, snapshot);
-      else { p.snapshot = snapshot; p.error = null; }
+      else { p.snapshot = snapshot; p.error = null; markHealthSuccess(p, snapshot); }
       claudeConnection = { status: 'connected', message: direct ? 'Quotas Claude lus directement. Actualisation automatique chaque minute.' : 'Dernier relevé Claude Desktop récupéré. Son heure de mesure reste affichée.' };
     } catch (error) {
       const blocked = direct && shouldFallbackToClaudeDesktop(error.code, p.snapshot);
@@ -168,11 +169,13 @@ async function verifyClaudeDesktop({ enableLive = false, manual = false } = {}) 
           const failure = new Error(`${error.message} ${claudeDesktopGuidance()}`);
           failure.code = error.code;
           p.error = failure.message;
+          markHealthFailure(p, failure);
           claudeConnection = { status: 'error', message: failure.message, errorCode: failure.code || null };
           throw failure;
         }
       }
       p.error = error.message;
+      markHealthFailure(p, error);
       claudeConnection = { status: 'error', message: error.message, errorCode: error.code || null };
       throw error;
     } finally {
@@ -201,6 +204,7 @@ async function verifyAntigravity() {
       antigravityConnection = { status: 'connected', message: 'Antigravity connecté. Quotas disponibles Gemini, Claude/GPT et Argon lus.' };
     } catch (error) {
       p.error = error.message;
+      markHealthFailure(p, error);
       antigravityConnection = { status: 'error', message: error.message };
       throw error;
     } finally { await persist(); broadcast(); }
@@ -221,10 +225,13 @@ const subscriptionAccounts = createSubscriptionController({
     p.accountSession = { kind: 'subscription-browser' };
     p.lastAttempt = new Date().toISOString();
     if (snapshot) record(p, snapshot);
-    else p.error = message;
+    else {
+      p.error = message;
+      markHealthFailure(p, Object.assign(new Error(message || 'Aucun relevé.'), { code: 'PARSER_EMPTY' }));
+    }
     await persist(); broadcast();
   },
-  onFailure: async (id, message) => { const p = provider(id); p.error = message; p.lastAttempt = new Date().toISOString(); await persist(); broadcast(); },
+  onFailure: async (id, message) => { const p = provider(id); p.error = message; p.lastAttempt = new Date().toISOString(); markHealthFailure(p, new Error(message)); await persist(); broadcast(); },
 });
 const openAiAccount = createOpenAiAccount({
   rpcFactory: () => openAiTransport.openCodexRpc(),
@@ -265,7 +272,7 @@ function publicState() {
   const { history, ...visibleState } = state;
   // L'ordre de consommation a été retiré : aucun `strategy` n'est exposé.
   delete visibleState.strategy;
-  return { ...visibleState, app: publicAppInfo(), historyCount: history.length, historyRevision: history[0]?.id || null, providers: state.providers.map(p => ({ ...p, ...(p.id === 'ollama' && p.snapshot ? { snapshot: { ...p.snapshot, usageCredits: lastKnownUsageCredits(p.snapshot, history) } } : {}), connector: connectionInfo(p.id), connected: isConnected(p), syncing: busy.has(p.id), ...(p.id === 'antigravity' ? { accountConnection: antigravityConnection } : p.id === 'claude' ? { accountConnection: claudeConnection } : p.id === 'openai' ? { accountConnection: openAiAccount.info() } : p.id === 'orcarouter' ? { accountConnection: orcaConnection } : p.id === 'ollama' ? { accountConnection: ollamaConnection } : connectors[p.id]?.browserAccount ? { accountConnection: subscriptionAccounts.info(p.id) } : {}) })), summary: summary(state.providers), desktop: true };
+  return { ...visibleState, app: publicAppInfo(), historyCount: history.length, historyRevision: history[0]?.id || null, providers: state.providers.map(p => ({ ...p, ...(p.id === 'ollama' && p.snapshot ? { snapshot: { ...p.snapshot, usageCredits: lastKnownUsageCredits(p.snapshot, history) } } : {}), connector: connectionInfo(p.id), connected: isConnected(p), syncing: busy.has(p.id), health: publicHealth(state.connectorHealth?.[p.id], p.snapshot), ...(p.id === 'antigravity' ? { accountConnection: antigravityConnection } : p.id === 'claude' ? { accountConnection: claudeConnection } : p.id === 'openai' ? { accountConnection: openAiAccount.info() } : p.id === 'orcarouter' ? { accountConnection: orcaConnection } : p.id === 'ollama' ? { accountConnection: ollamaConnection } : connectors[p.id]?.browserAccount ? { accountConnection: subscriptionAccounts.info(p.id) } : {}) })), summary: summary(state.providers), desktop: true };
 }
 function broadcast() {
   for (const window of [mainWindow, quickWindow]) if (window && !window.isDestroyed()) window.webContents.send('state:changed', publicState());
@@ -278,10 +285,35 @@ function provider(id) {
 }
 function record(p, snapshot) {
   if (p.id === 'ollama' && p.subscriptionStatus === 'expired' && snapshot.source === 'api') snapshot = asOllamaFreeSnapshot(snapshot);
+  // Valider AVANT de toucher au dernier relevé : une réponse valide HTTP mais
+  // illisible ne doit jamais remplacer un relevé sain ni afficher un faux zéro.
+  assertSnapshot(p.id, snapshot);
   p.snapshot = snapshot;
   p.error = null;
+  state.connectorHealth = state.connectorHealth || {};
+  state.connectorHealth[p.id] = healthSuccess(state.connectorHealth[p.id], {
+    providerId: p.id,
+    strategy: strategyFor(p, connectors),
+    snapshot,
+  });
   state.history.unshift({ id: require('node:crypto').randomUUID(), providerId: p.id, ...snapshot });
   state.history = state.history.slice(0, HISTORY_LIMIT);
+}
+function markHealthSuccess(p, snapshot) {
+  state.connectorHealth = state.connectorHealth || {};
+  state.connectorHealth[p.id] = healthSuccess(state.connectorHealth[p.id], {
+    providerId: p.id,
+    strategy: strategyFor(p, connectors),
+    snapshot,
+  });
+}
+function markHealthFailure(p, error) {
+  state.connectorHealth = state.connectorHealth || {};
+  state.connectorHealth[p.id] = healthFailure(state.connectorHealth[p.id], {
+    providerId: p.id,
+    strategy: strategyFor(p, connectors),
+    error,
+  });
 }
 function assumeOllamaFree(p) {
   // "Active" is the local tracking switch, not proof of a paid Ollama plan.
@@ -330,6 +362,7 @@ async function syncOne(id) {
       }
     } catch (error) {
       p.error = error.message;
+      markHealthFailure(p, error);
       // Session explicitement invalide : repasser « non connecté » pour que la
       // prochaine action soit une reconnexion, pas une boucle d'échecs.
       if (id === 'orcarouter' && error.code === 'ORCA_AUTH') delete p.accountSession;
@@ -471,6 +504,7 @@ async function verifyOrcaAccount() {
         error.message = `${error.message} Réessai automatique au prochain cycle d’actualisation.`;
       }
       p.error = error.message;
+      markHealthFailure(p, error);
       await persist();
       orcaConnection = { status: 'error', message: error.message, errorCode: error.code || null };
       throw error;
@@ -571,6 +605,7 @@ async function verifyOllamaAccount(automatic = false) {
       showMain();
     } catch (error) {
       const code = error.code || null;
+      markHealthFailure(p, error);
       if (code === 'OLLAMA_LOGIN_PENDING') ollamaConnection = { status: 'waiting', message: error.message };
       else if (code === 'OLLAMA_SIGNIN' && ollamaBrowser?.phase?.() === 'closed') {
         const browser = ollamaBrowser; ollamaBrowser = null;
@@ -703,12 +738,20 @@ function registerIpc() {
   handle('account:verify', async id => {
     provider(id);
     if (disconnecting.has(id) || quitting) throw new Error('Déconnexion en cours.');
-    if (id === 'openai') await openAiAccount.read(provider(id).accountSession?.identity);
-    else if (id === 'antigravity') await verifyAntigravity();
-    else if (id === 'claude') await verifyClaudeDesktop({ manual: true });
-    else if (id === 'orcarouter') await verifyOrcaAccount();
-    else if (id === 'ollama') await verifyOllamaAccount();
-    else await subscriptionAccounts.read(id, { background: true, interactive: true });
+    try {
+      if (id === 'openai') await openAiAccount.read(provider(id).accountSession?.identity);
+      else if (id === 'antigravity') await verifyAntigravity();
+      else if (id === 'claude') await verifyClaudeDesktop({ manual: true });
+      else if (id === 'orcarouter') await verifyOrcaAccount();
+      else if (id === 'ollama') await verifyOllamaAccount();
+      else await subscriptionAccounts.read(id, { background: true, interactive: true });
+    } catch (error) {
+      // Les connecteurs dédiés enregistrent déjà leur santé ; ce filet couvre
+      // OpenAI/Codex et toute erreur remontée avant leur propre catch.
+      markHealthFailure(provider(id), error);
+      await persist(); broadcast();
+      throw error;
+    }
     return publicState();
   });
   // Explicit activation only: never reuse a local credential on migration/startup.
