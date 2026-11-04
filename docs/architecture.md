@@ -9,7 +9,7 @@
 - **Démarrage** : création du dossier, restriction ACL (`lib/window-security.cjs`), chargement de l’état avec migrations (`lib/data-store.cjs`), chargement des packs signés (`lib/connector-packs.cjs`), sauvegarde de démarrage (`lib/state-backups.cjs`), initialisation du journal (`lib/logger.cjs`), purge des résidus, chargement des clés chiffrées, enregistrement de l’IPC, création des deux fenêtres, du tray, des observateurs et des timers.
 - **Erreur de démarrage** : dialogue d’erreur et arrêt ; les fichiers existants ne sont jamais réinitialisés silencieusement.
 - **Fenêtres** : la fenêtre principale se masque à la fermeture ; le widget est une fenêtre sans cadre, ancrée au tray, masquée au blur et dimensionnée sur son contenu. Les fenêtres de connexion internes (OrcaRouter, Ollama) sont sandboxées, sans preload, avec partition persistante et liste fermée d’origines.
-- **Timers** : échéance Claude toutes les 2 s (vérifie `nextAttemptAt`), expiration des abonnements toutes les 60 s, actualisation et notifications toutes les 5 min, actualisation initiale si activée ; tous `unref()` et protégés contre les exceptions. Observateurs de fichiers sur les identifiants Claude Code (2 s) et le relevé Claude Desktop (2 s).
+- **Timers** : échéance Claude toutes les 2 s (vérifie `nextAttemptAt`), expiration des abonnements toutes les 60 s, actualisation et notifications toutes les 5 min, actualisation initiale si activée ; tous `unref()` et protégés contre les exceptions. Vérification de mise à jour 60 s après le démarrage puis toutes les 6 h, uniquement lorsque l’application est packagée ou que `LASMIUM_UPDATE_MANIFEST_URL` est défini. Observateurs de fichiers sur les identifiants Claude Code (2 s) et le relevé Claude Desktop (2 s).
 - **Reprise** : `powerMonitor` (`resume`, `unlock-screen`) réveille la lecture Claude et déclenche une synchronisation si elle est due.
 - **Arrêt ordonné** (`before-quit`) : arrêt des observateurs, fermeture des navigateurs et attente des travaux en cours, puis vidage de la file d’écriture (`store.settle()` et `credentials.settled()`), avant l’arrêt effectif.
 - **Notifications** : identité Windows via `app.setAppUserModelId` ; seuils d’échéance et de solde USD ; une alerte par jour et par motif ; calcul protégé contre un relevé sans tableau de soldes.
@@ -18,7 +18,7 @@
 
 Tous les canaux passent par une garde unique : la frame émettrice doit être la **frame principale** de la fenêtre et son URL, paramètres retirés, doit être **exactement** le fichier `renderer/index.html` de l’installation (`main.cjs`). Aucun canal générique de fichiers, de commandes ou de réseau n’est exposé ; une clé API en clair ne circule du renderer vers le processus principal qu’au moment de `provider:connect`.
 
-**25 canaux `ipcMain.handle`**, miroir exact dans `preload.cjs` (25 méthodes `invoke` + l’abonnement `state:changed`) :
+**27 canaux `ipcMain.handle`**, miroir exact dans `preload.cjs` (27 méthodes `invoke` + l’abonnement `state:changed`) :
 
 | Domaine | Canaux |
 | --- | --- |
@@ -28,6 +28,7 @@ Tous les canaux passent par une garde unique : la frame émettrice doit être la
 | Réglages | `settings:update` |
 | Connexions de compte | `account:open`, `account:verify`, `orca:open-account`, `orca:verify-account`, `ollama:open-account`, `ollama:open-email`, `ollama:verify-account`, `claude:enable-live` |
 | Données | `export`, `diagnostic`, `data:erase` |
+| Mises à jour | `update:check`, `update:state`, `update:install` |
 
 `publicState()` expose l’inventaire sans l’historique complet (`historyCount` et `historyRevision`), la destination de chaque compteur, `summary`, `desktop`, `app: { version, electron, packaged }` (sans chemin absolu) et `history:get` sert l’historique complet. L’ancien champ `strategy` (ordre de consommation retiré) n’est jamais exposé. `app:info` renvoie `{ version, electron, platform, dataDir, packaged }`, la version venant de `app.getVersion()` (source unique). `settings.theme` accepte `light`, `dark` et `system`.
 
@@ -130,7 +131,7 @@ La suggestion de modèle et l’ordre de consommation ont été **retirés du pr
 
 ## Mises à jour et canary (0.6.0)
 
-`lib/update-manifest.cjs` définit le manifeste signé Ed25519 : JSON canonique, version, `minApp`, URL HTTPS, taille et SHA-256 de l’archive. `lib/updater.cjs` vérifie le manifeste et le téléchargement, puis délègue l’extraction à `lib/zip-extract.cjs` (refus des chemins hors racine, liens symboliques et doublons) et le remplacement à `lib/update-install.cjs`. Le script PowerShell séparé attend la fermeture, sauvegarde l’ancienne application, copie la nouvelle et relance. `data/` reste hors du périmètre de copie. La clé privée est dans `.local/updater/` ; la clé publique `lib/updater-public.pem` est versionnée. Voir [updates.md](updates.md).
+`lib/update-manifest.cjs` définit le manifeste signé Ed25519 : JSON canonique, version, `minApp`, URL HTTPS, taille et SHA-256 de l’archive. `lib/updater.cjs` vérifie le manifeste et le téléchargement, puis délègue l’extraction à `lib/zip-extract.cjs` (refus des chemins hors racine, liens symboliques et doublons) et le remplacement à `lib/update-install.cjs`. Le script PowerShell séparé attend la fermeture, sauvegarde l’ancienne application, copie la nouvelle et relance. `data/` reste hors du périmètre de copie. La clé privée est dans `.local/updater/` ; la clé publique `lib/updater-public.pem` est versionnée. `main.cjs` instancie l’updater avec `net.fetch` (configuration réseau Windows), l’active seulement en mode packagé ou avec `LASMIUM_UPDATE_MANIFEST_URL`, vérifie 60 s après le démarrage puis toutes les 6 h, et expose trois canaux IPC : `update:check` (vérification manuelle), `update:state` (état courant : `idle`, `checking`, `available`, `downloading`, `extracting`, `ready`, `installing`, `up-to-date`, `error`, `disabled`) et `update:install` (téléchargement, extraction dans `data/updates/<version>/staging`, écriture du script d’installation, puis arrêt de l’application une fois le script démarré). Voir [updates.md](updates.md).
 
 `lib/canary-env.cjs` charge `.local/canary.env` pour le canary live, sans écraser l’environnement et sans journaliser de clé. Le harness `scripts/connector-canary.cjs` reste hors ligne par défaut.
 

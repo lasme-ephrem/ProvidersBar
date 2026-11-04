@@ -1,7 +1,7 @@
 # Maintenance
 
 Documentation des commandes réelles de vérification, de l'intégration continue et
-des procédures de maintenance. La version cible est **0.3.3** (branche `refonte/pro`,
+des procédures de maintenance. La version publiée est **0.6.5** (branche `main`,
 Node.js ≥ 24, Windows x64, Electron 44.x).
 
 ## Validation locale (Definition of Done)
@@ -23,10 +23,14 @@ Node.js ≥ 24, Windows x64, Electron 44.x).
 7. Audit des dépendances de production : `npm audit --omit=dev`.
 8. Vérifier `git diff --check` et `git status --short` avant commit.
 
-## Intégration continue (`.github/workflows/ci.yml`)
+## Intégration continue (`.github/workflows/`)
 
-Workflow Windows unique, déclenché sur `main`, `refonte/**`, les pull requests et
-manuellement. Deux jobs :
+Trois workflows, tous sur `windows-latest` et Node 24, avec des permissions en
+lecture seule sur le dépôt.
+
+### `.github/workflows/ci.yml` — CI principale
+
+Déclenché sur `main`, `refonte/**`, les pull requests et manuellement. Deux jobs :
 
 - **tests** (`windows-latest`, Node 24, cache npm) : `npm ci`, `npm run verify`
   (repli automatique sur `node scripts/check-syntax.cjs` si le script npm manque),
@@ -40,7 +44,36 @@ manuellement. Deux jobs :
   verts sur une machine Windows interactive avant `npm run package:release`.
 
 Concurrence : un nouveau push annule la CI précédente sur la même référence.
-Permissions : lecture seule du dépôt. Aucun secret de dépôt n'est nécessaire.
+Aucun secret de dépôt n'est nécessaire. `tests/quality.test.cjs` vérifie la
+structure de ce workflow (jobs, commandes, Node 24, caractère best-effort).
+
+### `.github/workflows/quality.yml` — Qualité
+
+Déclenché sur `main`, `chantier/**`, les pull requests et manuellement. Un seul
+job **tests** : `npm ci`, `npm run verify`, `npm test`, `npm run connectors:canary`
+(canary hors ligne, sans clé) puis les tests ciblés des fixtures de diagnostic
+(`tests/diagnostic-bundle.test.cjs`, `tests/state-backups.test.cjs`,
+`tests/connector-packs.test.cjs`, déjà inclus dans `npm test`). Aucun secret.
+
+### `.github/workflows/canary-live.yml` — Canary live
+
+Déclenchement **manuel uniquement** (`workflow_dispatch`). Un job **canary** :
+`npm ci` puis `npm run connectors:canary:live` avec les secrets de dépôt
+`LASMIUM_CANARY_OPENROUTER_KEY`, `LASMIUM_CANARY_DEEPSEEK_KEY` et
+`LASMIUM_CANARY_RUNINFRA_KEY`. Le script refuse de simuler un succès sans clé
+(code de sortie 2) et ne journalise aucune clé. Ne jamais exposer ces secrets à
+une pull request issue d'un fork (voir [updates.md](updates.md)).
+
+### Redondance à résorber
+
+`ci.yml` et `quality.yml` exécutent tous deux `npm ci`, `npm run verify` et
+`npm test` sur les mêmes événements (push sur `main`, pull requests, manuel) :
+chaque push lance donc deux fois la même suite sur deux runners Windows. Seuls
+`npm run connectors:canary` et les filtres de branches (`refonte/**` d'un côté,
+`chantier/**` de l'autre) diffèrent. La fusion recommandée consiste à ajouter
+`npm run connectors:canary` au job **tests** de `ci.yml`, à y reporter le filtre
+`chantier/**`, puis à supprimer `quality.yml` ; `tests/quality.test.cjs` doit
+rester vert (il n'inspecte que `ci.yml`).
 
 ## Scripts de vérification et tests transverses
 
@@ -58,7 +91,7 @@ Permissions : lecture seule du dépôt. Aucun secret de dépôt n'est nécessair
   package.json, README et CHANGELOG doivent annoncer la même version.
 - **`tests/packaging.test.cjs`** : packaging sur chemins simulés, sans Electron et
   sans copie du portable de 160 Mo — `scripts/package.cjs --release` (distribution
-  versionnée, renommage `Lasmium TOKENS-HUB.exe`, dépendances de production imbriquées,
+  versionnée, renommage `LasmiumTokensHub.exe`, dépendances de production imbriquées,
   refus d'écraser une release existante), mise à jour du portable (données
   préservées octet par octet, fichiers obsolètes retirés), `scripts/app-resources.cjs`
   (refus hors `dist`), `scripts/update-portable.cjs` (état de diagnostic absent ou
@@ -155,9 +188,10 @@ réelles aux emplacements prévus : un nom arbitraire peut contourner les exclus
 
 `test-results/` et `.npm-cache/` sont régénérables ; les supprimer après l'arrêt
 des processus de test, notamment les dossiers `smoke-data-*` qui contiennent des
-profils Chromium complets. Ne pas supprimer `dist/Lasmium TOKENS-HUB-win32-x64/data/` ou
+profils Chromium complets. Ne pas supprimer `dist/ProvidersBar-win32-x64/data/` ou
 `.local/` pour nettoyer le projet : ces dossiers peuvent contenir les comptes de
-l'utilisateur.
+l'utilisateur, ainsi que les clés privées de signature (`.local/updater/`,
+`.local/connector-packs/`).
 
 Les scripts ponctuels d'exploration de comptes ne font pas partie du projet
 maintenu. `scripts/generate-icon.py` recrée l'icône de Lasmium TOKENS-HUB et nécessite
@@ -179,8 +213,13 @@ ressources sont remplacées ensemble afin de retirer aussi les fichiers devenus
 inutilisés.
 
 Les scripts de packaging et de mise à jour incluent les dépendances de production
-(`proper-lockfile` et ses dépendances imbriquées) avec leurs notices, indispensables
-au renouvellement Claude dans le portable.
+déclarées dans `package.json` (`proper-lockfile` pour les verrous du renouvellement
+Claude, `yauzl` pour l'extraction des archives de mise à jour, et leurs dépendances
+imbriquées) avec leurs notices.
+
+La signature du manifeste de mise à jour (`npm run updater:sign`) et sa publication
+sur GitHub Releases sont décrites dans [updates.md](updates.md) ; la clé privée
+`.local/updater/private-key.pem` ne doit jamais être versionnée.
 
 ## Diagnostic réel explicite
 

@@ -172,7 +172,7 @@ Les abonnements et les API sont simplement listés, avec leurs quotas, soldes et
 - **Sessions web** : chaque fournisseur utilise un profil ou une partition isolés. Les navigateurs de connexion sont pilotés par un **pipe local** (`--remote-debugging-pipe`) ; aucun port TCP de débogage n’est ouvert par les lecteurs de comptes. Un port local n’existe qu’en **mode diagnostic explicite** (`--remote-debugging-port`), utilisé par `npm run verify:connections` et `npm run update:portable`.
 - **Purge au démarrage** : fichiers `.tmp` interrompus, port de diagnostic obsolète (sauf en mode diagnostic), sauvegardes de migration au-delà des deux plus récentes, profils de navigateur temporaires orphelins.
 - **Historique** : plafonné à **20 000 relevés** (≈ 7 jours à dix fournisseurs avec l’actualisation de 5 minutes) ; les plus anciens sont purgés.
-- **Export** : document JSON autonome `{ app, version, exportedAt, inventory, settings, strategy, manualResets, history }`, **sans** session, sans identité et sans empreinte de clé. La restauration depuis l’export n’est pas proposée.
+- **Export** : document JSON autonome `{ app, version, exportedAt, inventory, settings, manualResets, history }`, **sans** session, sans identité et sans empreinte de clé. La restauration depuis l’export n’est pas proposée.
 - **Effacer mes données** (Réglages, double confirmation) : supprime `state.json`, `credentials.json`, les profils de navigateur, les sauvegardes et les caches, puis réinitialise l’inventaire. Refusé pendant une synchronisation.
 - **Télémétrie** : aucune. Lasmium TOKENS-HUB n’envoie aucune donnée d’usage à un serveur Lasmium TOKENS-HUB.
 
@@ -208,7 +208,7 @@ npm start
 
 Les tests unitaires n’utilisent ni Electron, ni réseau, ni compte réel. Les tests Electron et les smoke tests nécessitent une session Windows interactive (DPAPI, fenêtres Chromium) ; ils utilisent des dossiers de données isolés et des réponses simulées.
 
-**Intégration continue** : [`.github/workflows/ci.yml`](.github/workflows/ci.yml) exécute sur `windows-latest` et Node 24 un job **tests** obligatoire (`npm ci`, `npm run verify`, `npm run lint`, `npm test`, `npm audit --omit=dev`) et un job **smoke-electron** *best-effort* (`continue-on-error`) pour les trois smoke tests, avec artefacts `test-results/`. Un échec du job smoke reste visible mais ne bloque pas la fusion ; la validation de release exécute les smoke tests sur une machine Windows interactive.
+**Intégration continue** : [`.github/workflows/ci.yml`](.github/workflows/ci.yml) exécute sur `windows-latest` et Node 24 un job **tests** obligatoire (`npm ci`, `npm run verify`, `npm run lint`, `npm test`, `npm audit --omit=dev`) et un job **smoke-electron** *best-effort* (`continue-on-error`) pour les trois smoke tests, avec artefacts `test-results/`. Un échec du job smoke reste visible mais ne bloque pas la fusion ; la validation de release exécute les smoke tests sur une machine Windows interactive. Deux autres workflows complètent la CI : [`quality.yml`](.github/workflows/quality.yml) (syntaxe, tests, canary hors ligne et fixtures de diagnostic, sur les mêmes événements que `ci.yml`) et [`canary-live.yml`](.github/workflows/canary-live.yml) (déclenchement manuel uniquement, clés de test fournies par les secrets du dépôt). Détail dans [docs/maintenance.md](docs/maintenance.md).
 
 ### Diagnostic réel des connexions
 
@@ -227,11 +227,11 @@ npm run package:release
 npm run release:artifacts
 ```
 
-La distribution propre est créée dans `dist/LasmiumTokensHub-0.4.0-win32-x64/` ; la commande refuse un dossier de release déjà existant. `npm run release:artifacts` produit l'archive ZIP et `dist/SHA256SUMS-0.4.0.txt`, et refuse d'archiver une release contenant un dossier de données personnelles. Le portable personnel reste dans `dist/ProvidersBar-win32-x64/`, à côté de ses données.
+La distribution propre est créée dans `dist/LasmiumTokensHub-<version>-win32-x64/` (la version vient de `package.json`, par exemple `LasmiumTokensHub-0.6.5-win32-x64`) ; la commande refuse un dossier de release déjà existant. `npm run release:artifacts` produit l'archive ZIP et `dist/SHA256SUMS-<version>.txt`, et refuse d'archiver une release contenant un dossier de données personnelles. Le portable personnel reste dans `dist/ProvidersBar-win32-x64/`, à côté de ses données.
 
-Les ressources applicatives sont préparées dans un dossier temporaire puis remplacées ensemble : les fichiers retirés des sources ne subsistent pas dans l’installation. `npm run update:portable` conserve `data/` et les sessions, ferme l’ancien processus s’il est joignable en diagnostic, puis nécessite de relancer l’application ; sinon, la quitter manuellement avant la mise à jour. Le packaging inclut les dépendances de production (`proper-lockfile` et ses dépendances) et leurs notices.
+Les ressources applicatives sont préparées dans un dossier temporaire puis remplacées ensemble : les fichiers retirés des sources ne subsistent pas dans l’installation. `npm run update:portable` conserve `data/` et les sessions, ferme l’ancien processus s’il est joignable en diagnostic, puis nécessite de relancer l’application ; sinon, la quitter manuellement avant la mise à jour. Le packaging inclut les dépendances de production (`proper-lockfile`, `yauzl` et leurs dépendances) et leurs notices.
 
-L’exécutable **n’est pas signé** et conserve les métadonnées binaires Electron ; conserver toutes les licences et notices du dossier distribué. Aucune mise à jour automatique n’est proposée.
+L’exécutable **n’est pas signé** et conserve les métadonnées binaires Electron ; conserver toutes les licences et notices du dossier distribué. Depuis 0.6.0, le portable vérifie et installe lui-même les mises à jour signées (manifeste Ed25519, SHA-256, HTTPS) : la génération de la clé, la signature du manifeste et la publication sur GitHub Releases sont décrites dans [docs/updates.md](docs/updates.md).
 
 ## Limites connues
 
@@ -245,13 +245,13 @@ L’exécutable **n’est pas signé** et conserve les métadonnées binaires El
 
 ## Structure et documentation
 
-- `main.cjs` et `preload.cjs` : processus principal (cycle de vie, fenêtres, IPC, état) et pont IPC limité (23 canaux `invoke`).
+- `main.cjs` et `preload.cjs` : processus principal (cycle de vie, fenêtres, IPC, état) et pont IPC limité (27 canaux `invoke`, plus l’abonnement `state:changed`).
 - `lib/` : stockage (`data-store.cjs`), sécurité des fenêtres et des données (`window-security.cjs`), export nettoyé (`privacy-export.cjs`), diagnostic (`diagnostics.cjs`), connecteurs et quotas.
 - `renderer/` : shell, vues, helpers UI, thèmes et réglages ; contrat dans [renderer/CONTRAT-UI.md](renderer/CONTRAT-UI.md).
 - `scripts/` et `tests/` : fabrication, diagnostic, maintenance et validation.
 - [Architecture, IPC et modèles de données](docs/architecture.md)
 - [Maintenance et procédures de validation](docs/maintenance.md)
-- [Validation de la version 0.4.0](docs/validation-0.4.0.md) · [validation 0.3.6](docs/validation-0.3.6.md) (archive) · [validation 0.3.5](docs/validation-0.3.5.md) (archive) · [validation 0.3.4](docs/validation-0.3.4.md) (archive) · [validation 0.3.3](docs/validation-0.3.3.md) (archive) · [validation 0.3.2](docs/validation-0.3.2.md) (archive) · [validation 0.3.1](docs/validation-0.3.1.md) (archive) · [validation 0.3.0](docs/validation-0.3.0.md) (archive) · [validation 0.2.0](docs/validation-0.2.0.md) (archive)
+- [Validation de la version 0.6.5](docs/validation-0.6.5.md) · [validation 0.6.0](docs/validation-0.6.0.md) · [validation 0.5.0](docs/validation-0.5.0.md) · [validation 0.4.0](docs/validation-0.4.0.md) (archive) · [validation 0.3.6](docs/validation-0.3.6.md) (archive) · [validation 0.3.5](docs/validation-0.3.5.md) (archive) · [validation 0.3.4](docs/validation-0.3.4.md) (archive) · [validation 0.3.3](docs/validation-0.3.3.md) (archive) · [validation 0.3.2](docs/validation-0.3.2.md) (archive) · [validation 0.3.1](docs/validation-0.3.1.md) (archive) · [validation 0.3.0](docs/validation-0.3.0.md) (archive) · [validation 0.2.0](docs/validation-0.2.0.md) (archive)
 - [Historique des versions](CHANGELOG.md)
 - [Provenance des logos](assets/providers/sources.json)
 
