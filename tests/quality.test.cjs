@@ -11,6 +11,10 @@ const root = path.resolve(__dirname, '..');
 const read = relative => fs.readFile(path.join(root, relative), 'utf8');
 const exists = relative => fss.existsSync(path.join(root, relative));
 
+// Vues du renderer, dans l'ordre de chargement de renderer/index.html
+// (coquille, cartes, pages, widget) ; toutes chargées avant app.js.
+const VIEW_SCRIPTS = ['renderer/views-shell.js', 'renderer/views-cards.js', 'renderer/views-pages.js', 'renderer/views-quick.js'];
+
 async function walk(relativeDir) {
   const files = [];
   const directory = path.join(root, relativeDir);
@@ -247,6 +251,34 @@ test('check-syntax couvre tous les fichiers .cjs/.js du dépôt', async () => {
       assert.ok(checked.has(file), `${file} n'est pas vérifié par scripts/check-syntax.cjs`);
     }
   }
+});
+
+test('chaque script de index.html existe, est vérifié par check-syntax et servi par l’aperçu', async () => {
+  const html = await read('renderer/index.html');
+  const sources = [...html.matchAll(/<script\b[^>]*\bsrc="([^"]+)"[^>]*>/gi)].map(match => match[1]);
+  assert.ok(sources.length >= 6, 'index.html doit déclarer ses scripts via src');
+  const syntax = require('../scripts/check-syntax.cjs');
+  const checked = new Set(syntax.listFiles().files.map(file => path.relative(root, file).split(path.sep).join('/')));
+  const preview = await read('scripts/preview.cjs');
+  for (const src of sources) {
+    const file = path.posix.normalize(path.posix.join('renderer', src));
+    assert.ok(exists(file), `${src} (index.html) est introuvable : ${file}`);
+    assert.ok(checked.has(file), `${file} n'est pas couvert par scripts/check-syntax.cjs`);
+    // La liste de routes de l'aperçu est fermée : chaque script doit y figurer.
+    const route = '/' + (src.startsWith('../') ? src.slice(3) : src);
+    assert.ok(preview.includes(`'${route}'`), `scripts/preview.cjs ne sert pas ${route}`);
+    if (src !== 'theme-init.js') assert.ok(html.includes(`<script src="${src}" defer>`), `${src} doit être chargé en defer`);
+  }
+  // Ordre de chargement : noyau, dates de réinitialisation, les quatre vues, puis app.js en dernier.
+  const expectedOrder = ['ui-core.js', 'reset-ui.js', ...VIEW_SCRIPTS.map(file => file.slice('renderer/'.length)), 'app.js'];
+  assert.deepEqual(sources.filter(src => expectedOrder.includes(src)), expectedOrder, 'ordre de chargement des scripts du renderer');
+  assert.equal(sources.at(-1), 'app.js', 'app.js doit être le dernier script chargé');
+  // Aucun script orphelin dans renderer/ et plus de views.js monolithique.
+  const loaded = new Set(sources.filter(src => !src.startsWith('../')));
+  for (const file of await walk('renderer')) {
+    if (file.endsWith('.js')) assert.ok(loaded.has(file.slice('renderer/'.length)), `${file} n'est pas chargé par index.html`);
+  }
+  assert.equal(exists('renderer/views.js'), false, 'renderer/views.js a été découpé en views-*.js');
 });
 
 // ---------------------------------------------------------------------------
@@ -527,7 +559,7 @@ test('la police Inter Variable est empaquetée avec sa licence OFL', async () =>
   assert.match(theme, /font-weight:\s*100 900/);
   assert.match(await read('renderer/theme.css'), /--font-ui:\s*"Inter Variable",\s*"Inter"/);
   assert.match(await read('renderer/index.html'), /href="styles\.css"/);
-  for (const script of ['renderer/styles.css', 'renderer/theme.css', 'renderer/ui-core.js', 'renderer/views.js', 'renderer/app.js', 'renderer/index.html']) {
+  for (const script of ['renderer/styles.css', 'renderer/theme.css', 'renderer/ui-core.js', ...VIEW_SCRIPTS, 'renderer/app.js', 'renderer/index.html']) {
     assert.doesNotMatch(await read(script), /fonts\.(?:googleapis|gstatic)\.com|https?:\/\/[^"'\s]+\.woff2/i, `${script} ne doit pas charger de police distante`);
   }
   // Le packaging copie le dossier assets (police + licence) dans le portable.
@@ -543,7 +575,8 @@ test('l’identité Lasmium est présente dans le renderer et les assets', async
   assert.match(mark, /linearGradient/);
   const icon = fss.readFileSync(path.join(root, 'assets', 'icon.png'));
   assert.equal(icon.subarray(1, 4).toString('latin1'), 'PNG', 'assets/icon.png doit être un PNG valide');
-  const views = await read('renderer/views.js');
+  // La marque (logo + wordmark) est définie une seule fois, dans la coquille.
+  const views = await read('renderer/views-shell.js');
   assert.match(views, /lasmium-mark\.svg/);
   assert.match(views, /brand-name">Lasmium/);
   assert.match(views, /brand-sub">TOKENS-HUB/);
@@ -554,7 +587,7 @@ test('l’identité Lasmium est présente dans le renderer et les assets', async
   assert.match(theme, /assets\/fonts\/SoraVariable\.woff2/);
   const license = await read('assets/fonts/LICENSE-Sora.txt');
   assert.match(license, /SIL OPEN FONT LICENSE|SIL Open Font License/i);
-  assert.doesNotMatch(views, /ProvidersBar/);
+  for (const file of VIEW_SCRIPTS) assert.doesNotMatch(await read(file), /ProvidersBar/, `${file} ne doit plus mentionner ProvidersBar`);
   assert.doesNotMatch(await read('renderer/styles.css'), /\.quick-segment|\.quick-extra/);
 });
 
