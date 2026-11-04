@@ -9,11 +9,15 @@ manière de signaler une vulnérabilité.
 
 | Version | Support sécurité |
 | --- | --- |
-| 0.3.x (branche `refonte/pro`) | oui, dernière version publiée |
-| 0.2.x et antérieures | non — mettre à jour vers la dernière version |
+| 0.6.x (branche `main`) | oui — dernière version publiée : 0.6.5 |
+| 0.5.x et antérieures | non — mettre à jour vers la dernière version |
 
 Les correctifs de sécurité sont livrés dans la dernière version ; il n'existe
-pas de branche de maintenance séparée.
+pas de branche de maintenance séparée. Depuis 0.6.0, le portable installe
+lui-même les versions suivantes par la mise à jour automatique signée (voir
+§4 et [`docs/updates.md`](docs/updates.md)) ; les versions 0.6.0 à 0.6.4
+doivent être mises à jour manuellement une fois, leur chaîne d'installation
+étant défectueuse.
 
 ## 2. Périmètre
 
@@ -24,7 +28,11 @@ Couvert :
 - les bibliothèques `lib/` : stockage local, chiffrement des clés, export
   nettoyé, durcissement des fenêtres, connecteurs, lecteurs de sessions ;
 - les profils de navigateur et partitions de session gérés par l'application ;
-- la chaîne de fabrication et de livraison du portable (`scripts/`, CI Windows).
+- les packs de connecteurs signés (`lib/connector-packs.cjs`) et la mise à jour
+  automatique signée (`lib/updater.cjs`, `lib/update-manifest.cjs`,
+  `lib/zip-extract.cjs`, `lib/update-install.cjs`) ;
+- la chaîne de fabrication, de signature et de livraison du portable
+  (`scripts/`, CI Windows, manifeste de mise à jour).
 
 Non couvert : voir [Hors périmètre](#6-hors-périmètre).
 
@@ -52,8 +60,15 @@ un utilisateur légitime qui contrôle sa session et son dossier de données.
   et n'ouvrent **aucun port TCP de débogage** ;
 - l'export de données est nettoyé : aucune session, identité pseudonyme,
   empreinte de clé ou jeton ;
+- la mise à jour automatique n'accepte qu'un manifeste signé Ed25519 (clé
+  publique embarquée `lib/updater-public.pem`), servi en HTTPS sans redirection
+  vers HTTP, et une archive dont la taille et le SHA-256 correspondent au
+  manifeste ; l'extraction refuse les chemins `..`, les liens symboliques et
+  tout `data/` embarqué, et l'installation ne touche jamais au dossier de
+  données ;
 - aucune télémétrie et aucun serveur Lasmium TOKENS-HUB : seules les lectures vers les
-  services configurés par l'utilisateur sortent du poste.
+  services configurés par l'utilisateur et la vérification du manifeste de mise
+  à jour (requête HTTPS sans donnée transmise) sortent du poste.
 
 **Non protégé**
 
@@ -76,37 +91,56 @@ un utilisateur légitime qui contrôle sa session et son dossier de données.
 | `state.json` / historique | lecture d'habitudes d'usage | ACL du dossier, pas de secret, purge des sauvegardes et plafond de 20 000 relevés |
 | Fenêtres de connexion | injection de contenu distant, hameçonnage | `sandbox`, `contextIsolation`, pas de `nodeIntegration`, `devTools:false`, allowlist d'origines, popups limités, permissions refusées |
 | Renderer de l'interface | XSS par donnée de fournisseur | CSP sans `unsafe-eval` ni script inline, échappement HTML centralisé, échappement des libellés distants, `connect-src 'self'` |
-| IPC (`preload.cjs` → `main.cjs`) | appel d'actions privilégiées | surface explicite de 25 méthodes, canaux littéraux, filtre frame principale + URL exacte, validation des charges utiles dans `lib/domain.cjs` et `lib/usage-strategy.js` |
+| IPC (`preload.cjs` → `main.cjs`) | appel d'actions privilégiées | surface explicite de 27 méthodes `invoke` (plus l'abonnement `state:changed`), canaux littéraux, filtre frame principale + URL exacte, validation des charges utiles dans `lib/domain.cjs` (`validatePatch`, `manualSnapshot`) et des relevés dans `lib/connector-contract.cjs` |
 | Sessions navigateur | vol de cookies | profils/partitions isolés par fournisseur, pipe local, pas de port TCP, `clearStorageData` à la déconnexion et à l'effacement |
 | Jetons Claude Code | copie ou journalisation | lus en mémoire seulement, jamais persistés par Lasmium TOKENS-HUB, erreurs expurgées, verrous et écriture atomique du fichier officiel |
 | Réseau sortant | exfiltration, mauvaise destination | liste fermée d'endpoints officiels, `redirect: 'error'`, validation stricte des réponses, aucune télémétrie |
 | Export / effacement | fuite ou suppression incomplète | export nettoyé et documenté, double confirmation, refus pendant synchronisation, purge des caches et profils |
-| Dossier portable | altération locale du code | ACL du dossier de données, procédure de mise à jour qui remplace les ressources ensemble ; l'exécutable n'est pas encore signé (voir §5) |
+| Dossier portable | altération locale du code | ACL du dossier de données, procédures de mise à jour (manuelle ou automatique) qui remplacent les ressources ensemble ; l'exécutable n'est pas encore signé (voir §6) |
+| Mise à jour automatique | manifeste ou archive altérés, téléchargement détourné | manifeste `latest.json` signé Ed25519 (clé publique embarquée), HTTPS obligatoire y compris après redirection, taille et SHA-256 vérifiés avant extraction, refus des chemins `..`, liens symboliques, doublons et `data/`, installation par script séparé après fermeture avec sauvegarde de l'ancienne version et rollback, `data/` jamais copié ni supprimé, journal `data/updates/update.log` sans secret |
+| Packs de connecteurs | endpoint détourné par un pack local | packs JSON signés Ed25519 (`lib/connector-packs-public.pem`), refus d'un downgrade, d'une signature invalide, d'un endpoint HTTP ou d'un `minApp` futur ; `LASMIUM_ALLOW_UNSIGNED_PACKS=1` réservé au développement |
 
 ## 5. Pratiques du projet
 
 - **Dépendances verrouillées** : `package-lock.json` versionné, installation par
-  `npm ci` en CI ; une seule dépendance de production (`proper-lockfile`).
+  `npm ci` en CI ; deux dépendances de production (`proper-lockfile` pour les
+  verrous du renouvellement Claude, `yauzl` pour l'extraction des archives de
+  mise à jour).
   Electron est une dépendance de développement mais fournit le runtime du
   portable : sa version est vérifiée par les tests.
 - **Audit** : `npm audit --omit=dev` en CI sur les dépendances de production ;
   `npm audit` complet est attendu avant chaque release, car le runtime Electron
   livré ne fait pas partie de l'audit de production.
-- **CI Windows** : jobs déterministes (syntaxe, tests unitaires, audit) et job
-  Electron best-effort nécessitant une session graphique interactive.
+- **CI Windows** : trois workflows — `ci.yml` (syntaxe, tests unitaires, audit,
+  puis smoke Electron best-effort nécessitant une session graphique
+  interactive), `quality.yml` (syntaxe, tests, canary hors ligne, fixtures de
+  diagnostic) et `canary-live.yml` (déclenchement manuel uniquement, clés de
+  test lues dans les secrets du dépôt, jamais exposées à une pull request issue
+  d'un fork). Voir [`docs/maintenance.md`](docs/maintenance.md).
+- **Signature des livrables** : le manifeste de mise à jour et les packs de
+  connecteurs sont signés hors ligne (`npm run updater:sign`,
+  `npm run connectors:sign`) ; les clés privées restent dans `.local/updater/`
+  et `.local/connector-packs/` (ignorés par Git, `*.pem` exclu sauf les clés
+  publiques de `lib/`) ; seules les clés publiques sont versionnées.
 - **Tests de sécurité** : `tests/security.test.cjs`, `tests/window-security.test.cjs`,
   `tests/privacy-export.test.cjs` et `tests/quality.test.cjs` couvrent
   l'absence de port de débogage, l'allowlist, la CSP, l'export nettoyé, l'ACL,
-  la purge conditionnelle, l'absence de télémétrie et l'absence de secrets.
+  la purge conditionnelle, l'absence de télémétrie et l'absence de secrets ;
+  `tests/update-manifest.test.cjs`, `tests/updater.test.cjs`,
+  `tests/zip-extract.test.cjs`, `tests/update-install.test.cjs` et
+  `tests/connector-packs.test.cjs` couvrent la signature, le hachage,
+  l'extraction défensive, le script d'installation et les packs.
 - **Revue** : les changements touchant `main.cjs`, `preload.cjs`, `lib/`, le
   renderer, la fabrication ou les dépendances sont relus avant fusion (voir
-  `REFONTE-CONTRATS.md` et `analysis/06-revue-securite-finale.md`).
+  [`docs/archive/REFONTE-CONTRATS-0.3.md`](docs/archive/REFONTE-CONTRATS-0.3.md)
+  et [`docs/archive/audit-0.3/06-revue-securite-finale.md`](docs/archive/audit-0.3/06-revue-securite-finale.md)).
 - **Hygiène du dépôt** : `.gitignore` exclut données, sessions, clés, `.env` et
   résultats de tests ; un test vérifie l'absence de secrets et de chemins
   personnels dans le code livré.
 - **Transparence** : [`PRIVACY.md`](PRIVACY.md) décrit les données et leur
-  effacement ; `docs/architecture.md` décrit les flux ; `analysis/` contient les
-  revues de sécurité.
+  effacement ; [`docs/architecture.md`](docs/architecture.md) décrit les flux ;
+  [`docs/updates.md`](docs/updates.md) décrit la chaîne de mise à jour signée ;
+  `docs/archive/audit-0.3/` contient les revues de sécurité de la refonte 0.3.
 
 ## 6. Hors périmètre
 
@@ -122,16 +156,22 @@ un utilisateur légitime qui contrôle sa session et son dossier de données.
   ou de l'export.
 - Les dénis de service locaux, l'ingénierie sociale et les contenus affichés par
   les fournisseurs.
-- La signature Authenticode et l'intégrité du binaire portable : **le
-  `Lasmium TOKENS-HUB.exe` n'est pas signé** à ce jour ; vérifier la source de
-  téléchargement (dépôt officiel, dossier de release) avant exécution.
+- La signature Authenticode et la réputation SmartScreen du binaire portable :
+  **`LasmiumTokensHub.exe` n'est pas signé** à ce jour. Le manifeste Ed25519 et
+  le SHA-256 de la mise à jour automatique garantissent l'intégrité des versions
+  installées par l'application, pas la provenance du premier téléchargement :
+  vérifier la source (dépôt officiel, release GitHub, `SHA256SUMS-<version>.txt`)
+  avant la première exécution.
+- La disponibilité de l'hébergement du manifeste et des archives (GitHub
+  Releases) : une compromission de l'hébergeur ne permet pas d'installer une
+  archive non signée, mais peut retarder la distribution d'un correctif.
 
 ## 7. Signalement d'une vulnérabilité
 
 Merci de signaler toute vulnérabilité **en privé** :
 
 1. utiliser l'onglet **Security → Report a vulnerability** (Security Advisories)
-   du dépôt GitHub officiel : `https://github.com/lasme-ephrem/Lasmium TOKENS-HUB` ;
+   du dépôt GitHub officiel : `https://github.com/lasme-ephrem/lasmium-tokens-bar` ;
 2. à défaut d'accès à cet outil, contacter le mainteneur du dépôt par un canal
    privé déjà établi ;
 3. ne **pas** ouvrir d'issue publique contenant des détails exploitables, des
@@ -156,8 +196,19 @@ les tests destructifs contre des services tiers ne sont pas autorisés.
   personnel protégé.
 - Installer le portable dans un dossier lisible seulement par l'utilisateur ;
   éviter un partage réseau ou une clé USB non chiffrée.
-- Vérifier la provenance du dossier de release (dépôt officiel) ; aucun binaire
-  n'est signé actuellement.
+- Vérifier la provenance du dossier de release (dépôt officiel,
+  `SHA256SUMS-<version>.txt`) ; aucun binaire n'est signé actuellement.
+- Installer les mises à jour proposées par **Réglages → Mises à jour** : seule
+  une archive dont le manifeste est signé et le SHA-256 vérifié est installée,
+  et `data/` n'est jamais touché. Les versions 0.6.0 à 0.6.4 doivent être mises
+  à jour manuellement une fois (voir [`docs/updates.md`](docs/updates.md)).
+- Pour les mainteneurs : les clés privées `.local/updater/private-key.pem`
+  (mise à jour) et `.local/connector-packs/private-key.pem` (packs) sont des
+  secrets à protéger — jamais versionnées, jointes à un ticket ni synchronisées ;
+  en conserver une sauvegarde hors ligne. En cas de fuite suspectée, régénérer
+  la paire (`npm run updater:key`, `npm run connectors:key`) et publier une
+  version embarquant la nouvelle clé publique, en sachant que les installations
+  existantes devront être mises à jour manuellement une fois.
 - En cas de doute : **Réglages → Effacer mes données**, quitter l'application,
   supprimer le dossier de données résiduel, puis révoquer les clés API et les
   connexions de comptes auprès des fournisseurs.
@@ -166,11 +217,26 @@ les tests destructifs contre des services tiers ne sont pas autorisés.
   et la relancer normalement après usage (la purge de démarrage retire le
   fichier de port obsolète hors mode diagnostic).
 
-## 9. historique
+## 9. Historique
 
+- 2026-11 (versions 0.6.0 à 0.6.5) : mise à jour automatique signée du portable
+  (manifeste Ed25519, HTTPS obligatoire, taille et SHA-256 vérifiés, extraction
+  défensive, installation après fermeture avec rollback, `data/` préservé),
+  vérification 60 s après le démarrage puis toutes les 6 h, clé privée hors
+  dépôt dans `.local/updater/`, dépendance de production `yauzl`. Les 0.6.1 à
+  0.6.5 corrigent successivement l'extraction, le staging et le lancement du
+  script ; la 0.6.5 est la première version dont l'auto-update est opérationnel
+  de bout en bout. Détail : [`docs/updates.md`](docs/updates.md) et
+  [`docs/validation-0.6.5.md`](docs/validation-0.6.5.md).
+- 2026-11 (version 0.5.0) : packs de connecteurs JSON signés Ed25519 (refus des
+  downgrades, des endpoints HTTP et des packs altérés), validation des relevés
+  par contrat et disjoncteur, sauvegardes rotatives de `state.json`, bundle de
+  diagnostic et journal local sans secret. Détail :
+  [`docs/validation-0.5.0.md`](docs/validation-0.5.0.md) et
+  [`docs/runbook-connectors.md`](docs/runbook-connectors.md).
 - 2026-11 (version 0.3.0) : suppression de tout port CDP TCP pour les lecteurs de
   comptes (`--remote-debugging-pipe`), allowlist d'origines pour les fenêtres de
   connexion, ACL du dossier de données, export nettoyé, effacement des données,
   `devTools:false`, CSP et échappement durcis, Electron 44.10.2 (audit des
   dépendances sans vulnérabilité connue). Détail et résiduels :
-  [`analysis/06-revue-securite-finale.md`](analysis/06-revue-securite-finale.md).
+  [`docs/archive/audit-0.3/06-revue-securite-finale.md`](docs/archive/audit-0.3/06-revue-securite-finale.md).

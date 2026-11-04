@@ -1,4 +1,7 @@
-# Confidentialité — Lasmium TOKENS-HUB 0.3.0
+# Confidentialité — Lasmium TOKENS-HUB
+
+Ce document décrit le comportement de la version **0.6.5** ; la version
+installée est affichée dans les réglages de l'application.
 
 Lasmium TOKENS-HUB est une application **locale pour Windows x64**. Elle ne dispose
 d'aucun serveur, d'aucun compte Lasmium TOKENS-HUB et d'aucune télémétrie : les données
@@ -17,13 +20,15 @@ Il ne constitue pas une certification de conformité juridique (voir
 | Inventaire des services | Nom, type (abonnement ou API), tarif, devise, périodicité, date d'échéance, notes libres, favori, état actif/expiré | Saisie de l'utilisateur, complétée par les migrations de l'application |
 | Historique des relevés | Jusqu'à **20 000 relevés** (identifiant, fournisseur, horodatage, soldes par devise, pourcentages de quota, dates de remise à zéro) | Lectures fournisseurs et relevés manuels |
 | Réglages | Actualisation automatique, notifications, seuil de solde bas, thème clair/sombre/système | Saisie de l'utilisateur |
-| Stratégie de consommation | Profil de coût (tokens), modèles choisis par réserve, exclusions de routes API | Saisie de l'utilisateur |
+| Santé des connecteurs | Par fournisseur : dernier succès, dernier échec, compteur d'échecs, code et message d'erreur, prochaine tentative | Résultat des lectures fournisseurs |
 | Clés API | Clés OpenRouter, DeepSeek et RunInfra, **chiffrées** (voir §3) | Saisie de l'utilisateur |
 | Sessions de connexion aux comptes | Profils Chrome/Edge dédiés et partitions Electron (`persist:ollama-account`, `persist:orcarouter-account`) : cookies de session, stockage local des portails fournisseurs | Connexion de l'utilisateur sur les sites officiels |
 | Identifiants de compte pseudonymes | Pour OpenAI : empreinte SHA-256 de l'adresse e-mail du compte Codex (jamais l'adresse en clair). Pour OrcaRouter : identifiants **numériques** de compte et d'espace de travail. | Réponses des services officiels |
 | Cooldowns API | Empreintes SHA-256 de clés API et échéance de reprise après une réponse HTTP 429 (plafond 100 entrées) | Réponses des fournisseurs |
 | Relevé local Claude Desktop | Deux pourcentages lus dans `plan-usage-history.json` du profil Claude Desktop local | Fichier local de Claude Desktop |
 | Jetons Claude Code | Jetons OAuth lus **en mémoire** depuis le fichier officiel de Claude Code, jamais copiés dans Lasmium TOKENS-HUB | Fichier local `~/.claude/.credentials.json` |
+| Journal local | Échecs de lecture (code et message), sauvegardes d'état, démarrages, disponibilité d'une mise à jour ; **sans clé, jeton, solde ni chemin absolu** | Fonctionnement de l'application |
+| Mise à jour automatique | Version disponible, archive téléchargée et journal du script d'installation (`updates/update.log`) | Manifeste et archive de la release officielle |
 
 Aucune conversation, aucun contenu de prompt, aucun mot de passe et aucun
 message ne sont lus ou conservés. Les lecteurs de comptes n'extraient que des
@@ -33,14 +38,20 @@ pourcentages, des soldes, des libellés de limite bornés et des dates.
 
 | Mode d'installation | Dossier de données |
 | --- | --- |
-| Portable personnel | `dist/Lasmium TOKENS-HUB-win32-x64/data/` (à côté de l'exécutable) |
+| Portable personnel | `dist/ProvidersBar-win32-x64/data/` (nom historique conservé, à côté de l'exécutable) |
 | Développement | `.local/` |
-| Choix explicite | dossier indiqué par la variable d'environnement `PROVIDERSBAR_DATA_DIR` |
+| Choix explicite | dossier indiqué par la variable d'environnement `LASMIUM_DATA_DIR` (l'ancienne `PROVIDERSBAR_DATA_DIR` reste acceptée) |
 
 Ce dossier contient notamment :
 
-- `state.json` : inventaire, réglages, stratégie, cooldowns et historique ;
+- `state.json` : inventaire, réglages, santé des connecteurs, cooldowns et historique ;
 - `credentials.json` : clés API chiffrées (aucune clé en clair) ;
+- `backups/` : copies de `state.json` (au plus une toutes les 6 h, les **cinq plus
+  récentes** conservées) ; elles contiennent donc les mêmes données que l'état ;
+- `logs/lasmium.log` : journal rotatif (256 Ko, trois fichiers), sans secret ;
+- `connector-packs/` : packs de connecteurs signés ajoutés localement (facultatif) ;
+- `updates/` : archives de mise à jour téléchargées, dossier de préparation et
+  journal `update.log` du script d'installation ;
 - `account-browsers/<fournisseur>/` : profils Chrome/Edge dédiés aux comptes web ;
 - `Partitions/` : sessions Electron persistantes (Ollama, OrcaRouter) ;
 - `temporary-account-browsers/` : profils temporaires de lecture, purgés au démarrage ;
@@ -109,11 +120,27 @@ l'utilisateur, vers les services officiels qu'il a lui-même configurés :
 - `claude.ai`, `grok.com`, `z.ai` (pages d'utilisation dans Chrome/Edge) ;
 - `ollama.com` et `www.orcarouter.ai` (sessions de compte) ;
 - services locaux en boucle locale : service Antigravity sur `127.0.0.1` (port
-  du processus installé vérifié) et Codex `app-server` local.
+  du processus installé vérifié) et Codex `app-server` local ;
+- `github.com` (manifeste `latest.json` et archive ZIP de la release officielle,
+  uniquement pour la mise à jour automatique).
 
 Les écritures sont temporaires ou mises en cache par Windows/Chromium comme tout
 navigateur. Aucun proxy particulier n'est utilisé : les réglages réseau de
 Windows s'appliquent.
+
+**Mise à jour automatique.** Dans le portable, l'application envoie une requête
+HTTPS vers le manifeste `latest.json` de la release GitHub 60 secondes après le
+démarrage, puis **toutes les 6 heures**, ainsi qu'à la demande depuis
+**Réglages → Mises à jour**. Cette requête ne transmet **aucune donnée** : ni
+identifiant, ni inventaire, ni version installée (la comparaison de version se
+fait localement). Le manifeste est vérifié par signature Ed25519 avant toute
+utilisation ; l'archive n'est téléchargée que sur demande d'installation et
+son SHA-256 est contrôlé. Les étapes et erreurs du script d'installation sont
+consignées dans `data/updates/update.log`, sans secret ni donnée personnelle.
+Le dossier `data/` n'est jamais copié, remplacé ni supprimé par une mise à
+jour. En développement, aucune vérification n'a lieu sauf si
+`LASMIUM_UPDATE_MANIFEST_URL` est défini. Voir
+[`docs/updates.md`](docs/updates.md).
 
 ## 6. Export des données
 
@@ -121,8 +148,8 @@ L'action **Exporter mes données** produit un fichier JSON choisi par
 l'utilisateur, au format :
 
 ```json
-{ "app": "Lasmium TOKENS-HUB", "version": "0.3.0", "exportedAt": "…",
-  "inventory": [], "settings": {}, "strategy": null,
+{ "app": "Lasmium TOKENS-HUB", "version": "…", "exportedAt": "…",
+  "inventory": [], "settings": {},
   "manualResets": {}, "history": [] }
 ```
 
@@ -143,6 +170,9 @@ l'inventaire de départ.
 
 Ce qui n'est **pas** effacé par cette action :
 
+- les sous-dossiers `backups/` (copies de `state.json`), `logs/`, `updates/` et
+  `connector-packs/` du dossier de données : les supprimer manuellement avec le
+  dossier de données pour une remise à zéro complète ;
 - `~/.claude/.credentials.json` (fichier de Claude Code) ;
 - la session Codex et l'installation de Codex ;
 - les fichiers système, l'historique Windows et les sauvegardes externes
@@ -159,6 +189,9 @@ forcément ce dossier de données : il doit être supprimé explicitement.
 | --- | --- |
 | Historique | 20 000 relevés maximum ; les plus anciens sont purgés à l'écriture et au chargement |
 | Sauvegardes de migration | 2 plus récentes, les autres purgées au démarrage |
+| Sauvegardes rotatives (`backups/`) | 5 plus récentes, au plus une toutes les 6 h |
+| Journal local (`logs/`) | 3 fichiers de 256 Ko maximum, les plus anciens écrasés |
+| Mises à jour (`updates/`) | Archive et dossier de préparation conservés par version jusqu'à suppression manuelle ; une seule sauvegarde de l'ancienne application est gardée à côté de l'exécutable |
 | Cooldowns API | Entrées expirées purgées au démarrage et avant chaque lecture ; plafond 100 |
 | Profils temporaires de lecture | Purgés au démarrage et à la fermeture normale du lecteur |
 | Sessions de compte et clés API | Jusqu'à déconnexion ou effacement des données |
@@ -173,8 +206,9 @@ forcément ce dossier de données : il doit être supprimé explicitement.
 - **Portabilité** : export JSON autonome, lisible par un autre outil.
 - **Refus** : aucune connexion de compte ni saisie de clé n'est obligatoire ;
   l'application reste utilisable avec des relevés manuels.
-- **Transparence** : ce document, [`SECURITY.md`](SECURITY.md) et
-  [`docs/architecture.md`](docs/architecture.md) décrivent les flux réels.
+- **Transparence** : ce document, [`SECURITY.md`](SECURITY.md),
+  [`docs/architecture.md`](docs/architecture.md) et
+  [`docs/updates.md`](docs/updates.md) décrivent les flux réels.
 
 ## 10. Limites et transparence
 
