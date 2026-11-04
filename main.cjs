@@ -636,7 +636,7 @@ else {
       registerIpc();
       const webPreferences = { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true, spellcheck: false, devTools: false };
       const windowBackground = windowBackgroundFor(state.settings.theme);
-      mainWindow = new BrowserWindow({ width: 1360, height: 940, minWidth: 900, minHeight: 680, show: false, title: 'Lasmium TOKENS-HUB', icon: path.join(__dirname, 'assets/icon.png'), backgroundColor: windowBackground, icon: path.join(__dirname, 'assets/icon.png'), autoHideMenuBar: true, webPreferences });
+      mainWindow = new BrowserWindow({ width: 1360, height: 940, minWidth: 900, minHeight: 680, show: false, title: 'Lasmium TOKENS-HUB', icon: path.join(__dirname, 'assets/icon.png'), backgroundColor: windowBackground, autoHideMenuBar: true, webPreferences });
       secureWindow(mainWindow);
       mainWindow.on('close', event => { if (!quitting) { event.preventDefault(); mainWindow.hide(); } });
       mainWindow.once('ready-to-show', () => mainWindow.show());

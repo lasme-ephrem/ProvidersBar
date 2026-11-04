@@ -51,7 +51,7 @@ async function writeCredentials(home, document) {
 async function patchFetch(mode) {
   await desktop.evaluate(({ session }, data) => {
     globalThis.__claudeRequests = globalThis.__claudeRequests || { token: 0, usage: 0 };
-    session.defaultSession.fetch = async (url, options) => {
+    session.defaultSession.fetch = async (url, _options) => {
       const target = String(url);
       if (target === data.tokenUrl) {
         globalThis.__claudeRequests.token++;

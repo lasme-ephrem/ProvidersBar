@@ -1043,7 +1043,7 @@ const fontBytes = await fs.readFile(fontFile);
   // (USERPROFILE temporaire) et un transport HTTP simulé, jamais le vrai compte.
   assert.equal(await page.locator('[data-action="claude-enable-live"]').count(), 1);
   await desktop.evaluate(({ session }, urls) => {
-    session.defaultSession.fetch = async (url, options) => {
+    session.defaultSession.fetch = async (url, _options) => {
       if (String(url) === urls.token) return { ok: false, status: 400, headers: new Headers(), json: async () => ({}) };
       if (String(url) === urls.usage) return { ok: true, status: 200, json: async () => ({ five_hour: { utilization: 9, resets_at: '2099-09-30T11:00:00Z' }, seven_day: { utilization: 42, resets_at: '2099-10-07T08:00:00Z' }, limits: [{ display_name: 'Fable', percent: 31, resets_at: '2099-10-07T08:00:00Z' }] }) };
       throw new Error('Unexpected Claude endpoint');
@@ -1092,7 +1092,7 @@ const fontBytes = await fs.readFile(fontFile);
   // ------------------------------------------------------------------ *
   // Lecteur DOM réel des comptes (document Chromium sandboxé)
   // ------------------------------------------------------------------ *
-  const readings = await desktop.evaluate(async ({ app, BrowserWindow, session }) => {
+  const readings = await desktop.evaluate(async ({ BrowserWindow, session }) => {
     const { accounts, inspectSubscriptionPage } = process.mainModule.require('./lib/subscription-accounts.cjs');
     const isolated = session.fromPartition('subscription-dom-test');
     isolated.protocol.handle('https', () => new Response('<main><section role="dialog"><h2>Usage</h2><h3>5 hour usage limit</h3><p>80% remaining</p><h3>Weekly usage limit</h3><p>35% used</p></section></main>', { headers: { 'content-type': 'text/html' } }));

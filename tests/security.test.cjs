@@ -136,7 +136,6 @@ test('l’allowlist des fenêtres de compte est stricte et limitée aux origines
   for (const forbidden of ['https://claude.ai', 'https://grok.com', 'https://z.ai', 'https://chatgpt.com', 'http://127.0.0.1', 'http://localhost']) {
     assert.equal(origins.includes(forbidden), false, `${forbidden} ne doit jamais entrer dans l’allowlist`);
   }
-  const main = require('node:fs').readFileSync(path.join(root, 'main.cjs'), 'utf8');
   const flows = require('node:fs').readFileSync(path.join(root, 'lib', 'provider-flows.cjs'), 'utf8');
   assert.equal((flows.match(/secureAccountWindow\(\w+, ACCOUNT_ORIGINS\)/g) || []).length, 2, 'les deux fenêtres internes utilisent l’allowlist');
 });

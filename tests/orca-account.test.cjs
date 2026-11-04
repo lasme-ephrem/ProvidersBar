@@ -8,30 +8,6 @@ const ref = { userId: 12, workspaceId: 34 };
 const account = { success: true, data: { id: 12, active_workspace: { id: 34, wallet_quota: 26600000 }, quota: 999999999 } };
 const status = { success: true, data: { quota_per_unit: 500000 } };
 
-// La décision « session persistée ou fenêtre » vit dans main.cjs sans dépendre
-// d'Electron : elle est extraite de la source et exécutée ici (vérification
-// possible sans fenêtre, y compris après redémarrage).
-function loadMainHelper(name) {
-  const source = fsSync.readFileSync(path.join(__dirname, '..', 'main.cjs'), 'utf8');
-  const marker = `function ${name}(`;
-  const start = source.indexOf(marker);
-  assert.ok(start >= 0, `fonction ${name} introuvable dans main.cjs`);
-  assert.equal(source.lastIndexOf(marker), start, `fonction ${name} définie plusieurs fois dans main.cjs`);
-  const open = source.indexOf('{', start);
-  let depth = 0;
-  let end = -1;
-  for (let index = open; index < source.length; index++) {
-    if (source[index] === '{') depth++;
-    else if (source[index] === '}') {
-      depth--;
-      if (depth === 0) { end = index + 1; break; }
-    }
-  }
-  assert.ok(end > open, `fonction ${name} incomplète dans main.cjs`);
-  // eslint-disable-next-line no-new-func
-  return new Function(`return (${source.slice(start, end)})`)();
-}
-
 test('A persisted OrcaRouter session is verified without any login window', () => {
   const choose = chooseOrcaAccountRef;
   const stored = { userId: 102647, workspaceId: 102238 };
