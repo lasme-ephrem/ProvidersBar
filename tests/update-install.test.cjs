@@ -35,6 +35,19 @@ test('le script PowerShell échappe les chemins et refuse une cible incluse dans
     appPid: 1,
     logPath: 'log',
   }), /hors du dossier portable/);
+  const portable = path.join(os.tmpdir(), 'portable-data');
+  assert.match(buildWindowsInstallScript({
+    stagedRoot: path.join(portable, 'data', 'updates', '0.6.2', 'staging'),
+    targetRoot: portable,
+    appPid: 1,
+    logPath: path.join(portable, 'data', 'update.log'),
+  }), /Copy-Item/);
+  assert.throws(() => buildWindowsInstallScript({
+    stagedRoot: path.join(os.tmpdir(), 'staging-parent'),
+    targetRoot: path.join(os.tmpdir(), 'staging-parent', 'portable'),
+    appPid: 1,
+    logPath: 'log',
+  }), /incluse dans le dossier préparé/);
 });
 
 

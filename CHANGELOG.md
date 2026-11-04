@@ -1,5 +1,10 @@
 # Historique des versions
 
+## 0.6.3 — 4 novembre 2026
+
+- Le staging de mise à jour vit sous `<portable>/data/updates`, donc à l'intérieur du dossier portable. Le garde-fou l'autorise désormais explicitement tout en refusant tout autre sous-dossier du portable et une cible incluse dans le staging.
+- Validation du flux réel 0.6.0 → 0.6.3.
+
 ## 0.6.2 — 4 novembre 2026
 
 Second correctif d'extraction, découvert lors du test réel depuis la release
