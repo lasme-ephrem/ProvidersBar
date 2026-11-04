@@ -1,5 +1,35 @@
 # Historique des versions
 
+## 0.6.0 — 4 novembre 2026
+
+Version **Maintenance** : mise à jour automatique du portable et canary live.
+
+### Mise à jour automatique
+
+- Manifeste `latest.json` signé Ed25519, vérifié avant toute utilisation ;
+  URL HTTPS, version minimale, SHA-256 et taille contrôlés.
+- Téléchargement et extraction défensive : refus des chemins `..`, des liens
+  symboliques, des doublons, des archives trop volumineuses et de tout `data/`
+  embarqué.
+- Remplacement après fermeture par un script séparé : sauvegarde de
+  `resources/app` et de l'exécutable, copie, relance, rollback en cas d'échec.
+  `data/` n'est jamais copié ni supprimé.
+- Panneau **Réglages → Mises à jour** : vérification manuelle, notes, taille,
+  progression et installation avec redémarrage.
+- Outillage `updater:key` et `updater:sign`, clé privée dans `.local/updater/`,
+  clé publique versionnée.
+- Vérification automatique au démarrage (après 60 s) puis toutes les 6 heures.
+
+### Canary live
+
+- `connectors:canary:live` lit `.local/canary.env` (ignoré par Git) sans écraser
+  l'environnement, ne journalise aucune clé et échoue explicitement si aucune clé
+  n'est fournie. Les fournisseurs sans clé API sont signalés comme ignorés.
+
+### Qualité
+
+- 267 tests, dont manifeste, extraction ZIP, script d'installation et canary.
+
 ## 0.5.0 — 4 novembre 2026
 
 Version **Robustesse** : les connecteurs deviennent observables, réparables et

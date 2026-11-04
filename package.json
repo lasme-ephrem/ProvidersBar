@@ -1,6 +1,6 @@
 {
   "name": "lasmium-tokens-hub",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "private": true,
   "description": "Lasmium TOKENS-HUB — suivi local des abonnements, quotas et crédits IA pour Windows",
   "main": "main.cjs",
@@ -23,6 +23,9 @@
     "connectors:key": "node scripts/generate-connector-pack-key.cjs",
     "connectors:sign": "node scripts/sign-connector-pack.cjs",
     "connectors:canary": "node scripts/connector-canary.cjs",
+    "connectors:canary:live": "node scripts/connector-canary.cjs --live",
+    "updater:key": "node scripts/generate-update-key.cjs",
+    "updater:sign": "node scripts/sign-update-manifest.cjs",
     "state:backup": "node scripts/state-backup.cjs",
     "diagnostic": "node scripts/diagnostic-bundle.cjs"
   },
@@ -34,7 +37,8 @@
     "node": ">=24"
   },
   "dependencies": {
-    "proper-lockfile": "4.1.2"
+    "proper-lockfile": "4.1.2",
+    "yauzl": "^3.4.0"
   },
   "productName": "Lasmium TOKENS-HUB"
 }

@@ -136,6 +136,9 @@ async function main() {
   // ------------------------------------------------------------------ *
   await page.locator('[data-nav="settings"]').click();
   assert.equal(await page.locator('#app-version').innerText(), `Version ${packageJson.version}`);
+  assert.equal(await page.locator('.update-panel').count(), 1);
+  assert.match(await page.locator('.update-panel').innerText(), /Mises à jour/);
+  assert.equal(await page.locator('[data-action="update-check"]').count(), 1);
   assert.match(await page.locator('.privacy-note').innerText(), /Aucune télémétrie/);
   // Chips de statut de la légende des Réglages (T19) : texte toujours visible.
   assert.deepEqual(await page.locator('.resource-legend .level-pill').allTextContents(), [

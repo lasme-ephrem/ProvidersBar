@@ -810,6 +810,37 @@ function historyPage() {
 /* ------------------------------------------------------------------ *
  * Réglages
  * ------------------------------------------------------------------ */
+function updateSection() {
+  const update = state.update;
+  if (!update) return '';
+  const labels = {
+    idle: 'Prête à vérifier', checking: 'Vérification…', 'up-to-date': 'À jour',
+    available: 'Mise à jour disponible', downloading: 'Téléchargement…',
+    extracting: 'Préparation…', ready: 'Prête à installer', installing: 'Installation…',
+    error: 'Vérification impossible', disabled: 'Désactivées',
+  };
+  const busy = ['checking', 'downloading', 'extracting', 'installing'].includes(update.state);
+  const available = update.available;
+  const size = available ? `${(available.size / (1024 * 1024)).toFixed(1)} Mo` : '';
+  const install = available && !busy
+    ? `<button type="button" class="primary" data-action="update-install">Installer ${escapeHtml(available.version)} et redémarrer</button>`
+    : '';
+  const progress = busy && update.state !== 'checking'
+    ? `<progress class="update-progress" max="100" value="${Math.max(0, Math.min(100, update.progress || 0))}">${update.progress || 0}%</progress>`
+    : '';
+  return `<section class="settings-panel update-panel" aria-labelledby="update-title">`
+    + `<div class="section-heading"><h2 id="update-title">Mises à jour</h2>`
+    + `<span class="badge">${escapeHtml(labels[update.state] || update.state)}</span></div>`
+    + `<p class="hint">Version installée : <strong>${escapeHtml(update.currentVersion || state.app?.version || 'inconnue')}</strong>. `
+    + `Les mises à jour sont signées et vérifiées avant tout remplacement ; le dossier <code>data/</code> est conservé.</p>`
+    + (available ? `<p class="hint"><strong>${escapeHtml(available.version)}</strong> · ${escapeHtml(size)} · publiée le ${escapeHtml(String(available.publishedAt).slice(0, 10))}${available.notes ? `<br>${escapeHtml(available.notes)}` : ''}</p>` : '')
+    + progress
+    + `<div class="data-actions"><button type="button" class="secondary" data-action="update-check"${busy || !update.enabled ? ' disabled' : ''}>`
+    + `${icon('refresh', 16)} Vérifier les mises à jour</button>${install}</div>`
+    + (update.error ? `<p class="form-error" role="alert">${escapeHtml(update.error)}</p>` : '')
+    + `</section>`;
+}
+
 function settingsPage({ version = null, electronVersion = null, packaged = null, erasePending = false } = {}) {
   const versionText = version ? `Version ${escapeHtml(version)}` : 'Version non exposée';
   const aboutDetail = [electronVersion ? `Electron ${escapeHtml(electronVersion)}` : null,
@@ -854,6 +885,7 @@ function settingsPage({ version = null, electronVersion = null, packaged = null,
     + `<p class="hint privacy-note">${icon('shield', 15)} Aucune télémétrie : Lasmium TOKENS-HUB n’envoie `
     + `aucune donnée d’usage à un serveur Lasmium TOKENS-HUB. Les seules connexions réseau sont celles `
     + `nécessaires à la lecture des soldes chez les fournisseurs que tu as configurés.</p></section>`
+    + updateSection()
     + `<section class="settings-panel" aria-labelledby="data-title">`
     + `<div class="section-heading"><h2 id="data-title">Tes données t’appartiennent</h2></div>`
     + `<p class="hint">Les données et les clés chiffrées sont enregistrées localement. `

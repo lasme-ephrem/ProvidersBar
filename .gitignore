@@ -17,6 +17,7 @@ DevToolsActivePort
 !.env.example
 *.pem
 !lib/connector-packs-public.pem
+!lib/updater-public.pem
 *.key
 
 # Résultats locaux et fichiers temporaires

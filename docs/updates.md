@@ -1,0 +1,115 @@
+# Canary live et mises à jour signées
+
+## 1. Canary live : où mettre les clés
+
+Les clés de test ne sont **jamais** lues par l'application et ne sont pas versionnées.
+Le fichier local est déjà créé :
+
+`.local/canary.env`
+
+Renseigne uniquement des clés dédiées, en lecture seule et sans solde utile :
+
+```dotenv
+LASMIUM_CANARY_OPENROUTER_KEY=sk-or-...
+LASMIUM_CANARY_DEEPSEEK_KEY=sk-...
+LASMIUM_CANARY_RUNINFRA_KEY=...
+```
+
+Puis lance :
+
+```powershell
+npm run connectors:canary:live
+```
+
+Le script charge `.local/canary.env` sans écraser les variables déjà présentes dans
+PowerShell ou en CI. Il refuse de prétendre avoir testé quelque chose si aucune clé
+n'est fournie (code de sortie `2`). OrcaRouter n'a pas de clé API : il est ignoré.
+
+Pour la CI, utilise les secrets `LASMIUM_CANARY_OPENROUTER_KEY`,
+`LASMIUM_CANARY_DEEPSEEK_KEY` et `LASMIUM_CANARY_RUNINFRA_KEY`, avec un déclenchement
+manuel ou planifié. Ne les expose jamais dans une PR provenant d'un fork.
+
+## 2. Mise à jour automatique du portable
+
+### Principe
+
+1. L'application interroge un manifeste HTTPS (`latest.json`).
+2. Le manifeste est vérifié avec la clé publique Ed25519 **de mise à jour**.
+3. Le ZIP est téléchargé, son SHA-256 et sa taille sont vérifiés.
+4. Le ZIP est extrait avec refus des chemins `..`, des liens symboliques et des
+   archives contenant `data/`.
+5. Un script PowerShell séparé attend la fermeture de l'application, sauvegarde
+   `resources/app` et l'exécutable, copie la nouvelle version, puis relance.
+6. `data/` n'est jamais copié, remplacé ni supprimé.
+
+Une seule sauvegarde de secours est conservée. En cas d'échec de copie, l'ancienne
+version est restaurée. Le journal est écrit dans `data/updates/update.log`.
+
+### Clés
+
+- Clé privée : `.local/updater/private-key.pem` — **ne jamais versionner**, sauvegarde
+  hors ligne recommandée. Sans elle, aucune nouvelle mise à jour ne peut être signée.
+- Clé publique : `lib/updater-public.pem` — versionnée, embarquée dans l'application.
+
+Pour régénérer une paire (uniquement si tu acceptes de casser les mises à jour des
+versions déjà installées) :
+
+```powershell
+npm run updater:key
+```
+
+La commande refuse d'écraser une clé existante.
+
+### Construire et signer une version
+
+```powershell
+npm run package:release
+npm run release:artifacts
+npm run updater:sign -- --version 0.6.0 --notes "Corrections et mise à jour automatique"
+```
+
+Le manifeste est écrit dans `dist/latest.json`. Sans `--url`, l'URL GitHub Releases
+du dépôt `lasme-ephrem/ProvidersBar` est utilisée.
+
+Pour un autre hébergement :
+
+```powershell
+npm run updater:sign -- --version 0.6.0 --url "https://mon-domaine.example/LasmiumTokensHub-0.6.0-win32-x64.zip" --out dist/latest.json
+```
+
+### Publier
+
+Sur GitHub Releases :
+
+1. créer un tag `v0.6.0` ;
+2. joindre `dist/LasmiumTokensHub-0.6.0-win32-x64.zip` ;
+3. joindre `dist/latest.json` **sous le nom exact `latest.json`** ;
+4. publier la release.
+
+Sur un serveur statique, dépose le ZIP et `latest.json`, puis configure
+`LASMIUM_UPDATE_MANIFEST_URL` avec l'URL HTTPS du manifeste. En production, une
+variable d'environnement utilisateur n'est pas pratique : modifie la constante
+`DEFAULT_UPDATE_MANIFEST_URL` dans `main.cjs` ou garde GitHub Releases.
+
+### Tester sans publier
+
+Les tests unitaires vérifient la signature, le hash, l'extraction et le script
+d'installation. Pour un essai complet :
+
+- utilise une release GitHub **draft** ou un petit serveur HTTPS ;
+- lance l'application portable construit pour la version N-1 ;
+- vérifie le bandeau **Réglages → Mises à jour** ;
+- contrôle que `data/state.json` et `data/backups/` ont les mêmes tailles avant/après.
+
+En développement, `LASMIUM_UPDATE_MANIFEST_URL` active la vérification, mais
+l'installation reste bloquée sauf avec `LASMIUM_ALLOW_DEV_UPDATES=1` (à réserver aux
+essais jetables, jamais au dossier de données réel).
+
+### Limites
+
+- Windows x64 uniquement.
+- Une connexion HTTPS est obligatoire.
+- La publication et le certificat Authenticode restent des choix externes : le
+  manifeste Ed25519 garantit l'intégrité, pas la réputation SmartScreen.
+- Conserve une copie du ZIP et de la clé privée : la sauvegarde de secours locale
+  n'est pas un archive de release.

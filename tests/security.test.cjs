@@ -340,7 +340,7 @@ test('l’effacement des données supprime clés, sessions et profils puis réin
 
 test('aucune télémétrie : dépendances minimales, renderer sans réseau hors aperçu local', async () => {
   const pkg = JSON.parse(await read('package.json'));
-  assert.deepEqual(Object.keys(pkg.dependencies || {}), ['proper-lockfile']);
+  assert.deepEqual(Object.keys(pkg.dependencies || {}), ['proper-lockfile', 'yauzl']);
   const telemetryPackage = /analytics|telemetry|sentry|posthog|mixpanel|amplitude|bugsnag|datadog/i;
   for (const name of [...Object.keys(pkg.dependencies || {}), ...Object.keys(pkg.devDependencies || {})]) {
     assert.equal(telemetryPackage.test(name), false, `dépendance de télémétrie : ${name}`);

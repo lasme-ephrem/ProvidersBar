@@ -128,6 +128,12 @@ La suggestion de modèle et l’ordre de consommation ont été **retirés du pr
 
 `lib/state-backups.cjs` copie `state.json` dans `data/backups/` au plus toutes les 6 h avant écriture (5 dernières) et restaure avec validation et copie préalable. `lib/diagnostic-bundle.cjs` produit un JSON sans secret, sans solde et sans chemin absolu. `lib/logger.cjs` écrit un journal rotatif local. Voir le [runbook](runbook-connectors.md).
 
+## Mises à jour et canary (0.6.0)
+
+`lib/update-manifest.cjs` définit le manifeste signé Ed25519 : JSON canonique, version, `minApp`, URL HTTPS, taille et SHA-256 de l’archive. `lib/updater.cjs` vérifie le manifeste et le téléchargement, puis délègue l’extraction à `lib/zip-extract.cjs` (refus des chemins hors racine, liens symboliques et doublons) et le remplacement à `lib/update-install.cjs`. Le script PowerShell séparé attend la fermeture, sauvegarde l’ancienne application, copie la nouvelle et relance. `data/` reste hors du périmètre de copie. La clé privée est dans `.local/updater/` ; la clé publique `lib/updater-public.pem` est versionnée. Voir [updates.md](updates.md).
+
+`lib/canary-env.cjs` charge `.local/canary.env` pour le canary live, sans écraser l’environnement et sans journaliser de clé. Le harness `scripts/connector-canary.cjs` reste hors ligne par défaut.
+
 ## Diagnostic
 
 `lib/diagnostics.cjs` fournit des contrôles **lecture seule** et sans secret : dossier de données, chiffrement DPAPI (sonde PowerShell), navigateur Chrome/Edge, Codex, Claude Desktop, Claude Code, service local Antigravity, puis un accès HTTP non authentifié par endpoint de fournisseur (401/403 considérés comme normaux). `scripts/doctor.cjs` les exécute (`npm run doctor`, `--json` disponible) ; seuls `data-dir` et `encryption` sont bloquants, les autres résultats sont des avertissements actionnables. `scripts/verify-connections.cjs` reste le diagnostic **réel** des connexions : il se connecte au portable lancé avec `--remote-debugging-port=0`, vérifie l’URL exacte de la fenêtre, synchronise puis écrit `test-results/connections-live.json` sans identité, clé, cookie ni montant de portefeuille.

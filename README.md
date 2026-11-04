@@ -2,7 +2,13 @@
 
 Application desktop Windows pour suivre les abonnements, quotas et crédits de **dix fournisseurs d’IA**. Un tableau de bord et un widget dans la zone de notification regroupent les abonnements et les API avec leurs ressources restantes et leurs dates de réinitialisation.
 
-**Version 0.5.0 — 4 novembre 2026 :** version **Robustesse** des connecteurs — contrat typé, validation des relevés (un relevé incohérent ne remplace plus les dernières valeurs saines), panneau **Santé des connexions**, disjoncteur et reprise manuelle, **packs signés Ed25519** pour faire évoluer les endpoints API sans reconstruire l'app, sauvegardes rotatives, diagnostic sans secret et journal local. Toutes les fonctionnalités 0.4.0 sont conservées. Détails dans [CHANGELOG.md](CHANGELOG.md), la [matrice fournisseurs](docs/provider-matrix.md) et le [runbook](docs/runbook-connectors.md).
+**Version 0.6.0 — 4 novembre 2026 :** **mise à jour automatique signée** du portable, vérifiée par manifeste Ed25519 et SHA-256, avec remplacement après fermeture et conservation stricte de `data/` ; **canary live** prêt à recevoir des clés de test locales. Toutes les fonctionnalités 0.5.0 sont conservées. Détails dans [CHANGELOG.md](CHANGELOG.md), [updates.md](docs/updates.md), la [matrice fournisseurs](docs/provider-matrix.md) et le [runbook](docs/runbook-connectors.md).
+
+## Maintenance 0.6.0
+
+- **Mise à jour automatique** : l'application vérifie un manifeste HTTPS signé, télécharge l'archive, contrôle sa taille et son SHA-256, refuse les archives piégées (chemins `..`, liens symboliques, `data/`), puis un script séparé remplace l'application après fermeture. L'ancienne version reste disponible pour un rollback et `data/` n'est jamais touché. **Réglages → Mises à jour** permet aussi une vérification manuelle.
+- **Canary live** : `npm run connectors:canary:live` charge `.local/canary.env` (ignoré par Git) sans écraser les variables d'environnement. Aucune clé n'est journalisée ; l'absence de clé est signalée sans faux succès.
+- **Qualité** : 267 tests, tests dédiés au manifeste, à l'extraction ZIP, au script d'installation et au canary.
 
 ## Robustesse 0.5.0
 

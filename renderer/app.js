@@ -323,6 +323,32 @@ async function runAction(action, button) {
   if (action === 'diagnostic') {
     if (await api.exportDiagnostic()) toast('Diagnostic exporté, sans clés ni soldes.');
   }
+  if (action === 'update-check') {
+    button.disabled = true;
+    try {
+      const update = await api.checkUpdate();
+      state = { ...state, update };
+      render();
+      toast(update.state === 'available'
+        ? `Mise à jour ${update.available?.version} disponible.`
+        : update.state === 'up-to-date' ? 'Lasmium TOKENS-HUB est à jour.'
+          : update.error || 'Vérification terminée.');
+    } finally {
+      button.disabled = false;
+    }
+  }
+  if (action === 'update-install') {
+    if (!window.confirm('Installer la mise à jour et redémarrer Lasmium TOKENS-HUB ? Le dossier data/ sera conservé.')) return;
+    button.disabled = true;
+    try {
+      const update = await api.installUpdate();
+      state = { ...state, update };
+      render();
+      toast(update.state === 'error' ? update.error : 'Mise à jour prête. Redémarrage…');
+    } finally {
+      button.disabled = false;
+    }
+  }
 }
 
 /* ------------------------------------------------------------------ *

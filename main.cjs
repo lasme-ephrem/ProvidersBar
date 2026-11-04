@@ -6,7 +6,8 @@
 // Les parcours d'authentification fournisseur vivent dans lib/provider-flows.cjs
 // et l'orchestration des lectures dans lib/connector-sync.cjs ; main.cjs ne garde
 // que le cycle de vie, les fenêtres, l'IPC et l'état en mémoire.
-const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, nativeTheme, screen, safeStorage, dialog, Notification, session, powerMonitor } = require('electron');
+const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, nativeTheme, screen, safeStorage, dialog, Notification, session, powerMonitor, net } = require('electron');
+const fsSync = require('node:fs');
 const quotaResets = require('./lib/quota-resets.js');
 const fs = require('node:fs/promises');
 const path = require('node:path');
@@ -35,6 +36,7 @@ const { createConnectorSync, assumeOllamaFree } = require('./lib/connector-sync.
 const { assertSnapshot, healthSuccess, healthFailure, publicHealth, strategyFor, breakerOpen } = require('./lib/connector-contract.cjs');
 const { loadPacks, packFor, packSummary } = require('./lib/connector-packs.cjs');
 const { createProviderFlows } = require('./lib/provider-flows.cjs');
+const { createUpdater } = require('./lib/updater.cjs');
 const claudeDesktop = require('./lib/claude-desktop-usage.cjs');
 const claudeLive = require('./lib/claude-live-usage.cjs');
 const { CREDENTIAL_PATH } = require('./lib/claude-connection.cjs');
@@ -61,8 +63,30 @@ const ACCOUNT_ORIGINS = [...new Set([
 // donc laisser ce fichier intact tant que ce processus tourne.
 const diagnosticMode = process.argv.some(argument => argument.startsWith('--remote-debugging-port'));
 let mainWindow, quickWindow, tray, state, quitting = false;
+let updateTimer, updateStartupTimer;
 const credentials = createCredentialStore({ write: document => store.atomicWrite('credentials.json', document) });
 const disconnecting = new Set();
+const DEFAULT_UPDATE_MANIFEST_URL = 'https://github.com/lasme-ephrem/ProvidersBar/releases/latest/download/latest.json';
+const UPDATE_MANIFEST_URL = process.env.LASMIUM_UPDATE_MANIFEST_URL || DEFAULT_UPDATE_MANIFEST_URL;
+let lastUpdateState = null;
+const updater = createUpdater({
+  currentVersion: app.getVersion(),
+  manifestUrl: UPDATE_MANIFEST_URL,
+  publicKey: (() => { try { return fsSync.readFileSync(path.join(__dirname, 'lib', 'updater-public.pem'), 'utf8'); } catch { return ''; } })(),
+  dataDir,
+  targetRoot: path.dirname(process.execPath),
+  enabled: app.isPackaged || Boolean(process.env.LASMIUM_UPDATE_MANIFEST_URL),
+  fetchImpl: (url, options) => net.fetch(url, options),
+  quit: () => app.quit(),
+  onState: snapshot => {
+    if (snapshot.state !== lastUpdateState) {
+      lastUpdateState = snapshot.state;
+      if (snapshot.state === 'available') logger.info(`Mise à jour ${snapshot.available?.version || ''} disponible.`);
+      if (snapshot.state === 'error') logger.warn(`Mise à jour : ${snapshot.error}`);
+    }
+    if (state) broadcast();
+  },
+});
 // Electron uses Windows' network/proxy configuration for API connections too.
 const apiFetch = (...args) => session.defaultSession.fetch(...args);
 // Cooldowns 429 des clés API : store synchrone exigé par fetchUsage, adossé à
@@ -239,7 +263,7 @@ function publicState() {
   // L'ordre de consommation a été retiré : aucun `strategy` n'est exposé.
   delete visibleState.strategy;
   const flows = providerFlows.info();
-  return { ...visibleState, app: publicAppInfo(), connectorPacks: packSummary(connectorPacks), connectorPackErrors: connectorPackErrors.map(({ file, provider, reason }) => ({ file, provider: provider || null, reason })), historyCount: history.length, historyRevision: history[0]?.id || null, providers: state.providers.map(p => ({ ...p, ...(p.id === 'ollama' && p.snapshot ? { snapshot: { ...p.snapshot, usageCredits: lastKnownUsageCredits(p.snapshot, history) } } : {}), connector: connectionInfo(p.id), connected: isConnected(p), syncing: busy.has(p.id), health: publicHealth(state.connectorHealth?.[p.id], p.snapshot), ...(p.id === 'antigravity' ? { accountConnection: flows.antigravity } : p.id === 'claude' ? { accountConnection: flows.claude } : p.id === 'openai' ? { accountConnection: openAiAccount.info() } : p.id === 'orcarouter' ? { accountConnection: flows.orcarouter } : p.id === 'ollama' ? { accountConnection: flows.ollama } : connectors[p.id]?.browserAccount ? { accountConnection: subscriptionAccounts.info(p.id) } : {}) })), summary: summary(state.providers), desktop: true };
+  return { ...visibleState, app: publicAppInfo(), update: updater.info(), connectorPacks: packSummary(connectorPacks), connectorPackErrors: connectorPackErrors.map(({ file, provider, reason }) => ({ file, provider: provider || null, reason })), historyCount: history.length, historyRevision: history[0]?.id || null, providers: state.providers.map(p => ({ ...p, ...(p.id === 'ollama' && p.snapshot ? { snapshot: { ...p.snapshot, usageCredits: lastKnownUsageCredits(p.snapshot, history) } } : {}), connector: connectionInfo(p.id), connected: isConnected(p), syncing: busy.has(p.id), health: publicHealth(state.connectorHealth?.[p.id], p.snapshot), ...(p.id === 'antigravity' ? { accountConnection: flows.antigravity } : p.id === 'claude' ? { accountConnection: flows.claude } : p.id === 'openai' ? { accountConnection: openAiAccount.info() } : p.id === 'orcarouter' ? { accountConnection: flows.orcarouter } : p.id === 'ollama' ? { accountConnection: flows.ollama } : connectors[p.id]?.browserAccount ? { accountConnection: subscriptionAccounts.info(p.id) } : {}) })), summary: summary(state.providers), desktop: true };
 }
 async function loadConnectorPacks() {
   try {
@@ -560,6 +584,12 @@ function registerIpc() {
     return true;
   });
   handle('app:info', async () => appInfo());
+  handle('update:check', () => updater.check());
+  handle('update:state', () => updater.info());
+  handle('update:install', async () => {
+    if (!app.isPackaged && process.env.LASMIUM_ALLOW_DEV_UPDATES !== '1') throw new Error('L’installation d’une mise à jour est désactivée en développement.');
+    return updater.install();
+  });
   handle('data:erase', eraseAllData);
   handle('window:main', showMain);
 }
@@ -572,6 +602,8 @@ else {
     quitting = true;
     stopClaudeWatcher?.();
     clearInterval(claudeTimer);
+    clearInterval(updateTimer);
+    clearTimeout(updateStartupTimer);
     unwatchFile(CREDENTIAL_PATH);
     if (browsersClosed) return;
     event.preventDefault();
@@ -617,6 +649,12 @@ else {
       tray.setContextMenu(Menu.buildFromTemplate([{ label: 'Ouvrir Lasmium TOKENS-HUB', click: showMain }, { label: 'Synchroniser', click: () => syncAll({ force: true }).catch(error => console.error('Synchronisation manuelle :', error)) }, { type: 'separator' }, { label: 'Quitter', click: () => app.quit() }]));
       tray.on('click', toggleQuick); tray.on('double-click', showMain);
       broadcast();
+      if (updater.info().enabled) {
+        updateStartupTimer = setTimeout(() => { if (!quitting) updater.check().catch(() => {}); }, 60000);
+        updateStartupTimer.unref?.();
+        updateTimer = setInterval(() => { if (!quitting) updater.check().catch(() => {}); }, 6 * 60 * 60 * 1000);
+        updateTimer.unref?.();
+      }
       stopClaudeWatcher = claudeDesktop.watchClaudeDesktopUsage(() => {
         const p = state.providers.find(p => p.id === 'claude');
         if (!quitting && state.settings.autoRefresh && p && isTracked(p) && isConnected(p) && p.accountSession.kind === 'claude-desktop-local') verifyClaudeDesktop().catch(() => {});

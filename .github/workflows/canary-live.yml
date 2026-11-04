@@ -1,0 +1,25 @@
+name: Canary live
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  canary:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - name: Lecture réelle des APIs avec clés de test
+        env:
+          LASMIUM_CANARY_OPENROUTER_KEY: ${{ secrets.LASMIUM_CANARY_OPENROUTER_KEY }}
+          LASMIUM_CANARY_DEEPSEEK_KEY: ${{ secrets.LASMIUM_CANARY_DEEPSEEK_KEY }}
+          LASMIUM_CANARY_RUNINFRA_KEY: ${{ secrets.LASMIUM_CANARY_RUNINFRA_KEY }}
+        run: npm run connectors:canary:live
