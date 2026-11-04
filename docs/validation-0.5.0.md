@@ -25,7 +25,7 @@ document suit).
 ## Artefacts
 
 - Archive : `dist/LasmiumTokensHub-0.5.0-win32-x64.zip` (151,9 Mo / 159 237 581 octets)
-- SHA-256 : `1068a005fd18bb02ad783be7b2289bc4a3db909050d403436df0630957e460f6`
+- SHA-256 : `a2e7e44e4569fb72027777cb1427abb56bff62ef304c30ccb727ac1fb44844be`
 - Empreintes : `dist/SHA256SUMS-0.5.0.txt`
 - Exécutable packagé : `dist/LasmiumTokensHub-0.5.0-win32-x64/LasmiumTokensHub.exe`
   — SHA-256 `05e472fd3b2159c8965e7113cbea05ef3c1ca3419f779ea3af4e2da8e40f13be`
