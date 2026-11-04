@@ -109,7 +109,7 @@ essais jetables, jamais au dossier de données réel).
 
 - Windows x64 uniquement.
 - Une connexion HTTPS est obligatoire.
-- Les versions 0.6.0 à 0.6.4 contenaient des défauts d’extraction, de staging ou de lancement du script (entrée racine `./`, puis fichiers `.asar`) ; la 0.6.5 les corrige. Les clients 0.6.0/0.6.1 doivent être mis à jour manuellement une fois.
+- Les versions 0.6.0 à 0.6.4 contenaient des défauts d’extraction, de staging ou de lancement du script (entrée racine `./`, fichiers `.asar`, staging sous `data/updates`, démarrage du script) ; la 0.6.5 les corrige. Les clients 0.6.0 à 0.6.4 doivent être mis à jour manuellement une fois.
 - La publication et le certificat Authenticode restent des choix externes : le
   manifeste Ed25519 garantit l'intégrité, pas la réputation SmartScreen.
 - Conserve une copie du ZIP et de la clé privée : la sauvegarde de secours locale

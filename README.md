@@ -10,7 +10,7 @@ Application desktop Windows pour suivre les abonnements, quotas et crédits de *
 - **Démarrage fiable du script d'installation** : lancement via le shell Windows, script détaché, accusé de démarrage avant fermeture. L'application ne quitte qu'après cet accusé.
 - **Mise à jour automatique** : l'application vérifie un manifeste HTTPS signé, télécharge l'archive, contrôle sa taille et son SHA-256, refuse les archives piégées (chemins `..`, liens symboliques, `data/`), puis un script séparé remplace l'application après fermeture. L'ancienne version reste disponible pour un rollback et `data/` n'est jamais touché. **Réglages → Mises à jour** permet aussi une vérification manuelle.
 - **Canary live** : `npm run connectors:canary:live` charge `.local/canary.env` (ignoré par Git) sans écraser les variables d'environnement. Aucune clé n'est journalisée ; l'absence de clé est signalée sans faux succès.
-- **Qualité** : 269 tests, tests dédiés au manifeste, à l'extraction ZIP (entrée racine `./` et fichiers `.asar`), au script d'installation et au canary.
+- **Qualité** : 269 tests, tests dédiés au manifeste, à l'extraction ZIP (entrée racine `./` et fichiers `.asar`), au script d'installation et au canary. Flux réel 0.6.0 → 0.6.5 validé dans [validation-0.6.5.md](docs/validation-0.6.5.md).
 
 ## Robustesse 0.5.0
 
