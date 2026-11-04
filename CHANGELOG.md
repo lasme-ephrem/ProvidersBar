@@ -1,5 +1,71 @@
 # Historique des versions
 
+## 0.5.0 — 4 novembre 2026
+
+Version **Robustesse** : les connecteurs deviennent observables, réparables et
+capables d'évoluer sans reconstruire l'application. Toutes les fonctionnalités
+0.4.0 sont conservées et les données existantes sont migrées sans perte.
+
+### Contrat de connecteur et santé
+
+- Contrat pur `lib/connector-contract.cjs` : validation des relevés, erreurs
+  typées (`AUTH_REQUIRED`, `RATE_LIMITED`, `NETWORK`, `SCHEMA_DRIFT`…),
+  stratégie réellement utilisée, fraîcheur calculée sur la date du relevé.
+- **Un relevé incohérent ne remplace plus le dernier relevé sain** : il devient
+  `SCHEMA_DRIFT`, avec conservation des dernières valeurs et un message clair.
+- Santé persistée par fournisseur (migration non destructive) : dernier succès,
+  dernier échec, compteur d'échecs, code, message et prochaine tentative.
+- Panneau **Santé des connexions** : dix lignes avec état, stratégie, âge du
+  relevé et bouton **Tester** individuel.
+
+### Résilience
+
+- Disjoncteur dérivé de la santé : l'actualisation automatique espace les pannes
+  transitoires (30 s → 30 min) et les dérives (15 min), au lieu de marteler le
+  fournisseur. L'authentification reste immédiatement actionnable.
+- Toute action manuelle (Tester, Synchroniser, tray) force une tentative ; un
+  succès remet le compteur à zéro et réactive les mises à jour automatiques.
+- Chaînes de stratégies explicites, sans repli inventé (Claude direct →
+  Desktop ; les autres fournisseurs déclarent leur unique stratégie).
+
+### Packs de connecteurs signés
+
+- Format JSON versionné et **signé Ed25519**, vérifié au chargement : schéma,
+  fournisseur, version, `minApp`, endpoint HTTPS, expiration.
+- Pack embarqué + **override local signé** ; un downgrade ou un pack altéré est
+  refusé et visible dans le diagnostic. En développement uniquement,
+  `LASMIUM_ALLOW_UNSIGNED_PACKS=1` permet les essais.
+- Endpoints API surchargeables à chaud (OpenRouter, DeepSeek, RunInfra), sans
+  reconstruire l'application ; clé publique versionnée, clé privée locale.
+- Outillage : `npm run connectors:sign`, `npm run connectors:key`,
+  `npm run connectors:canary` (hors-ligne ou `--live` avec clés d'environnement).
+
+### Données et diagnostic
+
+- Sauvegardes rotatives de `state.json` toutes les 6 h (5 dernières), créées
+  avant écriture et au démarrage ; restauration validée qui sauvegarde d'abord
+  l'état courant. CLI `npm run state:backup`.
+- Bundle de diagnostic sans clé, solde ni chemin absolu, exportable depuis
+  **Réglages → Tes données** ou via `npm run diagnostic`.
+- Journal local rotatif (256 Ko × 3) pour les échecs de santé et les
+  sauvegardes, sans secret.
+
+### Qualité
+
+- 247 tests unitaires, tests dédiés au contrat, aux packs, aux sauvegardes, au
+  diagnostic et au journal ; smoke Electron étendu à la santé et à la dérive.
+- CI Windows (syntaxe, tests, canary) et documentation : matrice fournisseurs,
+  runbook de dépannage et de signature.
+
+### Limites assumées
+
+- Les lecteurs DOM des abonnements navigateur restent dans l'application : un
+  changement de sélecteur nécessite encore une version (les packs couvrent les
+  endpoints API).
+- Aucun canary `--live` n'est exécuté dans cette validation : pas de clés de
+  test réelles fournies. Aucune mise à jour automatique ni signature de code
+  Windows (certificat et hébergement à définir).
+
 ## 0.4.0 — 4 novembre 2026
 
 Nouvelle identité **Lasmium TOKENS-HUB** et refonte UX/UI complète, sans perte de fonctionnalité.

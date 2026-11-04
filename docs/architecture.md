@@ -6,7 +6,7 @@
 
 - **Dossier de données** : `PROVIDERSBAR_DATA_DIR`, sinon `data/` à côté de l’exécutable (packagé) ou `.local/` (développement). Il est aussi utilisé comme `userData` Electron : `state.json`, `credentials.json`, les partitions Chromium et les profils de navigateur y cohabitent.
 - **Instance unique** : `app.requestSingleInstanceLock()` ; un second lancement réaffiche la fenêtre principale.
-- **Démarrage** : création du dossier, restriction ACL (`lib/window-security.cjs`), chargement de l’état avec migrations (`lib/data-store.cjs`), purge des résidus, chargement des clés chiffrées, enregistrement de l’IPC, création des deux fenêtres, du tray, des observateurs et des timers.
+- **Démarrage** : création du dossier, restriction ACL (`lib/window-security.cjs`), chargement de l’état avec migrations (`lib/data-store.cjs`), chargement des packs signés (`lib/connector-packs.cjs`), sauvegarde de démarrage (`lib/state-backups.cjs`), initialisation du journal (`lib/logger.cjs`), purge des résidus, chargement des clés chiffrées, enregistrement de l’IPC, création des deux fenêtres, du tray, des observateurs et des timers.
 - **Erreur de démarrage** : dialogue d’erreur et arrêt ; les fichiers existants ne sont jamais réinitialisés silencieusement.
 - **Fenêtres** : la fenêtre principale se masque à la fermeture ; le widget est une fenêtre sans cadre, ancrée au tray, masquée au blur et dimensionnée sur son contenu. Les fenêtres de connexion internes (OrcaRouter, Ollama) sont sandboxées, sans preload, avec partition persistante et liste fermée d’origines.
 - **Timers** : échéance Claude toutes les 2 s (vérifie `nextAttemptAt`), expiration des abonnements toutes les 60 s, actualisation et notifications toutes les 5 min, actualisation initiale si activée ; tous `unref()` et protégés contre les exceptions. Observateurs de fichiers sur les identifiants Claude Code (2 s) et le relevé Claude Desktop (2 s).
@@ -18,7 +18,7 @@
 
 Tous les canaux passent par une garde unique : la frame émettrice doit être la **frame principale** de la fenêtre et son URL, paramètres retirés, doit être **exactement** le fichier `renderer/index.html` de l’installation (`main.cjs`). Aucun canal générique de fichiers, de commandes ou de réseau n’est exposé ; une clé API en clair ne circule du renderer vers le processus principal qu’au moment de `provider:connect`.
 
-**24 canaux `ipcMain.handle`**, miroir exact dans `preload.cjs` (24 méthodes `invoke` + l’abonnement `state:changed`) :
+**25 canaux `ipcMain.handle`**, miroir exact dans `preload.cjs` (25 méthodes `invoke` + l’abonnement `state:changed`) :
 
 | Domaine | Canaux |
 | --- | --- |
@@ -27,7 +27,7 @@ Tous les canaux passent par une garde unique : la frame émettrice doit être la
 | Synchronisation | `sync:all`, `sync:one` |
 | Réglages | `settings:update` |
 | Connexions de compte | `account:open`, `account:verify`, `orca:open-account`, `orca:verify-account`, `ollama:open-account`, `ollama:open-email`, `ollama:verify-account`, `claude:enable-live` |
-| Données | `export`, `data:erase` |
+| Données | `export`, `diagnostic`, `data:erase` |
 
 `publicState()` expose l’inventaire sans l’historique complet (`historyCount` et `historyRevision`), la destination de chaque compteur, `summary`, `desktop`, `app: { version, electron, packaged }` (sans chemin absolu) et `history:get` sert l’historique complet. L’ancien champ `strategy` (ordre de consommation retiré) n’est jamais exposé. `app:info` renvoie `{ version, electron, platform, dataDir, packaged }`, la version venant de `app.getVersion()` (source unique). `settings.theme` accepte `light`, `dark` et `system`.
 
@@ -102,7 +102,7 @@ Un relevé contient des soldes par devise, un quota principal et éventuellement
 
 `renderer/index.html` charge, dans l’ordre, `theme-init.js` puis les feuilles de style, les modules partagés de `lib/` (`quota-resets.js`, `resource-levels.js`) et les scripts du renderer (`ui-core.js`, `reset-ui.js`, `views.js`, `app.js`). `ui-core.js` fournit échappement, formatage, icônes, thème, focus, annonces et niveaux ; `views.js` contient les vues et le HTML des fiches et du widget ; `app.js` porte l’état, les événements, la boucle de rendu et les actions. Aucun script inline, aucun `eval`, aucune dépendance externe ; la CSP de `index.html` interdit les ressources distantes et `connect-src 'self'`.
 
-La fenêtre widget est dimensionnée en **360 × 560 px** par défaut (largeur fixe, hauteur adaptée au contenu entre 240 et 900 px via `window:quick-size`) ; elle reste une fenêtre sans cadre, ancrée au tray et masquée au blur.
+La fenêtre widget est dimensionnée en **360 × 660 px** par défaut (largeur fixe, hauteur adaptée au contenu entre 240 et 900 px via `window:quick-size`) ; elle reste une fenêtre sans cadre, ancrée au tray et masquée au blur.
 
 Le thème sombre d’origine reste dans les feuilles de style du renderer ; `renderer/theme.css` définit les tokens sémantiques clair/sombre. `settings.theme` vaut `light`, `dark` ou `system` ; `system` est résolu par `matchMedia('(prefers-color-scheme: dark)')` et suit les changements Windows en direct ; `main.cjs` aligne le fond natif via `nativeTheme.shouldUseDarkColors`. Les préférences explicites des anciens inventaires sont conservées (migration non destructive).
 
@@ -117,6 +117,14 @@ Une date fournisseur a priorité. Un complément sans heure conserve sa précisi
 ## Ordre de consommation retiré
 
 La suggestion de modèle et l’ordre de consommation ont été **retirés du produit**. Le moteur `lib/usage-strategy.js`, l’IPC `strategy:update`, la méthode `updateStrategy` du pont `preload.cjs` et les vues associées du renderer n’existent plus. La migration non destructive `removeUnusedProviders` (`lib/migrations.cjs`), appelée par `data-store` à chaque démarrage, supprime l’ancien champ `state.strategy` des inventaires existants — y compris une configuration contenant un modèle Gemini historique — sans modifier l’inventaire, l’historique, les réglages, ni les cooldowns. `publicState()` ne l’expose pas et l’export JSON ne le contient pas. Les cartes et le widget continuent d’afficher les quotas, les soldes, la fraîcheur et les dates de réinitialisation ; ils n’affichent plus de recommandation ni de catalogue de modèles.
+
+## Connecteurs robustes (0.5.0)
+
+`lib/connector-contract.cjs` est pur et sans dépendance Electron : validation des relevés (`validateSnapshot`, `assertSnapshot`), classification typée des erreurs, calcul de fraîcheur sur `snapshot.updatedAt`, santé (`healthSuccess` / `healthFailure`) et disjoncteur (`breakerOpen`). `main.cjs` valide **avant** `record` : un relevé incohérent devient `SCHEMA_DRIFT` et le snapshot précédent reste intact. La santé est persistée dans `state.connectorHealth` par une migration non destructive et exposée par fournisseur dans `publicState()`.
+
+`lib/connector-packs.cjs` charge des packs JSON signés Ed25519 depuis `assets/connector-packs/` puis `<dataDir>/connector-packs/`. Le dernier dossier gagne à version égale ; un downgrade, une signature invalide, un endpoint HTTP ou un `minApp` futur sont refusés. Les endpoints API sont passés à `fetchUsage` ; les sélecteurs DOM ne sont pas encore surchargeables. La clé publique est versionnée dans `lib/connector-packs-public.pem` ; la clé privée reste dans `.local/`.
+
+`lib/state-backups.cjs` copie `state.json` dans `data/backups/` au plus toutes les 6 h avant écriture (5 dernières) et restaure avec validation et copie préalable. `lib/diagnostic-bundle.cjs` produit un JSON sans secret, sans solde et sans chemin absolu. `lib/logger.cjs` écrit un journal rotatif local. Voir le [runbook](runbook-connectors.md).
 
 ## Diagnostic
 

@@ -2,7 +2,15 @@
 
 Application desktop Windows pour suivre les abonnements, quotas et crédits de **dix fournisseurs d’IA**. Un tableau de bord et un widget dans la zone de notification regroupent les abonnements et les API avec leurs ressources restantes et leurs dates de réinitialisation.
 
-**Version 0.4.0 — 4 novembre 2026 :** nouvelle identité **Lasmium TOKENS-HUB** et refonte UX/UI complète — logo Lasmium, palette obsidian/lime, typographie Sora + Inter, rail de navigation sombre, cartes et panneau de fiche redessinés, widget repositionné. Toutes les fonctionnalités des versions 0.3.x sont conservées (connexions, quotas segmentés, Ollama, soldes API, export, effacement). Détails dans [CHANGELOG.md](CHANGELOG.md) et [docs/validation-0.4.0.md](docs/validation-0.4.0.md).
+**Version 0.5.0 — 4 novembre 2026 :** version **Robustesse** des connecteurs — contrat typé, validation des relevés (un relevé incohérent ne remplace plus les dernières valeurs saines), panneau **Santé des connexions**, disjoncteur et reprise manuelle, **packs signés Ed25519** pour faire évoluer les endpoints API sans reconstruire l'app, sauvegardes rotatives, diagnostic sans secret et journal local. Toutes les fonctionnalités 0.4.0 sont conservées. Détails dans [CHANGELOG.md](CHANGELOG.md), la [matrice fournisseurs](docs/provider-matrix.md) et le [runbook](docs/runbook-connectors.md).
+
+## Robustesse 0.5.0
+
+- **Un relevé illisible ne devient jamais un faux zéro** : il est classé `SCHEMA_DRIFT` et le dernier relevé sain est conservé. La santé de chaque fournisseur (état, stratégie, âge, prochaine tentative) est persistée et visible dans **Connexions**.
+- **Disjoncteur** : l'actualisation automatique espace les pannes (30 s → 30 min) au lieu de marteler le fournisseur ; **Tester** et **Synchroniser** forcent une tentative immédiate.
+- **Packs signés** : endpoints et métadonnées de parseur peuvent être corrigés via un pack local signé, sans reconstruire l'application. Un pack altéré, non signé, HTTP ou plus ancien est refusé. Outillage `connectors:sign`, `connectors:key`, `connectors:canary`.
+- **Données** : sauvegardes rotatives de `state.json` (5 dernières), restauration contrôlée avec copie préalable, bundle de diagnostic sans clé ni solde, journal local rotatif.
+- **Qualité** : 247 tests, smoke Electron étendu à la santé et à la dérive, CI Windows.
 
 ## Refonte 0.4.0
 
