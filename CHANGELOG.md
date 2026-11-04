@@ -1,5 +1,20 @@
 # Historique des versions
 
+## 0.3.5 — 4 novembre 2026
+
+Lisibilité des quotas et identité visuelle : segmentation explicite des abonnements, statuts soignés et nouvelle police.
+
+### Interface
+
+- **Segmentation des abonnements** : seules les fenêtres réellement fournies sont affichées, avec des libellés explicites — **Hebdo** (semaine), **Horaire** (5 heures), **Hebdo Fable** pour la limite Fable de Claude, **Hebdo Argon** pour la réserve Argon d’Antigravity (groupe « Argon »), plus aucun « 5 h » ni ligne « — » pour une fenêtre absente quand d’autres existent. Ordre Hebdo puis Horaire, groupes Gemini / Claude-GPT / Argon conservés.
+- **Widget** : résumé segmenté sur deux segments maximum par ligne (les plus contraints), détail complet dans l’infobulle et aux lecteurs d’écran, `+N` pour les segments masqués ; toujours 10 fournisseurs visibles sans défilement à 360 × 520, lignes de 32 à 36 px, icônes 20 × 20.
+- **Statuts de ressource** : nouveau chip discret et harmonisé (fond teinté, bordure, pastille, 11 px, contraste AA, `title` explicite) pour « Suffisant / Bas / Critique / Épuisé / Indisponible » dans les cartes, le widget, la fiche et la légende des Réglages ; le texte reste accessible.
+- **Police** : **Inter Variable** (SIL OFL 1.1) embarquée dans `assets/fonts/` avec sa licence, appliquée à toute l’application et au widget, chiffres tabulaires, repli Segoe UI/system-ui, aucun chargement réseau.
+
+### Qualité
+
+- Tests adaptés aux libellés (Hebdo/Horaire/Hebdo Fable/Hebdo Argon), aux chips de statut et à la police embarquée ; smokes Electron rejoués, widget compact mesuré (10 lignes, sans défilement). Voir [docs/validation-0.3.5.md](docs/validation-0.3.5.md).
+
 ## 0.3.4 — 4 novembre 2026
 
 Simplification produit demandée : suppression de la fonctionnalité de recommandation de modèle et widget compact.

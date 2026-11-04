@@ -14,8 +14,13 @@ async function main() {
   desktop = await electron.launch({ executablePath: process.env.PROVIDERSBAR_EXECUTABLE || require('electron'), args: process.env.PROVIDERSBAR_EXECUTABLE ? [] : [root], cwd: root, env, timeout: 30000 });
   const dashboard = await desktop.firstWindow();
   await dashboard.waitForSelector('.card');
-  const widget = desktop.windows().find(w => w.url().includes('mode=quick'));
-  assert.ok(widget);
+  // Le widget peut être créé après la fenêtre principale : attendre sa création.
+  let widget;
+  for (let attempt = 0; attempt < 50 && !widget; attempt++) {
+    widget = desktop.windows().find(w => w.url().includes('mode=quick'));
+    if (!widget) await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  assert.ok(widget, 'fenêtre widget (mode=quick) introuvable');
   await widget.waitForSelector('.quick-row');
   const errors = [];
   for (const surface of [dashboard, widget]) surface.on('pageerror', error => errors.push(error.message));
@@ -51,12 +56,19 @@ async function main() {
     }
   }
   const windowSets = {
-    claude: [['Semaine', 'Limite hebdo atteinte'], ['Fable · Semaine', 'Limite hebdo Fable atteinte'], ['5 heures', 'Limite 5 h atteinte']],
-    zai: [['Semaine', 'Limite hebdo atteinte'], ['5 heures', 'Limite 5 h atteinte']],
-    antigravity: [['Gemini · Semaine', 'Limite Gemini · hebdo atteinte'], ['Gemini · 5 heures', 'Limite Gemini · 5 h atteinte'], ['Claude et GPT · Semaine', 'Limite Claude / GPT · hebdo atteinte'], ['Claude et GPT · 5 heures', 'Limite Claude / GPT · 5 h atteinte'], ['Gemini 4 Argon · Semaine', 'Limite Gemini 4 Argon · hebdo atteinte']],
+    claude: [['Semaine', 'Limite hebdo atteinte'], ['Fable · Semaine', 'Limite hebdo Fable atteinte'], ['5 heures', 'Limite horaire atteinte']],
+    zai: [['Semaine', 'Limite hebdo atteinte'], ['5 heures', 'Limite horaire atteinte']],
+    antigravity: [['Gemini · Semaine', 'Limite Gemini · hebdo atteinte'], ['Gemini · 5 heures', 'Limite Gemini · horaire atteinte'], ['Claude et GPT · Semaine', 'Limite Claude / GPT · hebdo atteinte'], ['Claude et GPT · 5 heures', 'Limite Claude / GPT · horaire atteinte'], ['Gemini 4 Argon · Semaine', 'Limite hebdo Argon atteinte']],
     openai: [['Codex et Work · Semaine', 'Limite Codex et Work · hebdo atteinte']],
     grok: [['Semaine', 'Limite Grok · hebdo atteinte'], ['Grok Bot · Semaine', 'Limite Grok Bot · hebdo atteinte']],
   };
+  // T19 : .quick-extra compte les segments masqués (2 affichés max, un par
+  // libellé agrégé) — Claude et Antigravity ont 3 catégories, les autres ≤ 2.
+  const extraSegments = { claude: '+1', antigravity: '+1' };
+  const quickLabel = label => label.endsWith('5 heures') ? 'Horaire'
+    : label.includes('Argon') ? 'Hebdo Argon'
+      : label === 'Fable · Semaine' ? 'Hebdo Fable'
+        : 'Hebdo';
   for (const [id, windows] of Object.entries(windowSets)) {
     for (const [exhausted, expected] of windows) {
       await fixture(id, { quotaRemaining: 0, quotaWindows: windows.map(([label]) => ({ label, remaining: label === exhausted ? 0 : 100 })) });
@@ -71,9 +83,13 @@ async function main() {
       assert.match(await row(id).locator('.quick-value').getAttribute('class'), /resource-empty/);
       assert.match(await row(id).locator('.quick-level').innerText(), /Épuisé/);
       assert.match(await row(id).locator('.quick-value-main').innerText(), /0/);
-      const expectedLabel = exhausted.endsWith('5 heures') ? '5 h' : exhausted === 'Fable · Semaine' ? 'Hebdo Fable' : 'Hebdo';
+      const expectedLabel = quickLabel(exhausted);
       assert.equal(await row(id).locator('.quick-value-label').innerText(), expectedLabel);
-      if (windows.length > 1) assert.equal(await row(id).locator('.quick-extra').innerText(), `+${windows.length - 1}`);
+      if (extraSegments[id]) assert.equal(await row(id).locator('.quick-extra').innerText(), extraSegments[id]);
+      else assert.equal(await row(id).locator('.quick-extra').count(), 0);
+      // Second segment T19 : deux segments affichés dès deux libellés agrégés.
+      const categories = new Set(windows.map(([label]) => quickLabel(label))).size;
+      assert.equal(await row(id).locator('.quick-segment').count(), categories >= 2 ? 2 : 1);
     }
     await fixture(id, { quotaWindows: windows.map(([label]) => ({ label, remaining: 0 })) });
     const expected = windows.length > 1 ? 'Toutes les limites atteintes' : 'Limite atteinte';
@@ -96,6 +112,8 @@ async function main() {
   assert.doesNotMatch(await row('claude').getAttribute('class'), /resource-empty/);
   assert.match(await row('claude').locator('.quick-value').getAttribute('class'), /resource-empty/);
   assert.equal(await row('claude').locator('.quick-value-label').innerText(), 'Hebdo');
+  assert.equal(await row('claude').locator('.quick-segment-label').innerText(), 'Horaire');
+  assert.match(await row('claude').locator('.quick-segment-value').innerText(), /0/);
   assert.match(await row('claude').locator('.quick-level').innerText(), /Épuisé/);
   // Situation exacte signalée, conservée dans les captures.
   await fixture('claude', { quotaWindows: [{ label: 'Semaine', remaining: 18 }, { label: 'Fable · Semaine', remaining: 0 }, { label: '5 heures', remaining: 100 }] });
@@ -105,6 +123,6 @@ async function main() {
   await dashboard.screenshot({ path: path.join(results, 'resource-status-dashboard.png'), fullPage: true });
   await widget.screenshot({ path: path.join(results, 'resource-status-widget.png') });
   assert.deepEqual(errors, []);
-  console.log('PASS: negative balances red for all 4 APIs in USD/EUR/CNY and both themes; per-window quota statuses on dashboard cards; widget compact résumé (.quick-value/.quick-level) sans statut par fenêtre ; global status only when every displayed limit is exhausted ; dashboard and widget.');
+  console.log('PASS: negative balances red for all 4 APIs in USD/EUR/CNY and both themes; per-window quota statuses on dashboard cards (Hebdo/Horaire/Hebdo Argon) ; widget compact segmenté (.quick-value/.quick-value-label/.quick-segment*/.quick-level) sans statut par fenêtre ; global status only when every displayed limit is exhausted ; dashboard and widget.');
 }
 main().catch(error => { console.error(error); process.exitCode = 1; }).finally(async () => { if (desktop) await desktop.close(); });

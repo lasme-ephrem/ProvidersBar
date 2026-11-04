@@ -7,6 +7,7 @@
 const { _electron: electron } = require(process.env.PROVIDERSBAR_PLAYWRIGHT || 'playwright');
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
+const fss = require('node:fs');
 const path = require('node:path');
 const packageJson = require('../package.json');
 const { createSeed } = require('../lib/seed.cjs');
@@ -128,6 +129,11 @@ async function main() {
   await page.locator('[data-nav="settings"]').click();
   assert.equal(await page.locator('#app-version').innerText(), `Version ${packageJson.version}`);
   assert.match(await page.locator('.privacy-note').innerText(), /Aucune télémétrie/);
+  // Chips de statut de la légende des Réglages (T19) : texte toujours visible.
+  assert.deepEqual(await page.locator('.resource-legend .level-pill').allTextContents(), [
+    'Épuisé · 0', 'Critique · ≤ 2 USD ou ≤ 10 %', 'Bas · ≤ 5 USD ou ≤ 25 %',
+    'Suffisant · au-dessus', 'Indisponible · aucune donnée',
+  ]);
   assert.equal(await page.locator('[data-action="erase-data"]').count(), 1);
   await page.locator('[data-action="erase-data"]').click();
   await page.waitForSelector('.danger-zone');
@@ -498,6 +504,39 @@ async function main() {
   const quick = desktop.windows().find(w => w.url().includes('mode=quick'));
   assert.ok(quick);
   await quick.waitForSelector('.quick-row');
+  // Police Inter Variable autohébergée (T19) : fichiers présents, licence OFL,
+  // chargement réel et chiffres tabulaires dans la fenêtre principale ET le widget.
+  const fontDirectory = path.join(root, 'assets', 'fonts');
+  const fontFile = path.join(fontDirectory, 'InterVariable.woff2');
+  const licenseFile = path.join(fontDirectory, 'LICENSE-Inter.txt');
+  const fontBytes = await fs.readFile(fontFile);
+  assert.equal(fontBytes.subarray(0, 4).toString('latin1'), 'wOF2', 'InterVariable.woff2 doit être une police WOFF2 valide');
+  assert.ok(fontBytes.length > 100000, `police Inter trop petite : ${fontBytes.length} octets`);
+  assert.match(await fs.readFile(licenseFile, 'utf8'), /SIL OPEN FONT LICENSE|SIL Open Font License/i, 'licence Inter (OFL) manquante');
+  for (const surface of [page, quick]) {
+    const fontState = await surface.evaluate(async () => {
+      try { await document.fonts.load('400 13px "Inter Variable"'); } catch { /* repli mesuré ci-dessous */ }
+      await document.fonts.ready;
+      const body = getComputedStyle(document.body);
+      return { check: document.fonts.check('400 13px "Inter Variable"'), family: body.fontFamily, numeric: body.fontVariantNumeric };
+    });
+    assert.equal(fontState.check, true, 'Inter Variable doit être chargée dans la surface');
+    assert.match(fontState.family, /Inter Variable/, 'la famille calculée doit commencer par Inter Variable');
+    assert.match(fontState.numeric, /tabular-nums/, 'les chiffres doivent être tabulaires');
+  }
+  // Embarquement dans un portable existant : vérifié seulement si ce portable a
+  // déjà été reconstruit avec la nouvelle feuille de style (sinon build antérieur).
+  try {
+    const distEntries = await fs.readdir(path.join(root, 'dist'), { withFileTypes: true });
+    for (const entry of distEntries.filter(item => item.isDirectory() && item.name.startsWith('ProvidersBar'))) {
+      const app = path.join(root, 'dist', entry.name, 'resources', 'app');
+      const appStyles = path.join(app, 'renderer', 'styles.css');
+      if (!fss.existsSync(appStyles)) continue;
+      if (!(await fs.readFile(appStyles, 'utf8')).includes('Inter Variable')) continue;
+      assert.ok(fss.existsSync(path.join(app, 'assets', 'fonts', 'InterVariable.woff2')), `${entry.name} doit embarquer InterVariable.woff2`);
+      assert.ok(fss.existsSync(path.join(app, 'assets', 'fonts', 'LICENSE-Inter.txt')), `${entry.name} doit embarquer LICENSE-Inter.txt`);
+    }
+  } catch { /* dist absent : validation limitée au dépôt */ }
   // Taille par défaut fixée par main.cjs (aucun auto-dimensionnement du renderer).
   // On mesure la zone de contenu : sur Windows, les bounds externes peuvent
   // inclure une bordure système d'un à deux pixels.
@@ -525,12 +564,12 @@ async function main() {
   // et l'icône « Relevé à vérifier » n'apparaît que si nécessaire.
   assert.doesNotMatch(quickText, /il y a|à l’instant|Dernier relevé/);
   assert.equal(await quick.locator('.quick-quota, .quick-period, .quick-period-status, .quick-resource-status, .meter').count(), 0);
-  // Lignes compactes (~32 px) sans chevauchement et icônes 20×20 visibles.
+  // Lignes compactes de 36 px (plafond 40) sans chevauchement, icônes 20×20 visibles.
   const quickRows = await quick.locator('.quick-row').evaluateAll(rows => rows.map(row => {
     const box = row.getBoundingClientRect();
     return { top: box.top, bottom: box.bottom, height: box.height };
   }));
-  for (const rowBox of quickRows) assert.ok(rowBox.height >= 31 && rowBox.height <= 40, `hauteur de ligne inattendue : ${rowBox.height}px`);
+  for (const rowBox of quickRows) assert.ok(rowBox.height >= 35 && rowBox.height <= 40, `hauteur de ligne inattendue (36 px attendu) : ${rowBox.height}px`);
   for (let index = 1; index < quickRows.length; index++) {
     assert.ok(quickRows[index].top >= quickRows[index - 1].bottom - 0.5, 'les lignes du widget ne doivent pas se chevaucher');
   }
@@ -561,7 +600,94 @@ async function main() {
   const quickLevels = await quick.locator('.quick-level').allTextContents();
   assert.equal(quickLevels.length, 10);
   for (const quickLevel of quickLevels) assert.match(quickLevel, /Épuisé|Critique|Bas|Suffisant|Indisponible/);
+  // Chips T19 : classe .level-pill + .quick-level, texte visible et title explicite.
+  const quickChips = await quick.locator('.quick-level').evaluateAll(chips => chips.map(chip => ({
+    classes: chip.className, text: chip.innerText, title: chip.getAttribute('title'),
+  })));
+  for (const chip of quickChips) {
+    assert.match(chip.classes, /level-pill/);
+    assert.match(chip.classes, /resource-(?:empty|critical|low|healthy|unknown)/);
+    assert.match(chip.title, /Ressource suffisante|Bas · ≤|Critique · ≤|Ressource épuisée|Donnée indisponible/);
+  }
   assert.match(await quick.locator('[data-provider="ollama"] .quick-value').getAttribute('title'), /réserve supplémentaire/);
+  // ------------------------------------------------------------------ *
+  // T19 : libellés segmentés (Hebdo/Horaire/Hebdo Fable/Hebdo Argon), chips,
+  // fenêtre absente sans ligne « — », segments du widget.
+  // ------------------------------------------------------------------ *
+  for (const surface of [page, quick]) await surface.evaluate(() => {
+    globalThis.t19OriginalState = state;
+    state = structuredClone(state);
+    const stamp = new Date().toISOString();
+    Object.assign(state.providers.find(p => p.id === 'claude'), {
+      active: true, connected: true, error: null,
+      snapshot: { source: 'api', updatedAt: stamp, balances: [], quotaWindows: [
+        { label: 'Semaine', remaining: 40 }, { label: '5 heures', remaining: 80 },
+        { label: 'Fable · Semaine', remaining: 30 },
+      ] },
+    });
+    Object.assign(state.providers.find(p => p.id === 'antigravity'), {
+      active: true, connected: true, error: null,
+      snapshot: { source: 'api', updatedAt: stamp, balances: [], quotaWindows: [
+        { label: 'Gemini · Semaine', remaining: 88 }, { label: 'Gemini · 5 heures', remaining: 95 },
+        { label: 'Claude et GPT · Semaine', remaining: 70 }, { label: 'Claude et GPT · 5 heures', remaining: 90 },
+        { label: 'Gemini 4 Argon · Semaine', remaining: 60 },
+      ] },
+    });
+    Object.assign(state.providers.find(p => p.id === 'zai'), {
+      active: true, connected: true, error: null,
+      snapshot: { source: 'api', updatedAt: stamp, balances: [], quotaWindows: [
+        { label: '5 heures', remaining: 50 },
+      ] },
+    });
+    page = 'overview'; filter = 'all'; query = '';
+    render();
+  });
+  // Cartes : libellés exacts, aucune occurrence de « 5 h ».
+  assert.deepEqual(await page.locator('.card:has([data-open="claude"]) .quota-period-label').allTextContents(), ['Hebdo', 'Horaire', 'Hebdo Fable']);
+  assert.deepEqual(await page.locator('.card:has([data-open="antigravity"]) .quota-period-label').allTextContents(), ['Hebdo', 'Horaire', 'Hebdo', 'Horaire', 'Hebdo Argon']);
+  assert.deepEqual(await page.locator('.card:has([data-open="zai"]) .quota-period-label').allTextContents(), ['Horaire']);
+  assert.equal(await page.locator('.card:has([data-open="zai"]) .quota-period').count(), 1, 'aucune ligne « — » pour une fenêtre absente');
+  assert.doesNotMatch(await page.locator('.card:has([data-open="zai"])').innerText(), /—/);
+  const cardsText = await page.locator('#provider-cards').innerText();
+  assert.doesNotMatch(cardsText, /\b5 h\b/, 'plus aucun libellé « 5 h » dans les cartes');
+  assert.match(cardsText, /Horaire/);
+  // Chips des cartes : classe, texte visible, title explicite.
+  const cardChips = await page.locator('.card .level-pill').evaluateAll(chips => chips.map(chip => ({
+    classes: chip.className, text: chip.innerText, title: chip.getAttribute('title'),
+  })));
+  assert.ok(cardChips.length > 0);
+  for (const chip of cardChips) {
+    assert.match(chip.classes, /level-pill/);
+    assert.match(chip.text, /Épuisé|Critique|Bas|Suffisant|Indisponible/);
+    assert.match(chip.title, /Ressource suffisante|Bas · ≤|Critique · ≤|Ressource épuisée|Donnée indisponible/);
+  }
+  // Widget : segment le plus contraint, second segment, compteur de segments masqués.
+  const claudeValue = quick.locator('[data-provider="claude"] .quick-value');
+  assert.equal(await claudeValue.locator('.quick-value-label').innerText(), 'Hebdo Fable');
+  assert.match(await claudeValue.locator('.quick-value-main').innerText(), /30/);
+  assert.equal(await claudeValue.locator('.quick-segment-label').innerText(), 'Hebdo');
+  assert.match(await claudeValue.locator('.quick-segment-value').innerText(), /40/);
+  assert.equal(await claudeValue.locator('.quick-extra').innerText(), '+1');
+  assert.equal(await quick.locator('[data-provider="claude"] .quick-level').innerText(), 'Suffisant');
+  const argonValue = quick.locator('[data-provider="antigravity"] .quick-value');
+  assert.equal(await argonValue.locator('.quick-value-label').innerText(), 'Hebdo Argon');
+  assert.match(await argonValue.locator('.quick-value-main').innerText(), /60/);
+  assert.equal(await argonValue.locator('.quick-segment-label').innerText(), 'Hebdo');
+  assert.match(await argonValue.locator('.quick-segment-value').innerText(), /70/);
+  assert.equal(await argonValue.locator('.quick-extra').innerText(), '+1');
+  const zaiValue = quick.locator('[data-provider="zai"] .quick-value');
+  assert.equal(await zaiValue.locator('.quick-value-label').innerText(), 'Horaire');
+  assert.match(await zaiValue.locator('.quick-value-main').innerText(), /50/);
+  assert.equal(await zaiValue.locator('.quick-segment-label').count(), 0, 'aucun second segment inventé');
+  assert.equal(await zaiValue.locator('.quick-extra').count(), 0);
+  assert.doesNotMatch(await quick.locator('.quick-list').innerText(), /\b5 h\b/);
+  // Restauration de l'état réel avant les fixtures de niveaux.
+  for (const surface of [page, quick]) await surface.evaluate(() => {
+    state = globalThis.t19OriginalState;
+    delete globalThis.t19OriginalState;
+    render();
+  });
+
   // Fournisseurs non suivis absents du widget (expiré non-Ollama), puis restauration.
   await quick.evaluate(() => {
     globalThis.widgetOriginalState = state;
@@ -640,7 +766,13 @@ async function main() {
   assert.match(await quick.locator('[data-provider="antigravity"] .quick-level').innerText(), /Épuisé/);
   assert.match(await quick.locator('[data-provider="antigravity"] .quick-value-label').innerText(), /Hebdo/);
   assert.match(await quick.locator('[data-provider="antigravity"] .quick-value-main').innerText(), /0/);
-  assert.match(await quick.locator('[data-provider="antigravity"] .quick-extra').innerText(), /\+4/);
+  // Segments T19 : second segment « Horaire 10 % », 1 segment masqué sur 3 catégories.
+  assert.equal(await quick.locator('[data-provider="antigravity"] .quick-segment-label').innerText(), 'Horaire');
+  assert.match(await quick.locator('[data-provider="antigravity"] .quick-segment-value').innerText(), /10/);
+  assert.match(await quick.locator('[data-provider="antigravity"] .quick-extra').innerText(), /\+1/);
+  // Libellés exacts de la carte Antigravity (Horaire, Hebdo Argon, jamais « 5 h »).
+  assert.deepEqual(await page.locator('.card:has([data-open="antigravity"]) .quota-period-label').allTextContents(), ['Hebdo', 'Horaire', 'Hebdo', 'Horaire', 'Hebdo Argon']);
+  assert.doesNotMatch(await page.locator('.card:has([data-open="antigravity"])').innerText(), /\b5 h\b/);
   // Le solde négatif reste rouge dans le widget, comme dans la carte.
   const openrouterNegativeColor = await quick.locator('[data-provider="openrouter"] .quick-value .resource-value').evaluate(el => getComputedStyle(el).color);
   const openrouterCardColor = await page.locator('.card:has([data-open="openrouter"]) .resource-value').evaluate(el => getComputedStyle(el).color);
@@ -979,7 +1111,7 @@ async function main() {
   assert.equal(Array.isArray(erasedState.providers) && erasedState.providers.length, 10);
   assert.deepEqual(erasedState.history, []);
   await desktop.close(); desktop = null;
-  console.log('PASS: marque neutre, thème système, version dynamique, app:info, erase-data, recommandations/ordre de consommation retirés (tableau de bord, réglages, widget, export), inventaire 10 fournisseurs, recherche/filtres, édition, historique, clés chiffrées, course connect/disconnect, reprise transitoire, cooldown persistant, Orca/Ollama (session conservée puis auth invalide), Claude Desktop/direct, lecteurs DOM réels, widget compact 360×520 (10 lignes Abonnements+API, 32 px, icônes 20 px, sans défilement ; scroll fin à 320), niveaux textuels, tray, redémarrage, Ollama Free, Antigravity, export nettoyé.');
+  console.log('PASS: marque neutre, thème système, version dynamique, app:info, erase-data, recommandations retirées, inventaire 10 fournisseurs, recherche/filtres, édition, historique, clés chiffrées, course connect/disconnect, reprise transitoire, cooldown persistant, Orca/Ollama (session conservée puis auth invalide), Claude Desktop/direct, lecteurs DOM réels, police Inter Variable (fichiers+OFL+chargement dashboard/widget, tabular-nums), libellés Hebdo/Horaire/Hebdo Fable/Hebdo Argon et chips, widget compact 360×520 (10 lignes 36 px, icônes 20 px, segments, sans défilement ; scroll fin à 320), niveaux textuels, tray, redémarrage, Ollama Free, Antigravity, export nettoyé.');
 }
 
 main().catch(error => { console.error(error); process.exitCode = 1; }).finally(async () => { if (desktop) await desktop.close(); });

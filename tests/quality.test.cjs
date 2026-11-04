@@ -476,22 +476,69 @@ test('le widget compact 360×520 est couvert par les smokes', async () => {
   const markers = [
     'quick-group-title',      // sections Abonnements puis API
     'quick-value',            // résumé par fournisseur
-    'quick-level',            // niveau textuel
-    'quick-value-label',      // fenêtre résumée
+    'quick-level',            // chip de niveau textuelle
+    'quick-value-label',      // segment le plus contraint
+    'quick-segment',          // second segment (T19)
+    'quick-extra',            // segments masqués comptés
     'quick-count',            // 10 comptes · 6 abonnements · 4 API
     'scrollHeight',           // non-défilement mesuré
     '360, 520',               // taille par défaut vérifiée
     'setSize(360, 320)',      // défilement fin en cas de dépassement
     'widget-scroll-360x320.png',
     'quick-stale',            // relevé à vérifier, jamais d'âge permanent
+    '35 && rowBox.height <= 40', // lignes de 36 px (plafond 40)
   ];
   for (const marker of markers) assert.ok(dashboard.includes(marker), `scripts/smoke.cjs doit couvrir « ${marker} ».`);
   assert.ok(resources.includes('quick-value'), 'smoke-resource-status doit vérifier le résumé .quick-value');
   assert.ok(resources.includes('quick-level'), 'smoke-resource-status doit vérifier le niveau textuel');
+  assert.ok(resources.includes('quick-segment'), 'smoke-resource-status doit vérifier les segments T19');
   // Les anciens hooks par fenêtre ne sont utilisés que dans des assertions d'absence.
   assert.match(dashboard, /quick-quota, \.quick-period, \.quick-period-status, \.quick-resource-status/);
   // Aucun smoke ne pilote l'auto-dimensionnement retiré.
   for (const script of ['scripts/smoke.cjs', 'scripts/smoke-resource-status.cjs', 'scripts/smoke-claude.cjs']) {
     assert.doesNotMatch(await read(script), /api\.fitQuick|fitQuick\(/, `${script} ne doit plus piloter la hauteur du widget`);
   }
+});
+
+// ---------------------------------------------------------------------------
+// T19 : police Inter Variable empaquetée, libellés segmentés et chips
+// ---------------------------------------------------------------------------
+
+test('la police Inter Variable est empaquetée avec sa licence OFL', async () => {
+  const fontPath = 'assets/fonts/InterVariable.woff2';
+  const licensePath = 'assets/fonts/LICENSE-Inter.txt';
+  assert.ok(fss.existsSync(path.join(root, fontPath)), 'assets/fonts/InterVariable.woff2 manquant');
+  assert.ok(fss.existsSync(path.join(root, licensePath)), 'assets/fonts/LICENSE-Inter.txt manquant');
+  const fontBytes = fss.readFileSync(path.join(root, fontPath));
+  assert.equal(fontBytes.subarray(0, 4).toString('latin1'), 'wOF2', 'fichier de police WOFF2 invalide');
+  assert.ok(fontBytes.length > 100000, `police Inter anormalement petite : ${fontBytes.length} octets`);
+  assert.match(await read(licensePath), /SIL OPEN FONT LICENSE|SIL Open Font License/i, 'licence OFL absente ou incorrecte');
+  // Déclaration locale, sans réseau : CSP 'self' et aucun CDN de police.
+  const styles = await read('renderer/styles.css');
+  assert.match(styles, /@font-face\s*\{[\s\S]*?font-family:\s*"Inter Variable"/);
+  assert.match(styles, /url\("\.\.\/assets\/fonts\/InterVariable\.woff2"\)\s*format\("woff2"\)/);
+  assert.match(styles, /font-display:\s*swap/);
+  assert.match(styles, /font-weight:\s*100 900/);
+  assert.match(await read('renderer/theme.css'), /--font-ui:\s*"Inter Variable",\s*"Inter"/);
+  assert.match(await read('renderer/index.html'), /href="styles\.css"/);
+  for (const script of ['renderer/styles.css', 'renderer/theme.css', 'renderer/ui-core.js', 'renderer/views.js', 'renderer/app.js', 'renderer/index.html']) {
+    assert.doesNotMatch(await read(script), /fonts\.(?:googleapis|gstatic)\.com|https?:\/\/[^"'\s]+\.woff2/i, `${script} ne doit pas charger de police distante`);
+  }
+  // Le packaging copie le dossier assets (police + licence) dans le portable.
+  const packaging = await read('scripts/app-resources.cjs');
+  assert.match(packaging, /'assets'/);
+});
+
+test('les libellés segmentés et les chips sont couverts par les smokes', async () => {
+  const dashboard = await read('scripts/smoke.cjs');
+  const resources = await read('scripts/smoke-resource-status.cjs');
+  const dashboardMarkers = ['Hebdo', 'Horaire', 'Hebdo Fable', 'Hebdo Argon', 'quick-segment-label', 'quick-segment-value', 'level-pill', 'Ressource suffisante', 'Donnée indisponible', 'document.fonts.check', 'tabular-nums', 'InterVariable.woff2', 'LICENSE-Inter.txt'];
+  for (const marker of dashboardMarkers) assert.ok(dashboard.includes(marker), `scripts/smoke.cjs doit couvrir « ${marker} ».`);
+  const resourceMarkers = ['Limite horaire atteinte', 'Limite hebdo Argon atteinte', 'quickLabel', 'quick-segment', 'quick-value-label'];
+  for (const marker of resourceMarkers) assert.ok(resources.includes(marker), `scripts/smoke-resource-status.cjs doit couvrir « ${marker} ».`);
+  // Libellés obsolètes : plus aucune attente de statut « 5 h » dans les smokes.
+  assert.doesNotMatch(resources, /Limite 5 h atteinte|Limite Gemini 4 Argon · hebdo/, 'statuts « 5 h »/Argon obsolètes dans smoke-resource-status');
+  // Chips : classe partagée cartes/widget/légende, texte toujours présent.
+  assert.match(dashboard, /\.resource-legend \.level-pill/);
+  assert.match(dashboard, /quick-level.*title/s);
 });

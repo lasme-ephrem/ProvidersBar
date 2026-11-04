@@ -121,7 +121,7 @@ et les cinq boutons `[data-nav]` restent visibles et focusables. Seuls
 <div class="dialog-body" id="dialog-panel" role="tabpanel" aria-labelledby="tab-info" tabindex="0">…</div>
 ```
 
-Le widget (fenêtre `?mode=quick`, **360×560** côté Electron) est rendu dans `#app` :
+Le widget (fenêtre `?mode=quick`, **360×520** côté Electron) est rendu dans `#app` :
 
 ```html
 <main class="quick">
@@ -130,22 +130,33 @@ Le widget (fenêtre `?mode=quick`, **360×560** côté Electron) est rendu dans 
     <span class="quick-count">10 comptes · 6 abonnements · 4 API</span></p>
   <div class="quick-list">
     <p class="quick-group-title">Abonnements</p>
-    <button class="quick-row resource-healthy" data-provider="openai" data-action="main">
-      <span class="quick-provider">logo 22 px + <span class="provider-name">OpenAI GPT</span></span>
-      <span class="quick-value resource-healthy" title="Hebdo : 40 %">
-        <span class="quick-value-label">Hebdo</span>
-        <span class="quick-value-main">40<small>%</small></span>
-        <span class="quick-level">Suffisant</span>
-        <span class="quick-extra">+1</span>
+    <button class="quick-row resource-healthy" data-provider="openai" data-action="main"
+            title="OpenAI GPT — Codex et Work Hebdo : 40 % — Dernier relevé : …">
+      <span class="quick-provider">logo 20 px + <span class="provider-name">OpenAI GPT</span></span>
+      <span class="quick-value resource-healthy" title="Codex et Work Hebdo : 40 % · …">
+        <span class="level-pill resource-healthy quick-level" title="Ressource suffisante">Suffisant</span>
+        <span class="quick-segments">
+          <span class="quick-segment">
+            <span class="quick-value-label">Hebdo</span>
+            <span class="quick-value-main">40<small>%</small></span>
+          </span>
+          <span class="quick-segment-sep" aria-hidden="true">·</span>
+          <span class="quick-segment">
+            <span class="quick-segment-label">Horaire</span>
+            <span class="quick-segment-value">80<small>%</small></span>
+          </span>
+          <span class="quick-extra">+1</span>
+        </span>
       </span>
+      <span class="sr-only">Codex et Work Hebdo : 40 % · Horaire : 80 % · …</span>
     </button>
     … (5 autres abonnements)
     <p class="quick-group-title">API</p>
     <button class="quick-row resource-low" data-provider="openrouter" data-action="main">
       <span class="quick-provider">logo + <span class="provider-name">OpenRouter</span></span>
-      <span class="quick-value" title="74,50 $US">
-        <span class="resource-value resource-low">74,50 $US</span>
-        <span class="quick-level">Bas</span>
+      <span class="quick-value resource-low" title="74,50 $US">
+        <span class="level-pill resource-low quick-level" title="Bas · ≤ 5 USD">Bas</span>
+        <span class="quick-segments"><span class="resource-value resource-low">74,50 $US</span></span>
       </span>
     </button>
     … (3 autres API)
@@ -159,6 +170,13 @@ de « Puis », de classement ni de section « API disponibles à utiliser » ; c
 liste : abonnements d'abord, API ensuite. Le contenu d'un `.quick-row` est
 exclusivement constitué d'éléments **phrasing** (`span`, `img`, `small`) : plus de
 `<div>`/`<h3>` dans un `<button>`.
+
+**Segmentation widget (T19)** : maximum **2 segments par ligne** (les plus
+contraints, un seul par libellé agrégé — ex. plusieurs « Hebdo » Gemini/Claude →
+minimum), affichés dans l'ordre de contrainte (`Hebdo 25 % · Horaire 80 %`), le reste
+dans le `title` et le `.sr-only` de la ligne. `.quick-extra` compte les segments
+supplémentaires non affichés (ex. `+1` pour Antigravity/Claude). Les fenêtres absentes
+ne produisent jamais de ligne « — ».
 
 ---
 
@@ -224,10 +242,10 @@ Vérifiés par audit statique sur toutes les vues :
 | `.strategy-panel`, `.strategy-current`, `.strategy-next`, `.strategy-api`, `.strategy-details`, `[data-disclosure="subscriptions"]` | **supprimés** du tableau de bord | demande utilisateur : plus de suggestion de modèle | `smoke.cjs:103,149,162-192,565-566,641` à supprimer/réécrire |
 | `[data-action="strategy-settings"]`, `#strategy-form`, `#strategy-model-*`, `#strategy-inputTokens`, `[name="contributor"]`, `#strategy-form button[type=submit]` | **supprimés** des Réglages et des actions | plus de panneau d'ordre de consommation | `smoke.cjs:134-145,681-683` et `updateStrategy` à retirer du scénario |
 | `.quick-strategy`, `.quick-api`, `.quick-api-providers`, `[data-api-provider]` | **supprimés** du widget (liste API sans classement) | plus de recommandation/classement | `smoke.cjs:562-566` à supprimer |
-| `.quick-period`, `.quick-period-label`, `.quick-period-status`, `.quick-quota`, `.quick-values`, `.quick-freshness`, `.quick-group-label`, `.quick-ollama-reserve` | **supprimés** ; remplacés par le résumé `.quick-value` par fournisseur | compaction et lisibilité | `smoke-resource-status.cjs` (statuts par fenêtre) et `smoke.cjs:449,463,468,562-566,589-641` à réécrire |
+| `.quick-period`, `.quick-period-label`, `.quick-period-status`, `.quick-quota`, `.quick-values`, `.quick-freshness`, `.quick-group-label`, `.quick-ollama-reserve` | **supprimés** ; remplacés par le résumé `.quick-value` par fournisseur (chips + segments) | compaction et lisibilité | `smoke-resource-status.cjs` (statuts par fenêtre) et `smoke.cjs:449,463,468,562-566,589-641` à réécrire |
 | `.quick-columns` | `.quick-refresh-status` + `.quick-count` (une seule ligne) | en-tête plus court | non utilisé tel quel par le smoke |
-| Auto-dimensionnement via `fitQuick()`/`ResizeObserver` | **supprimé** : la fenêtre garde sa taille par défaut (360×560) | widget compact stable | `smoke.cjs` 451-452, 464, 511-518, 526 (tests de redimensionnement) à retirer |
-| `.quick-row` en grille 2 lignes | `.quick-row` flex sur une ligne, 32 px | demande utilisateur | nouveaux hooks `.quick-value` à couvrir |
+| Auto-dimensionnement via `fitQuick()`/`ResizeObserver` | **supprimé** : la fenêtre garde sa taille par défaut (360×520) | widget compact stable | `smoke.cjs` 451-452, 464, 511-518, 526 (tests de redimensionnement) à retirer |
+| `.quick-row` en grille 2 lignes | `.quick-row` flex, **36 px** (chip + 2 segments max à droite) | demande utilisateur T19 | `.quick-value-label/main` conservés ; nouveaux `.quick-segment-label/value` ; `.quick-extra` = segments masqués |
 | `.shell` | `.app-shell` | grille de page | non utilisé par le smoke |
 | `.workspace` avec « L’atelier de Lasme » + avatar « L » | `.workspace` avec « Espace local » / « Données sur cet appareil » | marque neutre (§3.6) | **`scripts/smoke.cjs:24` doit changer** : `/Lasme/` → `/Espace local/` |
 | `nav button.active`, `.filters button.active`, `.dialog-tabs button.active` | `.is-active` (+ `aria-current`/`aria-selected`) | convention d'état unique | non utilisé par le smoke |
@@ -302,28 +320,30 @@ axe de graphique et boutons `primary`/`danger`. L'indicateur de focus est ≥ 3:
   `quota-period-status` sont textuels, le widget affiche toujours `.quick-level`
   (même vocabulaire), la légende complète est affichée sur Vue d'ensemble **et** dans
   Réglages ; un relevé ancien est signalé par une icône avec `aria-label`.
-- **Typographie** : plancher 11 px (`--text-xs`), 12 px pour les libellés, 13 px de
-  corps, 15–26 px pour les titres ; aucune règle à 8, 9 ou 10 px.
+- **Typographie** : **Inter Variable** (autohébergée, poids 100–900,
+  `font-display:swap`, repli Segoe UI/system-ui), `tabular-nums` pour les chiffres ;
+  plancher 11 px (`--text-xs`), 12 px pour les libellés, 13 px de corps, 15–26 px
+  pour les titres ; aucune règle à 8, 9 ou 10 px.
 - **Cibles** : boutons ≥ 32–34 px, liens de navigation ≥ 38 px, cases à cocher 18–20 px
   dans une ligne `.check-row`.
 - **Mouvement** : `prefers-reduced-motion` neutralise transitions et animations
   (y compris le chargement). `forced-colors` ajoute bordures et `Highlight` aux
   composants critiques.
 - **Langue** : `<html lang="fr">`, textes UI en français, dates/monnaies `fr-FR`.
-- **Logos** : `alt=""` quand le nom du fournisseur est adjacent (décoratif), jamais
-  utilisé seul comme unique identification d'un bouton (les boutons API du widget ont
-  un `aria-label` complet).
+- **Logos** : `alt=""` quand le nom du fournisseur est adjacent (décoratif) ; dans le
+  widget le logo et le nom sont dans le même bouton `.quick-row` (nom accessible
+  complet), aucun logo n'est la seule identification d'un bouton.
 
 ---
 
 ## 8. Widget compact : dimensions, contenu, défilement
 
-- **Dimensions cibles : 360 × 560 px** (fenêtre Electron modifiée par l'architecte en
-  parallèle). Le rendu a été mesuré au format 360×560, échelle 1× et 2×, via le
+- **Dimensions cibles : 360 × 520 px** (fenêtre Electron modifiée par l'architecte en
+  parallèle). Le rendu a été mesuré au format 360×520, échelle 1× et 2×, via le
   serveur d'aperçu : capture `test-results/widget-compact.png`.
 - **Aucun auto-dimensionnement** : `fitQuick()`/`ResizeObserver` ont été retirés du
   renderer ; la fenêtre garde sa taille par défaut. La liste ne défile que si le
-  contenu dépasse réellement (`scrollHeight <= clientHeight` attendu en 360×560), avec
+  contenu dépasse réellement (`scrollHeight <= clientHeight` attendu en 360×520), avec
   une barre fine de 5 px (`.quick-list::-webkit-scrollbar`, `scrollbar-width: thin`).
 - **Structure** : en-tête 26 px (marque + bouton synchroniser 26 px), une ligne de
   statut (`Auto 5 min · Claude 1 min` ou `Actualisation désactivée`) suivie du compte
@@ -332,17 +352,18 @@ axe de graphique et boutons `primary`/`danger`. L'indicateur de focus est ≥ 3:
   - titre `API` et les accès API actifs (4 en seed), avec leur solde.
   L'ordre suit l'inventaire ; aucun classement, aucune recommandation, aucun « À
   utiliser maintenant / Puis ».
-- **Lignes** : 32 px de hauteur minimale, une seule ligne, contenu uniquement
-  phrasing (`span`, `img`, `small`). Icône 20×20 px dans un carré de 24 px, nom 12 px
-  tronqué par ellipsis, valeur 11–12 px alignée à droite, pastille de niveau
-  **textuelle** (`.quick-level`, ex. « Suffisant », « Bas »), badge `+N` si plusieurs
-  fenêtres/soldes.
-  - Abonnement : résumé de la fenêtre la plus contrainte (`Hebdo 40 % · Bas +1`) ;
-    le détail de toutes les fenêtres est dans le `title` de la valeur.
-  - API : solde le plus contraint (`74,50 $US · Bas`) ; les autres devises sont
-    résumées par `+N` et détaillées dans le `title`.
-  - Quota/solde inconnu : « — » + « Indisponible » (texte accessible), aucune barre,
-    aucun faux pourcentage.
+- **Lignes** : 36 px (plafond 40 px), contenu uniquement phrasing (`span`, `img`,
+  `small`). Icône 20×20 px dans un carré de 24 px, nom 12 px tronqué par ellipsis,
+  à droite une colonne de 186 px max : chip de niveau (11 px) puis **segments**
+  (11–12 px, tabular-nums).
+  - Segments : maximum **2 par ligne**, un seul par libellé agrégé (plusieurs
+    « Hebdo » Gemini/Claude → le minimum), les plus contraints d'abord
+    (`Hebdo 25 % · Horaire 80 %`) ; `.quick-extra` indique le nombre de segments
+    supplémentaires non affichés ; tout le détail (libellé, groupe, %) est répété
+    dans le `title` et un `.sr-only` de la ligne.
+  - API : solde le plus contraint (`74,50 $US`) + chip, autres devises en `+N`/title.
+  - Quota/solde inconnu : chip « Indisponible » + « — » (texte accessible), aucune
+    barre, aucun faux pourcentage.
   - Relevé ancien/erreur : icône d'avertissement `.quick-stale` avec
     `aria-label="Relevé à vérifier"` ; sinon l'heure du relevé reste dans le `title`.
 - **État vide** : « Aucun compte à afficher. »
@@ -351,6 +372,29 @@ axe de graphique et boutons `primary`/`danger`. L'indicateur de focus est ≥ 3:
 - **Accessibilité** : chaque ligne est un bouton `[data-provider][data-action="main"]`
   dont le nom accessible contient fournisseur + résumé ; `aria-busy` sur le bouton de
   synchronisation ; `:focus-visible` conservé ; aucun texte < 11 px.
+
+### 8.1 Police Inter Variable et chips de statut (T19)
+
+- **Police** : `@font-face` en tête de `renderer/styles.css` :
+  `font-family:"Inter Variable"`, `src:url("../assets/fonts/InterVariable.woff2")`,
+  `font-weight:100 900`, `font-style:normal`, `font-display:swap`. `--font-ui`
+  commence par `"Inter Variable", "Inter"` puis repli Segoe UI/system-ui. Appliquée
+  au `body` (donc tableau de bord **et** widget), avec
+  `font-variant-numeric: tabular-nums` pour tous les chiffres. Aucun réseau : CSP
+  `'self'`, fichier embarqué (`assets/fonts/LICENSE-Inter.txt` conservé).
+  Vérification : `document.fonts.check('400 13px "Inter Variable"')` doit valoir
+  `true` (aperçu et widget) — voir la réserve MIME de l'aperçu au §10.
+- **Chips de statut** : `.level-pill` unique pour cartes, widget, légende des Réglages
+  et fiche. Fond teinté `--resource-bg`, bordure `color-mix(currentColor 55%)`,
+  point de 6 px (`::before`), texte 11 px (700), `title` explicite
+  (« Ressource suffisante », « Bas · ≤ 5 USD », « Critique · ≤ 10 % »,
+  « Ressource épuisée », « Donnée indisponible »). Dans le widget :
+  `.level-pill.quick-level` en 11 px compact. Le texte du niveau reste toujours
+  visible et lisible sans la couleur (AA conservé).
+- **Libellés exacts** : `Semaine` → **Hebdo**, `5 heures` → **Horaire**,
+  `Fable · Semaine` → **Hebdo Fable**, `Gemini 4 Argon · Semaine` → **Hebdo Argon**
+  (groupe Antigravity « Argon » conservé). Ordre des fenêtres : Hebdo avant Horaire.
+  Une fenêtre absente n'est jamais rendue (aucune ligne « — » quand d'autres existent).
 
 ---
 
@@ -425,8 +469,8 @@ soit déjà à jour. Aucun hook DOM nouveau : `[data-action="claude-enable-live"
   plus affichée en permanence (seul un indicateur « Relevé à vérifier » apparaît si
   nécessaire). Supprimer cette ligne.
 - `:451-452, 464, 511-518, 526` : plus de `fitQuick()` ni de redimensionnement
-  automatique ; remplacer par `assert.ok(scrollHeight <= clientHeight)` à 360×560
-  (la fenêtre de test doit être dimensionnée en 360×560) et vérifier que
+  automatique ; remplacer par `assert.ok(scrollHeight <= clientHeight)` à 360×520
+  (la fenêtre de test doit être dimensionnée en 360×520) et vérifier que
   `.quick-footer` reste visible.
 - `:562-566` supprimés (voir bloc stratégie) ; `:467` `.logo img` = 10 logos conservé.
 - `:492-504` : plus de `.quick-quota`, `.quick-period-status` ni `.quick-resource-status`
@@ -449,6 +493,38 @@ cartes (`.card.resource-*`, `.quota-period-status`, `.resource-status`,
 `.quick-value` / `.quick-level` (et `.resource-value` pour les soldes). Les fixtures
 USD/négatives restent valables.
 
+### Impacts T19 (segmentation, chips, police) — pour T20/qualite-tests
+
+- **Libellés** : plus aucun « 5 h » affiché. Les attentes qui contiennent encore
+  « 5 h » doivent devenir « Horaire » ; `Gemini 4 Argon · Semaine` devient
+  « Hebdo Argon » ; `Hebdo Fable` reste distinct de `Hebdo`.
+- `scripts/smoke-resource-status.cjs:54-56` : les statuts attendus deviennent
+  « Limite horaire atteinte » (au lieu de « Limite 5 h atteinte ») et
+  « Limite hebdo Argon atteinte » (au lieu de « Limite Gemini 4 Argon · hebdo atteinte »).
+- `scripts/smoke-resource-status.cjs:74` : `exhausted.endsWith('5 heures')` →
+  libellé **Horaire** ; `Gemini 4 Argon · Semaine` → **Hebdo Argon**.
+- `scripts/smoke-resource-status.cjs:76` : `.quick-extra` ne vaut plus
+  `windows.length - 1` mais le nombre de **segments** supplémentaires non affichés
+  (max 2 affichés, un par libellé agrégé : `Math.max(0, categories - 2)`, souvent
+  `+1` à 5 fenêtres).
+- `scripts/smoke.cjs:643` : `.quick-extra` Antigravity (`+4` attendu) devient `+1`
+  (5 fenêtres → 3 segments agrégés → 2 affichés).
+- `scripts/smoke.cjs:641` : `.quick-value-label` peut être `Hebdo` (inchangé) mais
+  les fixtures Horaire/Argon produisent respectivement `Horaire` / `Hebdo Argon`.
+- Les `.quick-value-label`/`.quick-value-main` restent le segment le plus contraint ;
+  `.quick-segment-label`/`.quick-segment-value` portent le second segment.
+- `.level-pill` reste la classe des chips (cartes, widget, légende, fiche) : les
+  textes restent « Épuisé / Critique / Bas / Suffisant / Indisponible » et passent
+  toujours le contrôle `smoke.cjs:655`.
+- La police Inter ne change aucun sélecteur ; ajouter si souhaité une assertion
+  `document.fonts.check('400 13px "Inter Variable"') === true` (aperçu **avec MIME
+  corrigé**, voir ci-dessous).
+- **`scripts/preview.cjs` — correctif requis par le Lead** : la route
+  `/assets/fonts/InterVariable.woff2` existe mais le serveur renvoie **500** car la
+  table des `Content-Type` ne connaît pas l'extension `woff2`. Ajouter
+  `'woff2': 'font/woff2'` au mapping (sans quoi `@font-face` échoue et
+  `document.fonts.check` reste `false`).
+
 ### `scripts/smoke-claude.cjs`
 
 Aucun changement attendu : `.dialog-body`, `.connection-success`,
@@ -457,13 +533,15 @@ Aucun changement attendu : `.dialog-body`, `.connection-success`,
 
 ### `scripts/preview.cjs`
 
-Aucune action : le Lead a déjà ajouté `/ui-core.js` et `/views.js` et retiré les
-routes `strategy*` / `usage-strategy`. Le renderer ne référence plus ces fichiers.
+Le Lead a déjà ajouté `/ui-core.js`, `/views.js` et la route du fichier de police.
+**Un correctif MIME reste nécessaire** : `'woff2': 'font/woff2'` dans le mapping des
+`Content-Type`, sinon la route de la police répond 500 (vérifié) et le navigateur
+utilise le repli Segoe UI. Aucune modification du renderer n'est requise.
 
 ### `main.cjs` (architecte)
 
-- **Fenêtre widget** : faite — `main.cjs` crée `quickWindow` en **360×560**
-  (`width: 360`, `height: Math.min(560, …)`, `quickDesiredHeight = 560`). Le renderer
+- **Fenêtre widget** : faite — `main.cjs` crée `quickWindow` en **360×520**
+  (`width: 360`, `height: Math.min(520, …)`, `quickDesiredHeight = 520`). Le renderer
   n'appelle plus `fitQuick`/`window:quick-size` ; l'API preload reste exposée mais
   n'est plus utilisée par le renderer actuel.
 - Optionnel : abaisser `minWidth` de la fenêtre principale de 900 à ~720 px ; le
@@ -472,8 +550,8 @@ routes `strategy*` / `usage-strategy`. Le renderer ne référence plus ces fichi
 ### `scripts/quality.test.cjs` (qualite-tests)
 
 Si ce test vérifie la taille/les lignes du renderer, cibles actuelles :
-`renderer/app.js` 561 lignes (max 112 car./ligne), `renderer/views.js` 1 108 lignes
-(max 142), `renderer/ui-core.js` 301 lignes, `renderer/styles.css` 1 273 lignes,
+`renderer/app.js` 561 lignes (max 112 car./ligne), `renderer/views.js` 1 194 lignes
+(max ~142), `renderer/ui-core.js` 310 lignes, `renderer/styles.css` 1 315 lignes,
 `renderer/theme.css` 122. `renderer/strategy-ui.js` et `renderer/strategy.css`
 n'existent plus ; `lib/usage-strategy.js` a également été retiré du dépôt par la
 vague produit. La CSP de `index.html` n'a pas changé.
@@ -489,32 +567,40 @@ vague produit. La CSP de `index.html` n'a pas changé.
 | Rendu statique | harnais Node + `vm` avec DOM factice : `overview`, `subscriptions`, `connections`, `historyPage`, `settingsPage`, 10 `quickAccountRow`, 40 `dialogMarkup`, `shell` | aucune exception ; aucun `undefined`/`NaN` ; aucun appel `UsageStrategy` |
 | Application | harnais `vm` chargeant `app.js` avec API simulée | rendu initial, `openDetail`, changement de page, `receiveState`, effacement, repli Claude sans erreur |
 | Widget compact | harnais `vm` en `?mode=quick` | 10 `.quick-row` (6 abonnements + 4 API), 2 `.quick-group-title`, `.quick-refresh-status`, aucune section stratégie |
-| **Chromium réel** (aperçu) | 360×560 @1x et @2x : `scrollHeight <= clientHeight`, chevauchement, hauteur des lignes, logos | 10 lignes (6 abonnements + 4 API), 2 titres de section, **hauteurs 32 px**, **liste 461 px / 461 px = aucun défilement**, 0 chevauchement, 10 logos chargés et visibles (20×20 px), footer dans la fenêtre, `scrollbar-width: thin` + règle `::-webkit-scrollbar` 5 px ; capture `test-results/widget-compact.png` |
-| Petite hauteur | 360×320 : débordement volontaire | la liste défile (`overflow-y:auto`) sans chevauchement ; à 560 px elle ne défile pas |
-| États connus | quotas %, crédits USD, fenêtres multiples (Antigravity 5, Claude 2, Z.ai 2) | 10 lignes de 32 px, 0 débordement, résumés « Hebdo 0 % · Épuisé +4 », « 2,00 $US · Critique +1 » |
+| **Chromium réel** (aperçu) | 360×520 @1x et @2x : `scrollHeight <= clientHeight`, chevauchement, hauteur des lignes, logos | 10 lignes (6 abonnements + 4 API), 2 titres de section, **hauteurs 36 px**, **liste 421 px / 421 px = aucun défilement**, 0 chevauchement, 10 logos chargés et visibles (20×20 px), footer dans la fenêtre, `scrollbar-width: thin` + règle `::-webkit-scrollbar` 5 px ; capture `test-results/after-widget.png` |
+| Petite hauteur | 360×320 : débordement volontaire | la liste défile (`overflow-y:auto`) sans chevauchement ; à 520 px elle ne défile pas |
+| États connus | quotas %, crédits USD, fenêtres multiples (Antigravity 5, Claude 3, Z.ai 2) | 10 lignes de 36 px, 0 débordement, segments « Hebdo 25 % · Horaire 80 % +1 », « 2,00 $US · Critique +1 » |
+| **Libellés** | cartes Claude/Antigravity + widget | Claude : **Hebdo, Horaire, Hebdo Fable** ; Antigravity : Gemini (Hebdo/Horaire), Claude / GPT (Hebdo/Horaire), groupe Argon + **Hebdo Argon** ; aucune occurrence de « 5 h » (grep et innerText) ; fenêtre absente = aucune ligne « — » |
+| **Chips** | rendu Chromium + inspection | `.level-pill` partout (cartes, widget, légende, fiche), fond teinté, bordure 55 %, point 6 px, texte 11 px, `title` explicite (« Ressource suffisante », « Bas · ≤ 5 USD », « Critique · ≤ 10 % », « Ressource épuisée », « Donnée indisponible ») |
+| **Police** | `document.fonts.check('400 13px "Inter Variable"')` + `getComputedStyle` | `true` dans le dashboard et le widget, famille `"Inter Variable", Inter, "Segoe UI"…`, `tabular-nums` actif — **vérifié avec interception de la route police** car l'aperçu renvoie 500 (MIME manquant, cf. §10) ; captures avec la police réelle |
+| **Captures** | Chromium Playwright | `before-claude-card.png`, `before-antigravity-card.png`, `before-widget.png` (avant) ; `after-claude-card.png`, `after-antigravity-card.png`, `after-widget.png`, `after-claude-dialog.png` (après, 2×) |
 | Tableau de bord / Réglages | Chromium 1280×900 : absence `.strategy-*` / `#strategy-form`, 10 cartes, filtres | OK |
 | Résidus | `grep -R "strategy\|UsageStrategy\|updateStrategy" renderer/*.js renderer/*.html renderer/*.css` | 0 résultat (seul le présent document mentionne l'historique) |
-| Couleurs | calcul WCAG sur les tokens | 58 paires ≥ 4,5:1 (focus ≥ 3:1) |
-| CSP | inspection `renderer/*` | aucun handler inline, `eval`, `new Function`, URL externe ; seul `fetch('/preview-state')` same-origin pour l'aperçu |
+| Couleurs | calcul WCAG sur les tokens | 58 paires ≥ 4,5:1 (focus ≥ 3:1) ; chips AA (texte sur `--resource-bg`) |
+| CSP | inspection `renderer/*` | aucun handler inline, `eval`, `new Function`, URL externe ; seul `fetch('/preview-state')` same-origin ; police `../assets/fonts/` = `'self'` |
 
 **Non vérifié (nécessite l'application Electron) :** rendu dans la fenêtre Electron
-réelle (taille 360×560 dépend de la modification `main.cjs` par l'architecte), zoom,
+réelle (taille 360×520 dépend de la modification `main.cjs` par l'architecte), zoom,
 lecteur d'écran NVDA/Narrator, smoke complet. Ces points sont à valider par le Lead.
 
 ---
 
 ## 12. Risques et points de vigilance
 
-1. **Fenêtre Electron** : `main.cjs` crée bien le widget en 360×560 (vérifié le
+1. **Aperçu : MIME de la police** — `/assets/fonts/InterVariable.woff2` répond 500
+   car `scripts/preview.cjs` ne mappe pas `woff2`. Sans ajout de
+   `'woff2': 'font/woff2'`, l'aperçu utilise le repli Segoe UI et
+   `document.fonts.check` reste `false` ; le renderer et l'application Electron
+   (fichier local) ne sont pas affectés. Correctif Lead attendu.
+2. **Fenêtre Electron** : `main.cjs` crée bien le widget en 360×520 (vérifié le
    4 novembre 2026) ; le renderer a été validé dans ce format via l'aperçu. Si une
    ancienne version du renderer reste en cache dans un portable déjà construit, elle
    continuera d'appeler `fitQuick` : reconstruire les ressources (`npm run
    update:portable`) pour propager le nouveau widget compact.
-2. **`scripts/smoke.cjs` doit être largement mis à jour** : tout le bloc stratégie
-   (lignes citées §10) et les hooks widget par fenêtre disparaissent. Sans mise à
-   jour, le smoke échouera — c'est attendu et documenté pour T10/qualite-tests.
-3. **`scripts/smoke-resource-status.cjs`** doit être adapté à la partie widget
-   (statuts par fenêtre remplacés par `.quick-value`/`.quick-level`).
+3. **`scripts/smoke.cjs` / `smoke-resource-status.cjs`** : les libellés `5 h` →
+   `Horaire`, `Gemini 4 Argon` → `Hebdo Argon`, les chips et la sémantique de
+   `.quick-extra` (segments masqués, plus `windows-1`) changent des attentes
+   explicites ; détail §10. T20/qualite-tests doivent adapter ces assertions.
 4. **Thème système au premier lancement** : si Windows est en mode sombre,
    `dataset.theme` vaut `dark` avant toute interaction ; les tests existants qui
    supposent `light` doivent forcer la préférence.
@@ -525,9 +611,12 @@ lecteur d'écran NVDA/Narrator, smoke complet. Ces points sont à valider par le
    `nextAmount` absents, mais pas un `billingCycle` inconnu au-delà du libellé par
    défaut ; une migration `lib/migrations.cjs` peut rester nécessaire.
 7. **Widget fixe sans auto-fit** : si les textes système sont agrandis (zoom), les
-   10 lignes peuvent dépasser 560 px ; la liste défile alors avec une barre fine
+   10 lignes peuvent dépasser 520 px ; la liste défile alors avec une barre fine
    (comportement voulu). Aucun élément n'est coupé horizontalement (testé 360 px).
-8. **Aucun test automatisé du nouveau code renderer** : le harnais statique et les
+8. **Police absente du paquet** : si `assets/fonts/InterVariable.woff2` manque à la
+   distribution, le repli Segoe UI/system-ui s'applique (aucun chargement réseau) ;
+   conserver `assets/fonts/LICENSE-Inter.txt` avec le portable.
+9. **Aucun test automatisé du nouveau code renderer** : le harnais statique et les
    mesures Chromium ne remplacent pas le smoke Electron. Le Lead doit lancer
    `npm run test:desktop`, `npm run test:resources:desktop` et
    `npm run test:claude:desktop` après mise à jour des scripts.
@@ -536,11 +625,19 @@ lecteur d'écran NVDA/Narrator, smoke complet. Ces points sont à valider par le
 
 ## 13. Captures / revue visuelle
 
-- Nouvelle capture de référence : **`test-results/widget-compact.png`** (360×560 @2x,
-  aperçu Chromium) — 10 fournisseurs, 2 sections, aucune barre de défilement.
-- Captures Lead à régénérer : `ui-widget-light.png`, `ui-widget-rows.png`,
-  `quick.png`, `compact-window.png`, `settings-*.png` ; elles ne doivent plus montrer
-  de panneau « Ton ordre d'usage » ni de section recommandation dans le widget.
-- Points visuels : widget 360×560 sans défilement, icônes 20 px visibles, lignes 32 px,
-  en-tête court, tableau de bord sans encart recommandation, Réglages sans formulaire
-  d'ordre de consommation, thème clair et sombre.
+- **Avant/après T19** dans `test-results/` (via Playwright, aperçu Chromium,
+  `deviceScaleFactor: 2`, fixtures de quotas) :
+  - `before-claude-card.png` / `after-claude-card.png` — carte Claude avec
+    Hebdo, Horaire, Hebdo Fable, chips ;
+  - `before-antigravity-card.png` / `after-antigravity-card.png` — groupes Gemini,
+    Claude / GPT, Argon + Hebdo Argon ;
+  - `before-widget.png` / `after-widget.png` — widget 360×520 @2x, 10 fournisseurs,
+    2 sections, segments et chips ;
+  - `after-claude-dialog.png` — chip de statut dans la fiche.
+- Captures Lead à régénérer après correctif MIME : `ui-widget-light.png`,
+  `ui-widget-rows.png`, `quick.png`, `compact-window.png`, `settings-*.png`,
+  `widget-compact.png` ; elles ne doivent plus montrer de panneau « Ton ordre
+  d'usage » ni de section recommandation, et doivent afficher Inter Variable.
+- Points visuels : widget 360×520 sans défilement, icônes 20 px visibles, lignes
+  36 px, en-tête court, chips AA, libellés Hebdo/Horaire/Hebdo Fable/Hebdo Argon,
+  tableau de bord sans encart recommandation, thème clair et sombre.

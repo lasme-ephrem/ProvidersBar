@@ -37,7 +37,8 @@ function resetForm(provider) {
   const slots = QuotaResets.slots(provider).map((slot, index) => {
     const manual = provider.manualResets?.[slot.key];
     const current = resetMarkup(provider, slot.key);
-    return `<fieldset class="reset-field"><legend>${escapeHtml(slot.key)}</legend>`
+    const slotLabel = typeof quotaSlotLabel === 'function' ? quotaSlotLabel(provider, slot) : slot.key;
+    return `<fieldset class="reset-field"><legend>${escapeHtml(slotLabel)}</legend>`
       + `${current ? `<p class="reset-current">${current}</p>` : ''}`
       + `<div class="fields">`
       + `${inputField('Date manuelle', `reset-date-${index}`, manual?.date || '', 'date')}`

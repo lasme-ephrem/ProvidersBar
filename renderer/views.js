@@ -75,7 +75,8 @@ function resourceLegend() {
     + `<span class="level-pill resource-empty">Épuisé · 0</span> `
     + `<span class="level-pill resource-critical">Critique · ≤ 2 USD ou ≤ 10 %</span> `
     + `<span class="level-pill resource-low">Bas · ≤ 5 USD ou ≤ 25 %</span> `
-    + `<span class="level-pill resource-healthy">Suffisant · au-dessus</span>. `
+    + `<span class="level-pill resource-healthy">Suffisant · au-dessus</span> `
+    + `<span class="level-pill resource-unknown">Indisponible · aucune donnée</span>. `
     + `Le niveau est toujours écrit en toutes lettres : la couleur ne porte jamais l’information seule. `
     + `Les seuils en dollars ne concernent que les soldes USD et sont distincts du seuil des notifications.</p>`;
 }
@@ -215,6 +216,7 @@ function quotaGroups(provider) {
       let name = slot.group;
       if (provider.id === 'claude' && slot.group === 'Fable') name = '';
       else if (slot.group === 'Claude et GPT') name = 'Claude / GPT';
+      else if (provider.id === 'antigravity' && slot.group === 'Gemini 4 Argon') name = 'Argon';
       else if (provider.id === 'grok' && !slot.group) {
         name = provider.snapshot?.usageKind === 'x-subscription-shared'
           ? 'Grok / Bot / Cursor'
@@ -235,11 +237,24 @@ function quotaGroups(provider) {
 
 function quotaPeriodLabel(provider, key, label) {
   if (provider.id === 'claude' && key === 'Fable · Semaine') return 'Hebdo Fable';
-  return label === 'Semaine' ? 'Hebdo' : label === '5 heures' ? '5 h' : label;
+  if (provider.id === 'antigravity' && key.includes('Argon')) return 'Hebdo Argon';
+  if (label === 'Semaine') return 'Hebdo';
+  if (label === '5 heures' || label === 'Période en cours') return 'Horaire';
+  return label;
+}
+
+// Une fenêtre absente du relevé n'est jamais rendue comme une ligne « — ».
+function displayedQuotaGroups(provider) {
+  const windows = provider.snapshot?.quotaWindows || [];
+  if (!windows.length) return [];
+  const present = new Set(windows.map(window => QuotaResets.canonical(window.label)));
+  return quotaGroups(provider)
+    .map(group => ({ ...group, periods: group.periods.filter(period => present.has(period.key)) }))
+    .filter(group => group.periods.length);
 }
 
 function quotaStatusPeriods(provider) {
-  return quotaGroups(provider).flatMap(group =>
+  return displayedQuotaGroups(provider).flatMap(group =>
     group.periods.map(period => ({ ...period, groupName: group.name })));
 }
 
@@ -275,14 +290,24 @@ function providerResourceLevel(provider) {
 
 function quotaLimitStatus(provider, key, label, groupName = '') {
   const period = label === 'Semaine' ? 'hebdo'
-    : label === '5 heures' ? '5 h'
-      : label === 'Période en cours' ? 'en cours'
-        : label.toLocaleLowerCase('fr-FR');
+    : (label === '5 heures' || label === 'Période en cours') ? 'horaire'
+      : label.toLocaleLowerCase('fr-FR');
+  if (provider.id === 'antigravity' && key.includes('Argon')) {
+    return 'Limite hebdo Argon atteinte';
+  }
   if (provider.id === 'claude') {
     const model = key.includes(' · ') ? key.slice(0, key.lastIndexOf(' · ')) : '';
     return `Limite ${period}${model ? ' ' + model : ''} atteinte`;
   }
   return `Limite ${groupName ? groupName + ' · ' : ''}${period} atteinte`;
+}
+
+function quotaSlotLabel(provider, slot) {
+  if (provider.id === 'antigravity' && slot.group === 'Gemini 4 Argon') return 'Hebdo Argon';
+  const label = quotaPeriodLabel(provider, slot.key, slot.period);
+  if (label === 'Hebdo Fable') return label;
+  const group = slot.group === 'Claude et GPT' ? 'Claude / GPT' : slot.group;
+  return group ? `${group} · ${label}` : label;
 }
 
 function resourceAmount(balance) {
@@ -357,9 +382,10 @@ function resourceNotice(provider, compact = false) {
  * Cartes fournisseurs
  * ------------------------------------------------------------------ */
 function quotaGroupsMarkup(groups, provider) {
+  const periodRank = period => period.label === 'Semaine' ? 0
+    : (period.label === '5 heures' || period.label === 'Période en cours') ? 1 : 2;
   return `<div class="quota-groups">${groups.map(group => {
-    const sorted = [...group.periods].sort((a, b) =>
-      (a.label === 'Semaine' ? -1 : 1) - (b.label === 'Semaine' ? -1 : 1));
+    const sorted = [...group.periods].sort((a, b) => periodRank(a) - periodRank(b));
     const periods = sorted.map(({ label, quota, key }) => {
       const value = quota?.remaining;
       const known = typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 100;
@@ -409,7 +435,7 @@ function favoriteButton(provider) {
 function card(provider) {
   if (provider.subscriptionStatus === 'expired' && !ollamaFree(provider)) return expiredCard(provider);
   const snapshot = provider.snapshot;
-  const groups = quotaGroups(provider);
+  const groups = displayedQuotaGroups(provider);
   const levelName = providerResourceLevel(provider);
   const unverified = resourceUnverified(provider);
   let metric;
@@ -486,7 +512,8 @@ function card(provider) {
       : simpleQuota}`
     + `${provider.id === 'ollama' ? resetMarkup(provider, 'Mois') : ''}`
     + `${ollamaReserveMarkup(provider)}${resourceNotice(provider)}`
-    + `<div class="card-bottom"><span class="card-meta">${meta}</span>${statusBadge(provider)}</div>`
+    + `<div class="card-bottom"><span class="card-meta">${meta}</span>`
+    + `<span class="card-badges">${levelPill(levelName, unit)}${statusBadge(provider)}</span></div>`
     + `${provider.error ? `<p class="card-error">${escapeHtml(provider.error)}</p>` : ''}`
     + `</div></article>`;
 }
@@ -741,27 +768,68 @@ function settingsPage({ version = null, electronVersion = null, packaged = null,
 /* ------------------------------------------------------------------ *
  * Widget compact : simple liste abonnements puis API (aucune recommandation)
  * ------------------------------------------------------------------ */
-// Résumé compact d'un abonnement : fenêtre la plus contrainte + nombre d'autres.
+// Résumé compact d'un abonnement : segments Hebdo/Horaire les plus contraints.
 function quickQuotaSummary(provider) {
-  const periods = quotaStatusPeriods(provider)
-    .filter(({ quota }) => typeof quota?.remaining === 'number' && Number.isFinite(quota.remaining));
-  if (!periods.length) return null;
-  const tightest = [...periods].sort((a, b) => a.quota.remaining - b.quota.remaining)[0];
-  const remaining = Math.max(0, Math.min(100, tightest.quota.remaining));
+  const known = quotaStatusPeriods(provider)
+    .filter(({ quota }) => typeof quota?.remaining === 'number' && Number.isFinite(quota.remaining))
+    .map(period => {
+      const remaining = Math.max(0, Math.min(100, period.quota.remaining));
+      return {
+        ...period,
+        displayLabel: quotaPeriodLabel(provider, period.key, period.label),
+        remaining,
+        levelName: ResourceLevels.level(remaining, '%'),
+      };
+    });
+  if (!known.length) return null;
+  // Un seul segment par libellé (ex. plusieurs « Hebdo » Gemini/Claude → le plus bas).
+  const categories = [];
+  for (const period of known) {
+    const category = categories.find(item => item.displayLabel === period.displayLabel);
+    if (!category) {
+      categories.push({ ...period });
+    } else if (period.remaining < category.remaining) {
+      Object.assign(category, {
+        remaining: period.remaining,
+        levelName: period.levelName,
+        groupName: period.groupName,
+      });
+    }
+  }
+  const byConstraint = [...categories].sort((a, b) => a.remaining - b.remaining);
+  const shown = byConstraint.length > 1 ? 2 : 1;
   return {
-    label: quotaPeriodLabel(provider, tightest.key, tightest.label),
-    remaining,
-    levelName: ResourceLevels.level(remaining, '%'),
-    extra: periods.length - 1,
-    details: periods.map(period =>
-      `${quotaPeriodLabel(provider, period.key, period.label)} : ${period.quota.remaining} %`).join(' · '),
+    tightest: byConstraint[0],
+    secondary: byConstraint[1] || null,
+    extra: Math.max(0, categories.length - shown),
+    details: known.map(period =>
+      `${period.groupName ? period.groupName + ' ' : ''}${period.displayLabel} : ${period.remaining} %`).join(' · '),
   };
+}
+
+function quickChip(levelName, unit = '%') {
+  return levelPill(levelName, unit, 'quick-level');
+}
+
+function quickSegmentsMarkup(summary) {
+  const segment = (period, first) => '<span class="quick-segment">'
+    + `<span class="${first ? 'quick-value-label' : 'quick-segment-label'}">`
+    + `${escapeHtml(period.displayLabel)}</span>`
+    + `<span class="${first ? 'quick-value-main' : 'quick-segment-value'}">`
+    + `${period.remaining}<small>%</small></span></span>`;
+  let html = segment(summary.tightest, true);
+  if (summary.secondary) {
+    html += '<span class="quick-segment-sep" aria-hidden="true">·</span>'
+      + segment(summary.secondary, false);
+  }
+  if (summary.extra > 0) html += `<span class="quick-extra">+${summary.extra}</span>`;
+  return `<span class="quick-segments">${html}</span>`;
 }
 
 function quickUnknownValue(title) {
   return `<span class="quick-value" title="${escapeHtml(title)}">`
-    + '<span class="quick-value-main">—</span>'
-    + '<span class="quick-level">Indisponible</span></span>';
+    + `${quickChip('unknown')}`
+    + '<span class="quick-segments"><span class="quick-value-main">—</span></span></span>';
 }
 
 function quickSubscriptionValue(provider) {
@@ -772,12 +840,10 @@ function quickSubscriptionValue(provider) {
       ? `Quota indisponible · réserve supplémentaire ${money(reserve.remaining, 'USD')}`
       : 'Quota indisponible');
   }
-  const extra = summary.extra > 0 ? `<span class="quick-extra">+${summary.extra}</span>` : '';
-  return `<span class="quick-value resource-${summary.levelName}" title="${escapeHtml(summary.details)}">`
-    + `<span class="quick-value-label">${escapeHtml(summary.label)}</span>`
-    + `<span class="quick-value-main">${summary.remaining}<small>%</small></span>`
-    + `<span class="quick-level">${escapeHtml(ResourceLevels.shortLabel(summary.levelName))}</span>`
-    + `${extra}</span>`;
+  return `<span class="quick-value resource-${summary.tightest.levelName}"`
+    + ` title="${escapeHtml(summary.details)}">`
+    + `${quickChip(summary.tightest.levelName)}`
+    + `${quickSegmentsMarkup(summary)}</span>`;
 }
 
 function quickApiValue(provider) {
@@ -794,10 +860,24 @@ function quickApiValue(provider) {
     severity.indexOf(a.levelName) - severity.indexOf(b.levelName))[0];
   const extra = rated.length > 1 ? `<span class="quick-extra">+${rated.length - 1}</span>` : '';
   const details = rated.map(balance => money(balance.remaining, balance.currency)).join(' · ');
-  return `<span class="quick-value" title="${escapeHtml(details)}">`
-    + `<span class="resource-value resource-${worst.levelName}">${money(worst.remaining, worst.currency)}</span>`
-    + `<span class="quick-level">${escapeHtml(ResourceLevels.shortLabel(worst.levelName))}</span>`
-    + `${extra}</span>`;
+  return `<span class="quick-value resource-${worst.levelName}" title="${escapeHtml(details)}">`
+    + `${quickChip(worst.levelName, worst.currency)}`
+    + `<span class="quick-segments"><span class="resource-value resource-${worst.levelName}">`
+    + `${money(worst.remaining, worst.currency)}</span>${extra}</span></span>`;
+}
+
+
+function quickDetailText(provider) {
+  if (provider.type === 'api') {
+    const balances = Array.isArray(provider.snapshot?.balances) ? provider.snapshot.balances : [];
+    return balances.map(balance => `${money(balance.remaining, balance.currency)} (`
+      + `${ResourceLevels.shortLabel(ResourceLevels.level(balance.remaining, balance.currency))})`).join(' · ');
+  }
+  return quotaStatusPeriods(provider)
+    .filter(({ quota }) => typeof quota?.remaining === 'number' && Number.isFinite(quota.remaining))
+    .map(period => `${period.groupName ? period.groupName + ' ' : ''}`
+      + `${quotaPeriodLabel(provider, period.key, period.label)} : ${period.quota.remaining} %`)
+    .join(' · ');
 }
 
 function quickAccountRow(provider) {
@@ -805,7 +885,9 @@ function quickAccountRow(provider) {
   const levelName = providerResourceLevel(provider);
   const unverified = resourceUnverified(provider);
   const value = provider.type === 'api' ? quickApiValue(provider) : quickSubscriptionValue(provider);
+  const detailText = quickDetailText(provider);
   const details = [];
+  if (detailText) details.push(detailText);
   if (snapshot?.updatedAt) details.push(`Dernier relevé : ${fullDateTime(snapshot.updatedAt)}`);
   if (provider.error) details.push(provider.error);
   const label = provider.name + (provider.error ? ' · relevé à vérifier' : '');
@@ -815,6 +897,7 @@ function quickAccountRow(provider) {
     + `<span class="quick-provider">${logo(provider, true)}`
     + `<span class="provider-name">${escapeHtml(provider.name)}${ollamaFree(provider) ? ' · Free' : ''}</span></span>`
     + `${value}`
+    + `${detailText ? `<span class="sr-only">${escapeHtml(detailText)}</span>` : ''}`
     + `${unverified ? `<span class="quick-stale" aria-label="Relevé à vérifier"`
       + ` title="Relevé à vérifier">${icon('warning', 12)}</span>` : ''}`
     + `</button>`;
@@ -1099,7 +1182,10 @@ function dialogMarkup(provider, activeTab) {
   return `<div class="dialog-head">${logo(provider)}`
     + `<div class="dialog-head-text"><h2 id="detail-title">${escapeHtml(provider.name)}</h2>`
     + `<p>${provider.type === 'subscription' ? 'Abonnement' : 'Accès API'} · `
-    + `${provider.reviewed ? 'Fiche vérifiée' : 'Fiche à vérifier'}</p></div>`
+    + `${provider.reviewed ? 'Fiche vérifiée' : 'Fiche à vérifier'}</p>`
+    + `${levelPill(providerResourceLevel(provider),
+      provider.type === 'api' ? (provider.snapshot?.balances?.[0]?.currency || 'USD') : '%',
+      'dialog-level')}</div>`
     + `<button type="button" class="icon-button" data-action="close-dialog" aria-label="Fermer la fiche">`
     + `${icon('close', 20)}</button></div>`
     + dialogTabs(provider, activeTab)

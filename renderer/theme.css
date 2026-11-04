@@ -7,7 +7,7 @@
   color-scheme: light;
 
   /* Typographie : jamais moins de 11 px, corps 13 px. */
-  --font-ui: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, Arial, sans-serif;
+  --font-ui: "Inter Variable", "Inter", "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, Arial, sans-serif;
   --font-mono: "Cascadia Mono", "Consolas", "SFMono-Regular", monospace;
   --text-xs: 11px;
   --text-sm: 12px;

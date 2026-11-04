@@ -156,11 +156,20 @@ function resourceClass(value, unit) {
   return 'resource-' + ResourceLevels.level(value, unit);
 }
 
-function levelPill(levelName, unit) {
-  if (!levelName || levelName === 'unknown') return '';
-  const description = ResourceLevels.describe(levelName, unit);
-  return `<span class="level-pill resource-${levelName}" title="${escapeHtml(description)}">`
-    + `${escapeHtml(ResourceLevels.shortLabel(levelName))}</span>`;
+// Chip de niveau : texte toujours visible (jamais couleur seule), point décoratif
+// et title explicitant le seuil. Le texte « Indisponible » est rendu comme les autres.
+function levelPill(levelName, unit, extraClass = '') {
+  const safeLevel = ['empty', 'critical', 'low', 'healthy', 'unknown'].includes(levelName)
+    ? levelName : 'unknown';
+  const explicit = {
+    empty: 'Ressource épuisée',
+    healthy: 'Ressource suffisante',
+    unknown: 'Donnée indisponible',
+  }[safeLevel];
+  const description = explicit || ResourceLevels.describe(safeLevel, unit);
+  const classes = ['level-pill', `resource-${safeLevel}`, extraClass].filter(Boolean).join(' ');
+  return `<span class="${classes}" title="${escapeHtml(description)}">`
+    + `${escapeHtml(ResourceLevels.shortLabel(safeLevel))}</span>`;
 }
 
 // Jauge accessible : rendue uniquement pour un pourcentage fiable.
