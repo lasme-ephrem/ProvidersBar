@@ -1,5 +1,11 @@
 # Historique des versions
 
+## 0.6.5 — 4 novembre 2026
+
+- Lancement du script d'installation via le shell Windows, en processus détaché. Un lancement direct de `powershell.exe` depuis Electron peut être bloqué par l'environnement.
+- L'accusé de démarrage reste obligatoire avant que l'application ne quitte.
+- Flux réel 0.6.0 → 0.6.5 validé.
+
 ## 0.6.4 — 4 novembre 2026
 
 - Le script d'installation écrit un accusé de démarrage avant d'attendre la fermeture de l'application. L'application attend cet accusé avant de quitter, afin de ne pas tuer un processus PowerShell qui n'aurait pas encore démarré.
