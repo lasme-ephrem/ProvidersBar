@@ -194,7 +194,8 @@ npm start
 | `npm test` | Suite unitaire déterministe : formats, erreurs, concurrence, migrations, chiffrement, cooldowns, sécurité et télémétrie zéro |
 | `npm run test:coverage` | Même suite avec couverture de code Node (`--experimental-test-coverage`) |
 | `npm run verify` | Vérification syntaxique de tous les `.cjs`/`.js` du dépôt (`node --check`) |
-| `npm run lint` | Alias de `npm run verify` |
+| `npm run lint` | Syntaxe + ESLint (`eslint.config.cjs`, règles `recommended` uniquement, aucune règle de style) |
+| `npm run lint:fix` | Même contrôle, en appliquant les corrections automatiques d'ESLint |
 | `npm run doctor` | Diagnostic lecture seule des prérequis (17 contrôles, `--json` disponible) |
 | `npm run test:desktop` | Intégration Electron : inventaire, IPC, chiffrement, persistance, widget |
 | `npm run test:resources:desktop` | Couleurs et épuisement de chaque limite dans les deux vues et les deux thèmes |

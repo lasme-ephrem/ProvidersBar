@@ -8,8 +8,10 @@ Node.js ≥ 24, Windows x64, Electron 44.x).
 
 1. Installer les dépendances verrouillées : `npm ci`.
 2. Vérifier la syntaxe : `npm run verify` (ou directement `node scripts/check-syntax.cjs`
-   si le script npm n'est pas encore déclaré). `npm run lint` exécute le même contrôle
-   et doit rester vert.
+   si le script npm n'est pas encore déclaré). Puis `npm run lint` : syntaxe + ESLint
+   (`scripts/lint.cjs`, configuration `eslint.config.cjs`), qui doit rester vert.
+   `npm run lint:fix` applique les corrections automatiques d'ESLint. La configuration
+   se limite au jeu `recommended` : aucune règle de style, aucun reformatage de masse.
 3. Exécuter `npm test` : suite unitaire déterministe, sans Electron ni réseau.
 4. Diagnostic local des données et de l'environnement : `npm run doctor`
    (`scripts/doctor.cjs`, sans secret). Il vérifie les chemins, les fichiers d'état,
@@ -45,9 +47,18 @@ Permissions : lecture seule du dépôt. Aucun secret de dépôt n'est nécessair
 ## Scripts de vérification et tests transverses
 
 - **`scripts/check-syntax.cjs`** : `node --check` sur `main.cjs`, `preload.cjs`,
-  `lib/*.cjs`, `lib/*.js`, `scripts/*.cjs`, `renderer/*.js` et `tests/*.cjs`.
-  Sortie claire, code de sortie 1 en cas d'erreur ou de fichier requis absent.
-  Appelé par `npm run verify` et `npm run lint`.
+  `eslint.config.cjs`, `lib/*.cjs`, `lib/*.js`, `scripts/*.cjs`, `renderer/*.js` et
+  `tests/*.cjs`. Sortie claire, code de sortie 1 en cas d'erreur ou de fichier
+  requis absent. Appelé par `npm run verify` et, en première étape, par `npm run lint`.
+- **`scripts/lint.cjs`** (`npm run lint`, `npm run lint:fix` avec `--fix`) : enchaîne
+  `check-syntax` puis ESLint via son API Node, formateur `stylish`, code de sortie 1
+  à la première erreur. La configuration **`eslint.config.cjs`** (flat config) se
+  limite au jeu `recommended` de `@eslint/js` : pas de règle de style (indentation,
+  guillemets, longueur de ligne), donc pas de reformatage de masse et des diffs
+  lisibles. Elle déclare les globals partagés par les scripts classiques du renderer
+  (scope global commun, voir `renderer/CONTRAT-UI.md`) et tolère `catch {}`, les
+  erreurs capturées non lues et les arguments préfixés `_`. Les dépendances
+  `eslint`, `@eslint/js` et `globals` sont épinglées en versions exactes.
 - **`tests/quality.test.cjs`** : garde-fous transverses — absence de secret en dur
   et de chemin utilisateur dans le code de production, `.gitignore` couvrant
   `data/`, `.local/`, `test-results/`, `credentials.json`, `state.json` et les
