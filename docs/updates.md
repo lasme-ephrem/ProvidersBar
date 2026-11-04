@@ -94,7 +94,12 @@ variable d'environnement utilisateur n'est pas pratique : modifie la constante
 ### Tester sans publier
 
 Les tests unitaires vérifient la signature, le hash, l'extraction et le script
-d'installation. Pour un essai complet :
+d'installation. Ils tournent sur toute plate-forme : les archives de test sont
+fabriquées en JavaScript pur (`tests/helpers/zip-writer.cjs`), la plate-forme
+Windows et le lancement du script sont injectés dans `createUpdater`. Seule
+l'exécution réelle du script PowerShell reste réservée à Windows ; son analyse
+syntaxique est vérifiée partout où `powershell.exe` ou `pwsh` est disponible.
+Pour un essai complet :
 
 - utilise une release GitHub **draft** ou un petit serveur HTTPS ;
 - lance l'application portable construit pour la version N-1 ;

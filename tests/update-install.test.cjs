@@ -4,11 +4,38 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const { execFileSync, spawnSync } = require('node:child_process');
 const { findPackageRoot, buildWindowsInstallScript } = require('../lib/update-install.cjs');
-const { execFileSync } = require('node:child_process');
 
-test('la racine du paquet est trouvée et une archive avec data/ est refusée', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'lasmium-stage-'));
+function workspace(t, prefix) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  // Sous Windows, un descripteur peut se refermer juste après le test : on réessaie.
+  t.after(() => fs.rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
+  return root;
+}
+
+// Interpréteur PowerShell disponible : `powershell.exe` (Windows PowerShell 5.1)
+// puis `pwsh` (PowerShell 7, installable aussi sous Linux et macOS). La
+// détection est paresseuse et mémorisée : aucun processus n'est lancé quand
+// les tests concernés sont ignorés.
+let powerShell;
+function findPowerShell() {
+  if (powerShell !== undefined) return powerShell;
+  powerShell = null;
+  for (const candidate of ['powershell.exe', 'pwsh']) {
+    const probe = spawnSync(candidate, ['-NoProfile', '-NonInteractive', '-Command', '$PSVersionTable.PSVersion.Major'],
+      { encoding: 'utf8', timeout: 15000, windowsHide: true });
+    if (!probe.error && probe.status === 0) { powerShell = candidate; break; }
+  }
+  return powerShell;
+}
+
+function psQuote(value) {
+  return `'${String(value).replace(/'/g, "''")}'`;
+}
+
+test('la racine du paquet est trouvée et une archive avec data/ est refusée', async t => {
+  const root = workspace(t, 'lasmium-stage-');
   const pkg = path.join(root, 'LasmiumTokensHub-0.6.0-win32-x64');
   fs.mkdirSync(path.join(pkg, 'resources', 'app'), { recursive: true });
   fs.writeFileSync(path.join(pkg, 'LasmiumTokensHub.exe'), 'exe');
@@ -50,9 +77,35 @@ test('le script PowerShell échappe les chemins et refuse une cible incluse dans
   }), /incluse dans le dossier préparé/);
 });
 
+test('le script d’installation généré est accepté par l’analyseur PowerShell', { timeout: 30000 }, t => {
+  const shell = findPowerShell();
+  if (!shell) { t.skip('ni powershell.exe ni pwsh n’est disponible'); return; }
+  const root = workspace(t, 'lasmium-install-parse-');
+  const scriptPath = path.join(root, 'install.ps1');
+  fs.writeFileSync(scriptPath, buildWindowsInstallScript({
+    stagedRoot: path.join(root, "stage-l'été"),
+    targetRoot: path.join(root, 'target'),
+    appPid: 2147483647,
+    logPath: path.join(root, 'target', 'data', 'updates', 'update.log'),
+  }));
+  // Analyse syntaxique seule : le script n'est pas exécuté.
+  const command = [
+    '$errors = $null',
+    `[System.Management.Automation.Language.Parser]::ParseFile(${psQuote(scriptPath)}, [ref]$null, [ref]$errors) | Out-Null`,
+    'if ($errors.Count) { $errors | ForEach-Object { $_.Message }; exit 1 }',
+    "'analyse-ok'",
+  ].join('; ');
+  const output = execFileSync(shell, ['-NoProfile', '-NonInteractive', '-Command', command], { encoding: 'utf8', timeout: 20000, windowsHide: true });
+  assert.match(output, /analyse-ok/);
+});
 
-test('le script d’installation remplace l’application et préserve data/', { skip: process.platform !== 'win32', timeout: 30000 }, () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'lasmium-install-'));
+test('le script d’installation remplace l’application et préserve data/', { timeout: 30000 }, t => {
+  // Le script manipule des chemins Windows (`resources\app`), attend la fin
+  // d'un PID Windows et relance un `.exe` : son exécution réelle n'a de sens
+  // que sous Windows, avec powershell.exe ou, à défaut, pwsh.
+  const shell = process.platform === 'win32' ? findPowerShell() : null;
+  if (!shell) { t.skip(process.platform === 'win32' ? 'aucun interpréteur PowerShell disponible' : 'exécution réelle du script réservée à Windows'); return; }
+  const root = workspace(t, 'lasmium-install-');
   const target = path.join(root, 'portable');
   const staged = path.join(root, 'staged');
   fs.mkdirSync(path.join(target, 'resources', 'app'), { recursive: true });
@@ -70,7 +123,7 @@ test('le script d’installation remplace l’application et préserve data/', {
     appPid: 2147483647,
     logPath: path.join(target, 'data', 'updates', 'update.log'),
   }));
-  execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', scriptPath], { timeout: 20000 });
+  execFileSync(shell, ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', scriptPath], { timeout: 20000 });
   assert.equal(fs.readFileSync(path.join(target, 'resources', 'app', 'main.cjs'), 'utf8'), 'new-main');
   assert.equal(fs.readFileSync(path.join(target, 'data', 'state.json'), 'utf8'), 'précieux');
   assert.ok(fs.existsSync(path.join(target, 'data', 'updates', 'install.started')));
