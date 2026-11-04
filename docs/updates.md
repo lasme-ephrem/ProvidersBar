@@ -65,11 +65,19 @@ La commande refuse d'écraser une clé existante.
 ```powershell
 npm run package:release
 npm run release:artifacts
+npm run release:verify
 npm run updater:sign -- --version 0.6.5 --notes "Corrections et mise à jour automatique"
 ```
 
+`npm run release:verify` extrait l'archive dans un dossier temporaire avec le même
+`extractZip` que l'application, vérifie les fichiers indispensables, la version de
+`resources/app/package.json`, l'absence de tout dossier `data/` et la concordance
+du SHA-256 avec `SHA256SUMS-0.6.5.txt`.
+
 Le manifeste est écrit dans `dist/latest.json`. Sans `--url`, l'URL GitHub Releases
-du dépôt `lasme-ephrem/ProvidersBar` est utilisée.
+du dépôt `lasme-ephrem/lasmium-tokens-bar` est utilisée. `--notes-file chemin`
+remplace `--notes` pour des notes multilignes (par exemple la section du CHANGELOG
+produite par `node scripts/release-notes.cjs`).
 
 Pour un autre hébergement :
 
@@ -79,12 +87,43 @@ npm run updater:sign -- --version 0.6.5 --url "https://mon-domaine.example/Lasmi
 
 ### Publier
 
-Sur GitHub Releases :
+Le workflow [`release.yml`](../.github/workflows/release.yml) remplace la
+fabrication et le dépôt manuels des fichiers sur GitHub Releases :
 
-1. créer un tag `v0.6.5` ;
-2. joindre `dist/LasmiumTokensHub-0.6.5-win32-x64.zip` ;
-3. joindre `dist/latest.json` **sous le nom exact `latest.json`** ;
-4. publier la release.
+1. vérifier que `package.json`, `CHANGELOG.md` et `README.md` annoncent la version ;
+2. créer et pousser le tag `v0.6.5`, identique à la version de `package.json`
+   (sinon le workflow échoue explicitement) ;
+3. le workflow rejoue `npm run verify`, `npm run lint` et `npm test`, fabrique
+   `dist/LasmiumTokensHub-0.6.5-win32-x64.zip` et `SHA256SUMS-0.6.5.txt`, contrôle
+   l'archive (`npm run release:verify`), extrait les notes de la section `## 0.6.5`
+   du CHANGELOG, lance un smoke best-effort sur le binaire construit, puis crée la
+   release GitHub en **brouillon** avec ces fichiers (ou complète la release du tag
+   si elle existe déjà) ;
+4. `latest.json` : signé et joint par le workflow si le secret
+   `LASMIUM_UPDATER_PRIVATE_KEY` est défini ; sinon, une notice le rappelle et il faut
+   le signer localement (`npm run updater:sign -- --version 0.6.5 --notes "..."`) puis
+   le joindre à la main **sous le nom exact `latest.json`** ;
+5. relire le brouillon et publier la release. Les applications installées ne voient
+   la mise à jour qu'une fois la release publiée
+   (`releases/latest/download/latest.json`).
+
+Un lancement manuel du workflow (**Run workflow**) est un essai à blanc : mêmes
+vérifications et mêmes fichiers, conservés 7 jours en artefact de workflow, sans
+toucher aux releases.
+
+#### Secret `LASMIUM_UPDATER_PRIVATE_KEY` (facultatif)
+
+Contenu PEM de `.local/updater/private-key.pem`, déclaré dans les secrets Actions
+du dépôt. Le workflow l'écrit dans un fichier temporaire du runner, hors du dépôt
+et de `dist/`, le passe à `npm run updater:sign -- --key ...` puis le supprime ; il
+n'apparaît ni dans les journaux ni dans les artefacts.
+
+Portée : toute personne capable de pousser un tag `v*` déclenche alors une
+signature valide, reconnue par toutes les applications installées. Ne définir ce
+secret que sur un dépôt dont les tags et `main` sont protégés et dont les
+mainteneurs sont de confiance ; à défaut, garder la signature locale. Une clé
+compromise impose de régénérer la paire (voir « Clés »), ce qui casse les mises à
+jour automatiques des versions déjà installées.
 
 Sur un serveur statique, dépose le ZIP et `latest.json`, puis configure
 `LASMIUM_UPDATE_MANIFEST_URL` avec l'URL HTTPS du manifeste. En production, une

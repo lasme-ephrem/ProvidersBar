@@ -92,8 +92,16 @@ un utilisateur légitime qui contrôle sa session et son dossier de données.
 - **Audit** : `npm audit --omit=dev` en CI sur les dépendances de production ;
   `npm audit` complet est attendu avant chaque release, car le runtime Electron
   livré ne fait pas partie de l'audit de production.
-- **CI Windows** : jobs déterministes (syntaxe, tests unitaires, audit) et job
-  Electron best-effort nécessitant une session graphique interactive.
+- **CI Windows** : `ci.yml` enchaîne des jobs déterministes (syntaxe, tests
+  unitaires, canary hors ligne, audit) et un job Electron best-effort nécessitant
+  une session graphique interactive. `release.yml` fabrique l'archive sur un tag
+  `v*`, la réextrait avec le code de l'application pour la contrôler (contenu,
+  version, absence de `data/`, SHA-256) et ne crée qu'un **brouillon** de release :
+  la publication reste un geste humain. Le secret facultatif
+  `LASMIUM_UPDATER_PRIVATE_KEY` permet de signer `latest.json` en CI ; toute
+  personne pouvant pousser un tag déclenche alors une signature, il est donc
+  réservé à un dépôt dont les tags sont protégés. Sans lui, la signature reste
+  locale (`npm run updater:sign`).
 - **Tests de sécurité** : `tests/security.test.cjs`, `tests/window-security.test.cjs`,
   `tests/privacy-export.test.cjs` et `tests/quality.test.cjs` couvrent
   l'absence de port de débogage, l'allowlist, la CSP, l'export nettoyé, l'ACL,

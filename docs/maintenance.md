@@ -22,16 +22,25 @@ Node.js ≥ 24, Windows x64, Electron 44.x).
 7. Audit des dépendances de production : `npm audit --omit=dev`.
 8. Vérifier `git diff --check` et `git status --short` avant commit.
 
-## Intégration continue (`.github/workflows/ci.yml`)
+## Intégration continue (`.github/workflows/`)
 
-Workflow Windows unique, déclenché sur `main`, `refonte/**`, les pull requests et
-manuellement. Deux jobs :
+Trois workflows, tous sur `windows-latest` avec Node 24, cache npm et `npm ci`.
+L'ancien workflow « Qualité », qui répétait `npm ci`, `npm run verify` et `npm test`
+sur un second runner Windows à chaque push, a été fusionné dans `ci.yml` ;
+`tests/quality.test.cjs` vérifie qu'il n'est pas recréé.
+
+### `ci.yml` — intégration continue
+
+Déclenché sur `main`, les pull requests et manuellement
+(`.github/workflows/ci.yml`). Deux jobs :
 
 - **tests** (`windows-latest`, Node 24, cache npm) : `npm ci`, `npm run verify`,
-  `npm run lint`, `npm test`, puis `npm audit --omit=dev`. Chaque étape est une
-  simple commande npm exécutée par le shell par défaut du runner : les scripts
-  `verify` et `lint` étant déclarés dans `package.json`, les anciens replis
-  conditionnels écrits en PowerShell ont été retirés. Ce job est bloquant.
+  `npm run lint`, `npm test`, `npm run connectors:canary` (canary hors ligne : packs
+  de connecteurs signés embarqués, sans clé ni réseau), puis `npm audit --omit=dev`.
+  Chaque étape est une simple commande npm exécutée par le shell par défaut du
+  runner : les scripts `verify` et `lint` étant déclarés dans `package.json`, les
+  anciens replis conditionnels écrits en PowerShell ont été retirés. Ce job est
+  bloquant.
 - **smoke-electron** : les trois smoke tests Playwright/Electron, **best-effort**
   (`continue-on-error: true`). Ils dépendent d'une session graphique Windows
   interactive et de DPAPI pour le chiffrement : un échec est visible dans Actions,
@@ -42,10 +51,40 @@ manuellement. Deux jobs :
 Concurrence : un nouveau push annule la CI précédente sur la même référence.
 Permissions : lecture seule du dépôt. Aucun secret de dépôt n'est nécessaire.
 
-Actions GitHub : `actions/checkout`, `actions/setup-node` et `actions/upload-artifact`
-sont épinglées sur leur majeure v7 (exécutée sous Node 24) dans les trois workflows
-(`ci.yml`, `quality.yml`, `canary-live.yml`) ; les v4 reposaient sur Node 20,
-déprécié sur les runners hébergés.
+### `release.yml` — fabrication et publication d'une version
+
+Déclenché par un tag `vX.Y.Z` ou manuellement (essai à blanc : fabrication et
+vérifications sans toucher aux releases GitHub ; les fichiers produits restent
+7 jours en artefact de workflow). Job **build** (`windows-latest`, 60 minutes) :
+`npm ci` complet (le script postinstall d'Electron télécharge le runtime copié dans
+le portable), `npm run verify`, `npm run lint`, `npm test`, contrôle que
+`package.json` porte la version du tag (`v0.6.5` et `0.6.5`, échec explicite sinon),
+`npm run package:release`, `npm run release:artifacts`, `npm run release:verify`
+(extraction de l'archive avec le même `extractZip` que l'application, fichiers
+indispensables, version, absence de `data/`, SHA-256 conforme à
+`SHA256SUMS-<version>.txt`), notes de version extraites de la section du CHANGELOG
+(`scripts/release-notes.cjs`), signature de `dist/latest.json` si le secret
+`LASMIUM_UPDATER_PRIVATE_KEY` est défini (clé écrite dans `RUNNER_TEMP`, hors du
+dépôt, passée à `npm run updater:sign -- --key ... --notes-file ...`, puis
+supprimée ; sinon une notice rappelle de signer localement), puis smoke best-effort
+sur le binaire construit (`PROVIDERSBAR_EXECUTABLE`, `continue-on-error: true`).
+Job **publish** (tags uniquement, `permissions: contents: write`, `gh` préinstallé) :
+crée la release GitHub en **brouillon** si le tag n'en a pas
+(`gh release create --draft`) et y joint le ZIP, `SHA256SUMS-<version>.txt` et, si
+signé, `latest.json` (`gh release upload --clobber`). La publication finale reste un
+geste humain. Flux complet et portée du secret dans `docs/updates.md`.
+
+### `canary-live.yml` — canary avec clés réelles
+
+Déclenché manuellement uniquement : `npm run connectors:canary:live` avec les
+secrets `LASMIUM_CANARY_OPENROUTER_KEY`, `LASMIUM_CANARY_DEEPSEEK_KEY` et
+`LASMIUM_CANARY_RUNINFRA_KEY` (voir `docs/updates.md`, §1). Jamais sur une pull
+request issue d'un fork.
+
+Actions GitHub : `actions/checkout`, `actions/setup-node`, `actions/upload-artifact`
+et `actions/download-artifact` sont épinglées sur leur majeure v7 (exécutée sous
+Node 24) dans les trois workflows ; les v4 reposaient sur Node 20, déprécié sur les
+runners hébergés.
 
 Règle d'écriture : aucun guillemet typographique (`‘ ’ “ ”`) dans les workflows ni
 dans les scripts PowerShell générés par l'application (`lib/update-install.cjs`,
@@ -55,14 +94,17 @@ apostrophe courbe dans un `Write-Host` a rendu le job **tests** rouge
 (`ParserError: Missing closing '}'`) et masqué `npm test` et l'audit.
 `tests/quality.test.cjs` vérifie l'absence de ces caractères dans
 `.github/workflows/*.yml` et `tests/update-install.test.cjs` dans le script
-d'installation généré.
+d'installation généré. Les étapes des workflows restent des commandes simples ;
+quand une logique dépasse quelques lignes de shell, elle vit dans un script Node
+sous `scripts/` (`release-notes.cjs`, `verify-release-archive.cjs`).
 
 ## Scripts de vérification et tests transverses
 
 - **`scripts/check-syntax.cjs`** : `node --check` sur `main.cjs`, `preload.cjs`,
-  `lib/*.cjs`, `lib/*.js`, `scripts/*.cjs`, `renderer/*.js` et `tests/*.cjs`.
-  Sortie claire, code de sortie 1 en cas d'erreur ou de fichier requis absent.
-  Appelé par `npm run verify` et `npm run lint`.
+  `lib/*.cjs`, `lib/*.js`, `scripts/*.cjs`, `renderer/*.js` et `tests/**/*.cjs`
+  (sous-dossiers compris, par exemple `tests/helpers/`). Sortie claire, code de
+  sortie 1 en cas d'erreur ou de fichier requis absent. Appelé par `npm run verify`
+  et `npm run lint`.
 - **`tests/quality.test.cjs`** : garde-fous transverses — absence de secret en dur
   et de chemin utilisateur dans le code de production, `.gitignore` couvrant
   `data/`, `.local/`, `test-results/`, `credentials.json`, `state.json` et les
@@ -78,6 +120,16 @@ d'installation généré.
   préservées octet par octet, fichiers obsolètes retirés), `scripts/app-resources.cjs`
   (refus hors `dist`), `scripts/update-portable.cjs` (état de diagnostic absent ou
   invalide) et `scripts/preview.cjs` (état simulé, 404, contenu HTML).
+- **`scripts/verify-release-archive.cjs`** (`npm run release:verify`) et
+  **`tests/release-archive.test.cjs`** : contrôle de l'archive de release —
+  extraction dans un dossier temporaire avec le `extractZip` de l'application,
+  fichiers indispensables, version de `resources/app/package.json`, absence de
+  `data/`, SHA-256 conforme à `SHA256SUMS-<version>.txt`. Les archives de test sont
+  fabriquées en JavaScript pur par `tests/helpers/zip-writer.cjs` (méthode store,
+  CRC-32 local) : ces tests tournent aussi hors Windows, contrairement aux fixtures
+  PowerShell de `tests/zip-extract.test.cjs`. `scripts/release-notes.cjs`
+  (`tests/release-notes.test.cjs`) extrait la section du CHANGELOG qui sert de notes
+  à la release et au manifeste.
 
 ## Tests : deux couches distinctes
 
@@ -192,6 +244,12 @@ conserve le portable personnel et son éventuel `data/` ; ne pas diffuser ce dos
 Conserver les notices Electron et les fichiers de provenance des logos. Les
 ressources sont remplacées ensemble afin de retirer aussi les fichiers devenus
 inutilisés.
+
+Puis `npm run release:artifacts` (ZIP et `SHA256SUMS-<version>.txt`) et
+`npm run release:verify`. Sur un tag `vX.Y.Z`, `release.yml` enchaîne ces étapes et
+dépose les fichiers dans un brouillon de release GitHub ; `latest.json` est signé par
+le workflow si le secret `LASMIUM_UPDATER_PRIVATE_KEY` existe, sinon localement
+(`npm run updater:sign`). Voir `docs/updates.md`.
 
 Les scripts de packaging et de mise à jour incluent les dépendances de production
 (`proper-lockfile` et ses dépendances imbriquées) avec leurs notices, indispensables

@@ -203,18 +203,21 @@ npm start
 | `npm run package` | Construire ou actualiser le portable personnel, données conservées |
 | `npm run package:release` | Construire un dossier versionné neuf, sans données personnelles |
 | `npm run release:artifacts` | Créer l'archive ZIP et son empreinte SHA-256 de la release construite |
+| `npm run release:verify` | Contrôler l'archive produite : extraction avec le code de l'application, fichiers indispensables, version, absence de `data/`, SHA-256 |
 | `npm run update:portable` | Remplacer uniquement les ressources du portable personnel |
 | `npm run verify:connections` | Lectures réelles via le portable démarré en mode diagnostic |
 
 Les tests unitaires n’utilisent ni Electron, ni réseau, ni compte réel. Les tests Electron et les smoke tests nécessitent une session Windows interactive (DPAPI, fenêtres Chromium) ; ils utilisent des dossiers de données isolés et des réponses simulées.
 
-**Intégration continue** : [`.github/workflows/ci.yml`](.github/workflows/ci.yml) exécute sur `windows-latest` et Node 24 un job **tests** obligatoire (`npm ci`, `npm run verify`, `npm run lint`, `npm test`, `npm audit --omit=dev`) et un job **smoke-electron** *best-effort* (`continue-on-error`) pour les trois smoke tests, avec artefacts `test-results/`. Un échec du job smoke reste visible mais ne bloque pas la fusion ; la validation de release exécute les smoke tests sur une machine Windows interactive.
+**Intégration continue** : trois workflows sur `windows-latest` et Node 24. [`ci.yml`](.github/workflows/ci.yml) exécute un job **tests** obligatoire (`npm ci`, `npm run verify`, `npm run lint`, `npm test`, `npm run connectors:canary` hors ligne, `npm audit --omit=dev`) et un job **smoke-electron** *best-effort* (`continue-on-error`) pour les trois smoke tests, avec artefacts `test-results/`. Un échec du job smoke reste visible mais ne bloque pas la fusion ; la validation de release exécute les smoke tests sur une machine Windows interactive. [`release.yml`](.github/workflows/release.yml) fabrique, contrôle et dépose les fichiers d'une version sur un tag `v*` (ou à blanc, à la main) et prépare un **brouillon** de release GitHub ; [`canary-live.yml`](.github/workflows/canary-live.yml) lance le canary avec de vraies clés, à la demande. Détails dans [docs/maintenance.md](docs/maintenance.md).
 
 ### Diagnostic réel des connexions
 
 Quitter le portable, puis le lancer avec `--remote-debugging-port=0 --remote-debugging-address=127.0.0.1` et exécuter `npm run verify:connections`. Le script vérifie le chemin exact de l’interface, synchronise les connexions déjà suivies et écrit `test-results/connections-live.json`, sans identité, clé, cookie ni montant de portefeuille. `--include-inactive` vérifie aussi les services expirés ou en pause. Quitter puis relancer normalement pour fermer le port de diagnostic. Voir [docs/maintenance.md](docs/maintenance.md).
 
 ## Fabriquer et mettre à jour
+
+Validation locale, puis fabrication et contrôle de l'archive :
 
 ```powershell
 npm ci
@@ -225,13 +228,16 @@ npm run test:resources:desktop
 npm run test:claude:desktop
 npm run package:release
 npm run release:artifacts
+npm run release:verify
 ```
 
-La distribution propre est créée dans `dist/LasmiumTokensHub-0.4.0-win32-x64/` ; la commande refuse un dossier de release déjà existant. `npm run release:artifacts` produit l'archive ZIP et `dist/SHA256SUMS-0.4.0.txt`, et refuse d'archiver une release contenant un dossier de données personnelles. Le portable personnel reste dans `dist/ProvidersBar-win32-x64/`, à côté de ses données.
+La distribution propre est créée dans `dist/LasmiumTokensHub-<version>-win32-x64/` ; la commande refuse un dossier de release déjà existant. `npm run release:artifacts` produit l'archive ZIP et `dist/SHA256SUMS-<version>.txt`, et refuse d'archiver une release contenant un dossier de données personnelles. `npm run release:verify` réextrait l'archive avec le même code que la mise à jour automatique et contrôle les fichiers indispensables, la version, l'absence de `data/` et l'empreinte SHA-256. Le portable personnel reste dans `dist/ProvidersBar-win32-x64/`, à côté de ses données.
+
+**Publier une version** : aligner `package.json`, `CHANGELOG.md` et ce README, puis pousser un tag `vX.Y.Z` identique à la version. Le workflow [`release.yml`](.github/workflows/release.yml) rejoue les vérifications sur un runner Windows, fabrique l'archive, la contrôle, extrait les notes de la section correspondante du CHANGELOG et crée un **brouillon** de release GitHub avec le ZIP et `SHA256SUMS-<version>.txt`. Le manifeste `latest.json` de mise à jour automatique est signé et joint par le workflow si le secret `LASMIUM_UPDATER_PRIVATE_KEY` est défini ; sinon, le signer localement (`npm run updater:sign`) et le joindre à la main avant de publier la release. Un lancement manuel du workflow est un essai à blanc : mêmes fichiers, conservés 7 jours en artefact, sans toucher aux releases. Détails et portée du secret dans [docs/updates.md](docs/updates.md).
 
 Les ressources applicatives sont préparées dans un dossier temporaire puis remplacées ensemble : les fichiers retirés des sources ne subsistent pas dans l’installation. `npm run update:portable` conserve `data/` et les sessions, ferme l’ancien processus s’il est joignable en diagnostic, puis nécessite de relancer l’application ; sinon, la quitter manuellement avant la mise à jour. Le packaging inclut les dépendances de production (`proper-lockfile` et ses dépendances) et leurs notices.
 
-L’exécutable **n’est pas signé** et conserve les métadonnées binaires Electron ; conserver toutes les licences et notices du dossier distribué. Aucune mise à jour automatique n’est proposée.
+L’exécutable **n’est pas signé** et conserve les métadonnées binaires Electron ; conserver toutes les licences et notices du dossier distribué. La mise à jour automatique du portable repose sur le manifeste `latest.json` signé Ed25519 et sur l'empreinte SHA-256 de l'archive, pas sur un certificat Authenticode : SmartScreen peut demander une confirmation.
 
 ## Limites connues
 

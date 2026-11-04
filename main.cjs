@@ -66,7 +66,7 @@ let mainWindow, quickWindow, tray, state, quitting = false;
 let updateTimer, updateStartupTimer;
 const credentials = createCredentialStore({ write: document => store.atomicWrite('credentials.json', document) });
 const disconnecting = new Set();
-const DEFAULT_UPDATE_MANIFEST_URL = 'https://github.com/lasme-ephrem/ProvidersBar/releases/latest/download/latest.json';
+const DEFAULT_UPDATE_MANIFEST_URL = 'https://github.com/lasme-ephrem/lasmium-tokens-bar/releases/latest/download/latest.json';
 const UPDATE_MANIFEST_URL = process.env.LASMIUM_UPDATE_MANIFEST_URL || DEFAULT_UPDATE_MANIFEST_URL;
 let lastUpdateState = null;
 const updater = createUpdater({
