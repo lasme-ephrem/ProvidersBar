@@ -137,7 +137,8 @@ test('l’allowlist des fenêtres de compte est stricte et limitée aux origines
     assert.equal(origins.includes(forbidden), false, `${forbidden} ne doit jamais entrer dans l’allowlist`);
   }
   const main = require('node:fs').readFileSync(path.join(root, 'main.cjs'), 'utf8');
-  assert.equal((main.match(/secureAccountWindow\(\w+, ACCOUNT_ORIGINS\)/g) || []).length, 2, 'les deux fenêtres internes utilisent l’allowlist');
+  const flows = require('node:fs').readFileSync(path.join(root, 'lib', 'provider-flows.cjs'), 'utf8');
+  assert.equal((flows.match(/secureAccountWindow\(\w+, ACCOUNT_ORIGINS\)/g) || []).length, 2, 'les deux fenêtres internes utilisent l’allowlist');
 });
 
 test('une fenêtre de compte refuse toute navigation ou popup hors allowlist', () => {
@@ -207,7 +208,8 @@ test('les fenêtres UI sont isolées et la passerelle IPC est filtrée', async (
     assert.ok(prefs.includes(flag), `webPreferences UI doit contenir ${flag}`);
   }
   assert.equal((main.match(/secureWindow\((?:mainWindow|quickWindow)\)/g) || []).length, 2);
-  assert.equal((main.match(/devTools: false/g) || []).length >= 3, true, 'fenêtres UI et de connexion sans DevTools');
+  const flowsSource = await read('lib/provider-flows.cjs');
+  assert.equal(((main + flowsSource).match(/devTools: false/g) || []).length >= 3, true, 'fenêtres UI et de connexion sans DevTools');
 
   // Un seul point d'entrée IPC, filtré sur la frame principale et l'URL exacte de l'UI.
   assert.equal((main.match(/ipcMain\.handle\(/g) || []).length, 1, 'tout l’IPC passe par le wrapper filtré');

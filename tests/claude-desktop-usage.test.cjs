@@ -1,6 +1,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { parseClaudeDesktopUsage, usagePaths, readClaudeDesktopUsage, watchClaudeDesktopUsage } = require('../lib/claude-desktop-usage.cjs');
+const { shouldFallbackToClaudeDesktop, claudeDesktopGuidance } = require('../lib/provider-flows.cjs');
 const fs = require('node:fs/promises');
 const fsSync = require('node:fs');
 const os = require('node:os');
@@ -35,7 +36,7 @@ const staleSnapshot = { updatedAt: new Date(FALLBACK_NOW - 11 * 60000).toISOStri
 const sixDayOldSnapshot = { updatedAt: new Date(FALLBACK_NOW - 6 * 86400000).toISOString() };
 
 test('Claude direct fallback triggers on 429/auth failures when the last reading is absent or stale', () => {
-  const shouldFallback = loadMainHelper('shouldFallbackToClaudeDesktop');
+  const shouldFallback = shouldFallbackToClaudeDesktop;
   const eligible = ['rate-limit', 'auth-rate-limit', 'auth-required', 'auth-unavailable', 'auth-busy', 'auth-save', 'auth-network', 'auth-refused', 'auth-whatever'];
   const notEligible = ['network', 'service', 'format', 'API_RATE_LIMIT', 'rate_limit', 'auth', '', null, undefined, 429];
 
@@ -87,12 +88,12 @@ test('Claude Desktop stale readings are only returned when allowStale is explici
 });
 
 test('Claude direct fallback announces the switch and keeps an actionable guidance', () => {
-  const guidance = loadMainHelper('claudeDesktopGuidance');
+  const guidance = claudeDesktopGuidance;
   const message = guidance();
   assert.match(message, /Claude Desktop/);
   assert.match(message, /page Utilisation/);
   assert.match(message, /Claude Code/);
-  const source = fsSync.readFileSync(path.join(__dirname, '..', 'main.cjs'), 'utf8');
+  const source = fsSync.readFileSync(path.join(__dirname, '..', 'lib', 'provider-flows.cjs'), 'utf8');
   assert.ok(
     source.includes('Lecture directe indisponible (renouvellement du jeton Claude Code limité) ; Lasmium TOKENS-HUB utilise le relevé Claude Desktop.'),
     'le message de bascule explicite doit rester câblé dans verifyClaudeDesktop',

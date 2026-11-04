@@ -1,0 +1,18 @@
+{
+  "name": "deepseek double devise",
+  "provider": "deepseek",
+  "body": {
+    "is_available": true,
+    "balance_infos": [
+      { "currency": "USD", "total_balance": "12.50", "granted_balance": "0.00", "topped_up_balance": "12.50" },
+      { "currency": "CNY", "total_balance": "0.00", "granted_balance": "0.00", "topped_up_balance": "0.00" }
+    ]
+  },
+  "expect": {
+    "quotaRemaining": null,
+    "balances": [
+      { "currency": "USD", "remaining": 12.5 },
+      { "currency": "CNY", "remaining": 0 }
+    ]
+  }
+}

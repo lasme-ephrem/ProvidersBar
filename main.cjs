@@ -3,8 +3,9 @@
 // exposée par preload.cjs, orchestration des lectures via les connecteurs de
 // lib/, état en mémoire et persistance (lib/data-store.cjs), durcissement des
 // fenêtres (lib/window-security.cjs) et export nettoyé (lib/privacy-export.cjs).
-// Les parcours d'authentification fournisseur (OrcaRouter, Ollama, Claude,
-// OpenAI Codex) restent dans ce fichier ; tout le reste est délégué à lib/.
+// Les parcours d'authentification fournisseur vivent dans lib/provider-flows.cjs
+// et l'orchestration des lectures dans lib/connector-sync.cjs ; main.cjs ne garde
+// que le cycle de vie, les fenêtres, l'IPC et l'état en mémoire.
 const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, nativeTheme, screen, safeStorage, dialog, Notification, session, powerMonitor } = require('electron');
 const quotaResets = require('./lib/quota-resets.js');
 const fs = require('node:fs/promises');
@@ -30,8 +31,10 @@ const accountBrowser = require('./lib/account-browser.cjs');
 const { createOpenAiAccount } = require('./lib/openai-account.cjs');
 const openAiTransport = require('./lib/openai-account.cjs');
 const { createSubscriptionController } = require('./lib/subscription-controller.cjs');
+const { createConnectorSync, assumeOllamaFree } = require('./lib/connector-sync.cjs');
 const { assertSnapshot, healthSuccess, healthFailure, publicHealth, strategyFor, breakerOpen } = require('./lib/connector-contract.cjs');
 const { loadPacks, packFor, packSummary } = require('./lib/connector-packs.cjs');
+const { createProviderFlows } = require('./lib/provider-flows.cjs');
 const claudeDesktop = require('./lib/claude-desktop-usage.cjs');
 const claudeLive = require('./lib/claude-live-usage.cjs');
 const { CREDENTIAL_PATH } = require('./lib/claude-connection.cjs');
@@ -95,131 +98,10 @@ const claudeReader = claudeLive.createClaudeLiveReader({ fetchImpl: apiFetch });
 let quickDesiredHeight = 660;
 let connectorPacks = new Map();
 let connectorPackErrors = [];
-let orcaLoginWindow;
-let orcaDetectionTimer, orcaVerification;
-let orcaConnection = { status: 'idle', message: '' };
 const orcaSession = () => session.fromPartition('persist:orcarouter-account');
 const ollamaSession = () => session.fromPartition('persist:ollama-account');
-let ollamaLoginWindow, ollamaDetectionTimer, ollamaVerification;
-let ollamaBrowser, ollamaBrowserOpening;
-let ollamaConnection = { status: 'idle', message: '' };
-let antigravityWork;
-let antigravityConnection = { status: 'idle', message: '' };
-let claudeConnection = { status: 'idle', message: '' };
-let claudeWork;
 let stopClaudeWatcher;
 let claudeTimer;
-function syncClaudeWhenDue() {
-  const p = state?.providers.find(p => p.id === 'claude');
-  if (quitting || !state?.settings.autoRefresh || !p || !isTracked(p) || p.accountSession?.kind !== 'claude-live-local') return;
-  if (Date.parse(claudeReader.info().nextAttemptAt) > Date.now()) return;
-  syncOne('claude', { force: false }).catch(() => {});
-}
-// Repli explicite Claude Desktop : décision pure, sans dépendance Electron
-// (testée par tests/claude-desktop-usage.test.cjs). La lecture directe peut être
-// remplacée quand elle est bloquée par un 429 ou un problème d'authentification
-// ET que le dernier relevé direct est absent ou périmé (> 10 min, seuil de
-// fraîcheur de l'interface) : un relevé périmé n'a rien de valable à préserver.
-function shouldFallbackToClaudeDesktop(code, snapshot, nowMs = Date.now()) {
-  const updatedAt = Date.parse(snapshot?.updatedAt);
-  if (Number.isFinite(updatedAt) && nowMs - updatedAt <= 10 * 60 * 1000) return false;
-  if (typeof code !== 'string' || !code) return false;
-  // `rate-limit` (quota ou renouvellement limité) et tous les codes `auth-*`,
-  // y compris `auth-rate-limit` renvoyé par le renouvellement OAuth.
-  return code === 'rate-limit' || code.startsWith('auth-');
-}
-function claudeDesktopGuidance() {
-  return 'Ouvre Claude Desktop (page Utilisation) pour actualiser le relevé ; la lecture directe reprendra après renouvellement du jeton dans Claude Code.';
-}
-async function verifyClaudeDesktop({ enableLive = false, manual = false } = {}) {
-  if (disconnecting.has('claude') || quitting) throw new Error('Déconnexion en cours.');
-  if (claudeWork) {
-    if (!enableLive) return claudeWork;
-    await claudeWork.catch(() => {});
-  }
-  claudeWork = (async () => {
-    const p = provider('claude');
-    const direct = enableLive || p.accountSession?.kind === 'claude-live-local';
-    // Action explicite (bouton Vérifier / Connexion) : une reconnexion Claude Code
-    // doit pouvoir être prise en compte sans attendre le cooldown d'un échec passé.
-    if (manual && direct) claudeReader.credentialsChanged();
-    claudeConnection = { status: 'verifying', message: direct ? 'Lecture des quotas actuels auprès de Claude…' : 'Lecture du relevé local de Claude Desktop…' };
-    // Keep the chosen mode even when the first request fails, including restart.
-    p.accountSession = { kind: direct ? 'claude-live-local' : 'claude-desktop-local' };
-    p.lastAttempt = new Date().toISOString(); broadcast();
-    try {
-      const snapshot = direct ? await claudeReader.read() : await claudeDesktop.readClaudeDesktopUsage(p.snapshot);
-      p.accountSession = { kind: direct ? 'claude-live-local' : 'claude-desktop-local' };
-      if (p.snapshot?.updatedAt !== snapshot.updatedAt || p.snapshot?.connectorVersion !== snapshot.connectorVersion) record(p, snapshot);
-      else { p.snapshot = snapshot; p.error = null; markHealthSuccess(p, snapshot); }
-      claudeConnection = { status: 'connected', message: direct ? 'Quotas Claude lus directement. Actualisation automatique chaque minute.' : 'Dernier relevé Claude Desktop récupéré. Son heure de mesure reste affichée.' };
-    } catch (error) {
-      const blocked = direct && shouldFallbackToClaudeDesktop(error.code, p.snapshot);
-      if (blocked) {
-        // Bascule explicite et annoncée : le relevé direct est inutilisable et
-        // absent/périmé. On ne change de mode qu'une fois un relevé Desktop
-        // réellement lu : sans donnée à afficher, on conserve le mode direct et
-        // son cooldown (aucune oscillation), avec une consigne actionnable.
-        const previousSession = p.accountSession;
-        try {
-          const snapshot = await claudeDesktop.readClaudeDesktopUsage(p.snapshot, { allowStale: true });
-          p.accountSession = { kind: 'claude-desktop-local' };
-          record(p, snapshot);
-          p.claudeSync = claudeReader.info();
-          claudeConnection = { status: 'connected', message: snapshot.stale
-            ? 'Lecture directe indisponible (renouvellement du jeton Claude Code limité) ; Lasmium TOKENS-HUB utilise le dernier relevé Claude Desktop connu (relevé ancien).'
-            : 'Lecture directe indisponible (renouvellement du jeton Claude Code limité) ; Lasmium TOKENS-HUB utilise le relevé Claude Desktop.' };
-          return publicState();
-        } catch {
-          // Relevé Desktop aussi indisponible : conserver mode, snapshot et
-          // cooldown (écrit par le `finally`) et fournir une consigne actionnable.
-          p.accountSession = previousSession;
-          const failure = new Error(`${error.message} ${claudeDesktopGuidance()}`);
-          failure.code = error.code;
-          p.error = failure.message;
-          markHealthFailure(p, failure);
-          claudeConnection = { status: 'error', message: failure.message, errorCode: failure.code || null };
-          throw failure;
-        }
-      }
-      p.error = error.message;
-      markHealthFailure(p, error);
-      claudeConnection = { status: 'error', message: error.message, errorCode: error.code || null };
-      throw error;
-    } finally {
-      if (direct) {
-        p.claudeSync = claudeReader.info();
-        Object.assign(claudeConnection, p.claudeSync);
-      }
-      await persist(); broadcast();
-    }
-    return publicState();
-  })();
-  const work = claudeWork;
-  try { return await work; } finally { if (claudeWork === work) claudeWork = null; }
-}
-async function verifyAntigravity() {
-  if (disconnecting.has('antigravity') || quitting) throw new Error('Déconnexion en cours.');
-  if (antigravityWork) return antigravityWork;
-  antigravityWork = (async () => {
-    const p = provider('antigravity');
-    antigravityConnection = { status: 'verifying', message: 'Lecture des quotas dans Antigravity…' };
-    p.lastAttempt = new Date().toISOString(); broadcast();
-    try {
-      const snapshot = await antigravityTransport.fetchAntigravityQuota();
-      p.accountSession = { kind: 'antigravity-local' };
-      record(p, snapshot);
-      antigravityConnection = { status: 'connected', message: 'Antigravity connecté. Quotas disponibles Gemini, Claude/GPT et Argon lus.' };
-    } catch (error) {
-      p.error = error.message;
-      markHealthFailure(p, error);
-      antigravityConnection = { status: 'error', message: error.message };
-      throw error;
-    } finally { await persist(); broadcast(); }
-    return publicState();
-  })();
-  try { return await antigravityWork; } finally { antigravityWork = null; }
-}
 const isConnected = p => connectors[p.id]?.mode === 'account' ? Boolean(p.accountSession) : credentials.has(p.id);
 const busy = new Map();
 const announced = new Set();
@@ -254,6 +136,79 @@ const openAiAccount = createOpenAiAccount({
   },
 });
 
+const providerFlows = createProviderFlows({
+  BrowserWindow,
+  secureAccountWindow,
+  ACCOUNT_ORIGINS,
+  ORCA_ORIGIN,
+  OLLAMA_ORIGIN,
+  SETTINGS_URL,
+  dataDir,
+  getState: () => state,
+  getMainWindow: () => mainWindow,
+  provider,
+  isTracked,
+  isConnected: p => isConnected(p),
+  disconnecting,
+  busy,
+  isQuitting: () => quitting,
+  broadcast: () => broadcast(),
+  persist: () => persist(),
+  publicState: () => publicState(),
+  record,
+  markHealthSuccess,
+  markHealthFailure,
+  showMain,
+  syncOne: (id, options) => syncOne(id, options),
+  claudeReader,
+  claudeDesktop,
+  antigravityTransport,
+  fetchWallet,
+  validateAccountRef,
+  orcaSession,
+  fetchOllamaCredits,
+  ollamaSession,
+  openOllamaBrowser,
+  assumeOllamaFree,
+});
+const {
+  syncClaudeWhenDue, verifyClaudeDesktop, verifyAntigravity,
+  openOrcaAccount, verifyOrcaAccount,
+  openOllamaSystemAccount, openOllamaAccount, verifyOllamaAccount,
+} = providerFlows;
+
+const connectorSync = createConnectorSync({
+  getState: () => state,
+  provider,
+  isTracked,
+  isConnected: p => isConnected(p),
+  disconnecting,
+  busy,
+  publicState: () => publicState(),
+  broadcast: () => broadcast(),
+  persist: () => persist(),
+  notify: () => notify(),
+  record,
+  markHealthFailure,
+  safeStorage,
+  credentials,
+  fetchUsage,
+  apiFetch,
+  cooldowns,
+  endpointFor: id => packFor(connectorPacks, id)?.endpoint,
+  fetchWallet,
+  orcaSession,
+  fetchOllamaCredits,
+  ollamaSession,
+  openAiAccount,
+  verifyAntigravity,
+  verifyClaudeDesktop,
+  subscriptionAccounts,
+  isBrowserAccount: id => Boolean(connectors[id]?.browserAccount),
+  breakerOpen,
+});
+const { syncOne, syncAll } = connectorSync;
+
 function persist() {
   // La copie de sécurité est faite avant l'écriture, au plus toutes les 6 h ;
   // une erreur de sauvegarde ne doit jamais empêcher la persistance.
@@ -283,7 +238,8 @@ function publicState() {
   const { history, ...visibleState } = state;
   // L'ordre de consommation a été retiré : aucun `strategy` n'est exposé.
   delete visibleState.strategy;
-  return { ...visibleState, app: publicAppInfo(), connectorPacks: packSummary(connectorPacks), connectorPackErrors: connectorPackErrors.map(({ file, provider, reason }) => ({ file, provider: provider || null, reason })), historyCount: history.length, historyRevision: history[0]?.id || null, providers: state.providers.map(p => ({ ...p, ...(p.id === 'ollama' && p.snapshot ? { snapshot: { ...p.snapshot, usageCredits: lastKnownUsageCredits(p.snapshot, history) } } : {}), connector: connectionInfo(p.id), connected: isConnected(p), syncing: busy.has(p.id), health: publicHealth(state.connectorHealth?.[p.id], p.snapshot), ...(p.id === 'antigravity' ? { accountConnection: antigravityConnection } : p.id === 'claude' ? { accountConnection: claudeConnection } : p.id === 'openai' ? { accountConnection: openAiAccount.info() } : p.id === 'orcarouter' ? { accountConnection: orcaConnection } : p.id === 'ollama' ? { accountConnection: ollamaConnection } : connectors[p.id]?.browserAccount ? { accountConnection: subscriptionAccounts.info(p.id) } : {}) })), summary: summary(state.providers), desktop: true };
+  const flows = providerFlows.info();
+  return { ...visibleState, app: publicAppInfo(), connectorPacks: packSummary(connectorPacks), connectorPackErrors: connectorPackErrors.map(({ file, provider, reason }) => ({ file, provider: provider || null, reason })), historyCount: history.length, historyRevision: history[0]?.id || null, providers: state.providers.map(p => ({ ...p, ...(p.id === 'ollama' && p.snapshot ? { snapshot: { ...p.snapshot, usageCredits: lastKnownUsageCredits(p.snapshot, history) } } : {}), connector: connectionInfo(p.id), connected: isConnected(p), syncing: busy.has(p.id), health: publicHealth(state.connectorHealth?.[p.id], p.snapshot), ...(p.id === 'antigravity' ? { accountConnection: flows.antigravity } : p.id === 'claude' ? { accountConnection: flows.claude } : p.id === 'openai' ? { accountConnection: openAiAccount.info() } : p.id === 'orcarouter' ? { accountConnection: flows.orcarouter } : p.id === 'ollama' ? { accountConnection: flows.ollama } : connectors[p.id]?.browserAccount ? { accountConnection: subscriptionAccounts.info(p.id) } : {}) })), summary: summary(state.providers), desktop: true };
 }
 async function loadConnectorPacks() {
   try {
@@ -346,12 +302,6 @@ function markHealthFailure(p, error) {
   const failure = state.connectorHealth[p.id].error;
   if (failure) logger.warn(`Connecteur ${p.id} (${failure.code}) : ${failure.message}`);
 }
-function assumeOllamaFree(p) {
-  // "Active" is the local tracking switch, not proof of a paid Ollama plan.
-  // Keep using the last provider-verified Free tier when the current settings
-  // page omits its monthly section, instead of raising a false connection error.
-  return p.subscriptionStatus === 'expired' || p.snapshot?.planTier === 'free';
-}
 function notify() {
   if (!state.settings.notifications || !Notification.isSupported()) return;
   const today = new Date().toLocaleDateString('en-CA');
@@ -368,53 +318,6 @@ function notify() {
       if (!announced.has(key)) { announced.add(key); new Notification({ title: p.name, body, icon: path.join(__dirname, 'assets/icon.png') }).show(); }
     }
   }
-}
-async function syncOne(id, { force = true } = {}) {
-  if (disconnecting.has(id)) throw new Error('Déconnexion en cours.');
-  if (busy.has(id)) { await busy.get(id); return publicState(); }
-  const p = provider(id);
-  if (!isTracked(p)) throw new Error(p.subscriptionStatus === 'expired' ? 'Cet abonnement est expiré. Réactive-le dans sa fiche pour reprendre la synchronisation.' : 'Ce service est en pause.');
-  if (!isConnected(p)) throw new Error('Connecte ce service dans Connexions.');
-  // Disjoncteur : après une panne transitoire, ne pas marteler le fournisseur.
-  // Une action manuelle (« Tester ») force une tentative immédiate.
-  if (!force && breakerOpen(state.connectorHealth?.[id])) {
-    return publicState();
-  }
-  const work = (async () => {
-    p.lastAttempt = new Date().toISOString();
-    try {
-      cooldowns.prune(Date.now());
-      if (id === 'orcarouter') record(p, await fetchWallet(p.accountSession, orcaSession().fetch.bind(orcaSession())));
-      else if (id === 'ollama') record(p, await fetchOllamaCredits(ollamaSession().fetch.bind(ollamaSession()), new Date(), { assumeFree: assumeOllamaFree(p) }));
-      else if (id === 'openai') await openAiAccount.read(p.accountSession?.identity);
-      else if (id === 'antigravity') await verifyAntigravity();
-      else if (id === 'claude') await verifyClaudeDesktop();
-      else if (connectors[id]?.browserAccount) await subscriptionAccounts.read(id, { background: true });
-      else {
-        let key;
-        try { key = safeStorage.decryptString(Buffer.from(credentials.get(id), 'base64')); }
-        catch { throw new Error('La clé enregistrée ne peut plus être déchiffrée sur ce compte Windows. Renseigne de nouveau la clé dans Connexions.'); }
-        record(p, await fetchUsage(id, key, apiFetch, { cooldowns, endpoint: packFor(connectorPacks, id)?.endpoint }));
-      }
-    } catch (error) {
-      p.error = error.message;
-      markHealthFailure(p, error);
-      // Session explicitement invalide : repasser « non connecté » pour que la
-      // prochaine action soit une reconnexion, pas une boucle d'échecs.
-      if (id === 'orcarouter' && error.code === 'ORCA_AUTH') delete p.accountSession;
-      if (id === 'ollama' && error.code === 'OLLAMA_SIGNIN') delete p.accountSession;
-    }
-    await persist();
-    notify();
-  })();
-  busy.set(id, work);
-  broadcast();
-  try { await work; } finally { busy.delete(id); broadcast(); }
-  return publicState();
-}
-async function syncAll({ force = false } = {}) {
-  await Promise.allSettled(state.providers.filter(p => isTracked(p) && isConnected(p)).map(p => syncOne(p.id, { force })));
-  return publicState();
 }
 function showMain() {
   if (quickWindow && !quickWindow.isDestroyed()) quickWindow.hide();
@@ -436,246 +339,6 @@ function positionQuick() {
   const y = Math.max(area.y, Math.min(bounds.y - size.height - 8, area.y + area.height - size.height));
   quickWindow.setBounds({ x, y, width: size.width, height: size.height });
 }
-async function openOrcaAccount() {
-  if (disconnecting.has('orcarouter') || quitting) throw new Error('Déconnexion en cours.');
-  if (orcaLoginWindow && !orcaLoginWindow.isDestroyed()) { orcaLoginWindow.show(); orcaLoginWindow.focus(); return true; }
-  const accountSession = orcaSession();
-  accountSession.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
-  accountSession.setPermissionCheckHandler(() => false);
-  if (!accountSession.lasmiumConfigured) {
-    accountSession.on('will-download', event => event.preventDefault());
-    accountSession.lasmiumConfigured = true;
-  }
-  orcaLoginWindow = new BrowserWindow({ width: 1100, height: 850, title: 'Connexion au compte OrcaRouter', parent: mainWindow,
-    webPreferences: { partition: 'persist:orcarouter-account', nodeIntegration: false, contextIsolation: true, sandbox: true, webSecurity: true, devTools: false } });
-  secureAccountWindow(orcaLoginWindow, ACCOUNT_ORIGINS);
-  orcaConnection = { status: 'waiting', message: 'Connecte-toi sur le site OrcaRouter. Le portefeuille sera récupéré automatiquement.' };
-  broadcast();
-  orcaLoginWindow.on('closed', () => {
-    orcaLoginWindow = null;
-    clearInterval(orcaDetectionTimer); orcaDetectionTimer = null;
-    if (orcaConnection.status === 'waiting') orcaConnection = { status: 'idle', message: 'Fenêtre fermée. Rouvre le compte pour reprendre la connexion.' };
-    broadcast();
-  });
-  try { await orcaLoginWindow.loadURL(ORCA_ORIGIN + '/console'); }
-  catch { throw new Error('Le site OrcaRouter ne peut pas être ouvert. Vérifie ta connexion Internet.'); }
-  let nextAttempt = 0;
-  orcaDetectionTimer = setInterval(async () => {
-    if (!orcaLoginWindow || orcaLoginWindow.isDestroyed() || orcaVerification || busy.has('orcarouter') || Date.now() < nextAttempt) return;
-    const ref = await readOrcaAccountRef().catch(() => null);
-    try { validateAccountRef(ref); } catch { return; }
-    nextAttempt = Date.now() + 15000;
-    await verifyOrcaAccount().catch(() => {});
-  }, 1000);
-  orcaDetectionTimer.unref();
-  return true;
-}
-// Origines acceptées pour la fenêtre de compte OrcaRouter : le site canonique
-// (www) et sa redirection sans www. La fenêtre est déjà contrainte par
-// `secureAccountWindow` ; cette liste ne sert qu'à décider si le localStorage
-// peut être lu pour récupérer les identifiants numériques.
-const ORCA_ACCOUNT_ORIGINS = new Set([ORCA_ORIGIN, ORCA_ORIGIN.replace('://www.', '://')]);
-
-// Décision pure (aucune dépendance Electron, testée hors application) : la ref
-// persistée suffit à vérifier une session existante sans fenêtre. Celle de la
-// fenêtre n'est retenue que si elle est valide et différente (connexion neuve ou
-// changement de compte / espace de travail).
-function chooseOrcaAccountRef(stored, fromWindow) {
-  const valid = ref => Boolean(ref) && Number.isSafeInteger(ref.userId) && ref.userId > 0
-    && Number.isSafeInteger(ref.workspaceId) && ref.workspaceId > 0;
-  const windowRef = valid(fromWindow) ? fromWindow : null;
-  const storedRef = valid(stored) ? stored : null;
-  if (windowRef && (!storedRef || windowRef.userId !== storedRef.userId || windowRef.workspaceId !== storedRef.workspaceId)) return windowRef;
-  return storedRef || windowRef || null;
-}
-async function readOrcaAccountRef() {
-  if (!orcaLoginWindow || orcaLoginWindow.isDestroyed()) return null;
-  let origin;
-  try { origin = new URL(orcaLoginWindow.webContents.getURL()).origin; } catch { return null; }
-  if (!ORCA_ACCOUNT_ORIGINS.has(origin)) return null;
-  // Only numeric account/workspace identifiers leave the remote page. Passwords,
-  // tokens and cookies stay in the isolated browser session.
-  return orcaLoginWindow.webContents.executeJavaScript(`(() => {
-    try { const user = JSON.parse(localStorage.getItem('user') || 'null');
-      return { userId: Number(user?.id), workspaceId: Number(localStorage.getItem('active_workspace_id') || user?.active_workspace_id) };
-    } catch { return null; }
-  })()`).catch(() => null);
-}
-async function verifyOrcaAccount() {
-  if (disconnecting.has('orcarouter') || quitting) throw new Error('Déconnexion en cours.');
-  if (orcaVerification) { await orcaVerification; return publicState(); }
-  const p = provider('orcarouter');
-  if (busy.has(p.id)) throw new Error('Une synchronisation OrcaRouter est déjà en cours.');
-  const work = (async () => {
-    try {
-      // Une session persistée valide se vérifie directement : la fenêtre de
-      // connexion n'est pas requise (elle ne sert qu'à une connexion neuve ou à
-      // un changement de compte / espace de travail).
-      const fromWindow = await readOrcaAccountRef();
-      const ref = chooseOrcaAccountRef(p.accountSession, fromWindow);
-      validateAccountRef(ref);
-      orcaConnection = { status: 'verifying', message: 'Lecture du portefeuille OrcaRouter…' };
-      // Session écrite AVANT la première lecture : un 429 ou une panne transitoire
-      // ne doit pas faire croire à une déconnexion (reprise au cycle de 5 minutes).
-      const previous = p.accountSession;
-      if (previous?.userId !== ref.userId || previous?.workspaceId !== ref.workspaceId) { p.accountSession = ref; await persist(); }
-      broadcast();
-      const snapshot = await fetchWallet(ref, orcaSession().fetch.bind(orcaSession()));
-      await orcaSession().cookies.flushStore();
-      p.accountSession = ref;
-      record(p, snapshot); p.lastAttempt = snapshot.updatedAt;
-      await persist();
-      orcaConnection = { status: 'connected', message: 'Connexion réussie. Le portefeuille se synchronise automatiquement.' };
-      if (orcaLoginWindow && !orcaLoginWindow.isDestroyed()) orcaLoginWindow.close();
-      showMain();
-    } catch (error) {
-      // ORCA_AUTH : la session n'est plus valable, l'UI repasse non connectée et
-      // le message invite à reconnecter. ORCA_RATE_LIMIT / ORCA_TRANSIENT :
-      // session conservée, dernier relevé intact, réessai automatique annoncé.
-      if (error.code === 'ORCA_AUTH') delete p.accountSession;
-      // Session acceptée mais lecture transitoire : la fenêtre de connexion a
-      // rempli son rôle, la reprise se fera en arrière-plan.
-      else if (orcaLoginWindow && !orcaLoginWindow.isDestroyed()) orcaLoginWindow.close();
-      if (error.code === 'ORCA_RATE_LIMIT' || error.code === 'ORCA_TRANSIENT') {
-        error.message = `${error.message} Réessai automatique au prochain cycle d’actualisation.`;
-      }
-      p.error = error.message;
-      markHealthFailure(p, error);
-      await persist();
-      orcaConnection = { status: 'error', message: error.message, errorCode: error.code || null };
-      throw error;
-    } finally { broadcast(); }
-  })();
-  orcaVerification = work; busy.set(p.id, work);
-  try { await work; } finally { orcaVerification = null; busy.delete(p.id); broadcast(); }
-  return publicState();
-}
-async function openOllamaSystemAccount() {
-  if (disconnecting.has('ollama') || quitting) throw new Error('Déconnexion en cours.');
-  if (['login', 'verifying'].includes(ollamaBrowser?.phase?.())) return true;
-  if (ollamaBrowserOpening) return ollamaBrowserOpening;
-  const work = (async () => {
-    if (ollamaLoginWindow && !ollamaLoginWindow.isDestroyed()) ollamaLoginWindow.close();
-    clearInterval(ollamaDetectionTimer); ollamaDetectionTimer = null;
-    ollamaConnection = { status: 'waiting', message: 'Connecte-toi sur Ollama dans Chrome ou Edge, puis ferme cette fenêtre. La vérification démarrera ensuite.' }; broadcast();
-    if (ollamaBrowser) { const browser = ollamaBrowser; ollamaBrowser = null; await browser.close(); }
-    ollamaBrowser = await openOllamaBrowser(dataDir);
-    ollamaDetectionTimer = setInterval(async () => {
-      if (ollamaVerification || busy.has('ollama') || ollamaBrowser?.phase?.() !== 'verifying') return;
-      clearInterval(ollamaDetectionTimer); ollamaDetectionTimer = null;
-      await verifyOllamaAccount(true).catch(() => {});
-    }, 750);
-    ollamaDetectionTimer.unref();
-    return true;
-  })();
-  ollamaBrowserOpening = work;
-  try { return await work; }
-  catch (error) { ollamaConnection = { status: 'error', message: error.message }; broadcast(); throw error; }
-  finally { ollamaBrowserOpening = null; }
-}
-async function openOllamaAccount() {
-  if (disconnecting.has('ollama') || quitting) throw new Error('Déconnexion en cours.');
-  if (ollamaLoginWindow && !ollamaLoginWindow.isDestroyed()) { ollamaLoginWindow.show(); ollamaLoginWindow.focus(); return true; }
-  const isolated = ollamaSession();
-  isolated.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
-  isolated.setPermissionCheckHandler(() => false);
-  if (!isolated.lasmiumConfigured) { isolated.on('will-download', event => event.preventDefault()); isolated.lasmiumConfigured = true; }
-  ollamaLoginWindow = new BrowserWindow({ width: 1100, height: 850, title: 'Connexion au compte Ollama', parent: mainWindow,
-    webPreferences: { partition: 'persist:ollama-account', nodeIntegration: false, contextIsolation: true, sandbox: true, webSecurity: true, devTools: false } });
-  secureAccountWindow(ollamaLoginWindow, ACCOUNT_ORIGINS);
-  ollamaConnection = { status: 'waiting', message: 'Connecte-toi sur Ollama. Les crédits seront récupérés automatiquement.' }; broadcast();
-  const loginWindow = ollamaLoginWindow;
-  loginWindow.on('closed', () => {
-    if (ollamaLoginWindow === loginWindow) ollamaLoginWindow = null;
-    if (!ollamaBrowserOpening && !ollamaBrowser) {
-      clearInterval(ollamaDetectionTimer); ollamaDetectionTimer = null;
-      if (ollamaConnection.status === 'waiting') ollamaConnection = { status: 'idle', message: 'Fenêtre fermée. Rouvre le compte pour reprendre la connexion.' };
-    }
-    broadcast();
-  });
-  let nextAttempt = 0;
-  ollamaDetectionTimer = setInterval(async () => {
-    if (!ollamaLoginWindow || ollamaLoginWindow.isDestroyed() || ollamaVerification || busy.has('ollama') || Date.now() < nextAttempt) return;
-    let url;
-    try { url = new URL(ollamaLoginWindow.webContents.getURL()); } catch { return; }
-    if (url.origin !== OLLAMA_ORIGIN || url.pathname.startsWith('/auth/') || url.pathname.startsWith('/signin')) return;
-    nextAttempt = Date.now() + 15000;
-    await verifyOllamaAccount(true).catch(() => {});
-  }, 1000);
-  ollamaDetectionTimer.unref();
-  try { await ollamaLoginWindow.loadURL(SETTINGS_URL); }
-  catch { ollamaConnection = { status: 'error', message: 'Le site Ollama ne peut pas être ouvert. Vérifie ta connexion Internet.' }; broadcast(); throw new Error(ollamaConnection.message); }
-  return true;
-}
-async function verifyOllamaAccount(automatic = false) {
-  if (disconnecting.has('ollama') || quitting) throw new Error('Déconnexion en cours.');
-  if (ollamaVerification) { await ollamaVerification; return publicState(); }
-  const p = provider('ollama');
-  if (busy.has(p.id)) throw new Error('Une synchronisation Ollama est déjà en cours.');
-  const work = (async () => {
-    try {
-      if (ollamaBrowser) {
-        const cookies = await ollamaBrowser.readOllamaCookies();
-        if (!cookies.length) throw Object.assign(new Error('En attente de ta connexion Ollama dans le navigateur.'), { code: 'OLLAMA_SIGNIN' });
-        for (const cookie of cookies) await ollamaSession().cookies.set(cookie);
-        // Save the imported login even if Ollama's usage page cannot yet be
-        // parsed; otherwise a display error could discard a valid session.
-        await ollamaSession().cookies.flushStore();
-      }
-      // Session écrite AVANT la première lecture : un 429 ou une panne transitoire
-      // ne doit pas faire croire à une déconnexion (reprise au cycle de 5 minutes).
-      if (p.accountSession?.kind !== 'ollama-credits') { p.accountSession = { kind: 'ollama-credits' }; await persist(); }
-      const snapshot = await fetchOllamaCredits(ollamaSession().fetch.bind(ollamaSession()), new Date(), { assumeFree: assumeOllamaFree(p) });
-      await ollamaSession().cookies.flushStore();
-      ollamaConnection = { status: 'verifying', message: 'Crédits Ollama récupérés. Enregistrement de la session…' };
-      clearInterval(ollamaDetectionTimer); ollamaDetectionTimer = null;
-      if (ollamaLoginWindow && !ollamaLoginWindow.isDestroyed()) ollamaLoginWindow.close();
-      if (ollamaBrowser) { const browser = ollamaBrowser; ollamaBrowser = null; await browser.close(); }
-      p.accountSession = { kind: 'ollama-credits' };
-      record(p, snapshot); p.lastAttempt = snapshot.updatedAt;
-      await persist();
-      const freeLimitUnavailable = snapshot.planTier === 'free' && !snapshot.balances.length && snapshot.quotaRemaining === null;
-      ollamaConnection = { status: 'connected', message: freeLimitUnavailable
-        ? `Session Ollama active. ${snapshot.usageCredits ? 'Réserve supplémentaire à jour. ' : ''}Le site ne fournit pas le détail de la limite Free ; aucun montant mensuel n’est estimé.`
-        : 'Ollama connecté. Les crédits mensuels sont à jour.' };
-      showMain();
-    } catch (error) {
-      const code = error.code || null;
-      markHealthFailure(p, error);
-      if (code === 'OLLAMA_LOGIN_PENDING') ollamaConnection = { status: 'waiting', message: error.message };
-      else if (code === 'OLLAMA_SIGNIN' && ollamaBrowser?.phase?.() === 'closed') {
-        const browser = ollamaBrowser; ollamaBrowser = null;
-        clearInterval(ollamaDetectionTimer); ollamaDetectionTimer = null;
-        await browser.close().catch(() => {});
-        delete p.accountSession;
-        p.error = error.message;
-        await persist();
-        ollamaConnection = { status: 'error', message: 'Aucune session Ollama détectée après la fermeture du navigateur. Réessaie et termine la connexion Google jusqu’au retour sur Ollama.' };
-      }
-      else if (code === 'OLLAMA_SIGNIN') {
-        // Session refusée : repasser non connecté pour demander une reconnexion.
-        delete p.accountSession;
-        p.error = error.message;
-        await persist();
-        ollamaConnection = automatic
-          ? { status: 'waiting', message: 'En attente de ta connexion sur le site officiel Ollama.' }
-          : { status: 'error', message: error.message, errorCode: code };
-      }
-      else {
-        // OLLAMA_RATE_LIMIT / OLLAMA_TRANSIENT (format inclus) : session valide
-        // conservée avec le dernier relevé, réessai au cycle suivant. Le
-        // navigateur éventuellement ouvert n'est pas fermé.
-        p.error = error.message;
-        await persist();
-        ollamaConnection = { status: 'error', message: error.message, errorCode: code };
-      }
-      throw error;
-    }
-  })();
-  ollamaVerification = work; busy.set(p.id, work); broadcast();
-  try { await work; } finally { ollamaVerification = null; busy.delete(p.id); broadcast(); }
-  return publicState();
-}
 // Caches et sessions Chromium recréés au besoin : effacés avec les données.
 const ERASABLE_CACHE_ENTRIES = Object.freeze([
   'Cache', 'Code Cache', 'GPUCache', 'DawnGraphiteCache', 'DawnWebGPUCache', 'Shared Dictionary',
@@ -691,18 +354,11 @@ async function eraseAllData() {
   if (disconnecting.size || busy.size) throw new Error('Attends la fin des synchronisations avant d’effacer les données.');
   // Aucune écriture en attente ne doit pouvoir recréer un fichier effacé.
   await Promise.allSettled([store.settle(), credentials.settled()]);
-  clearInterval(orcaDetectionTimer); orcaDetectionTimer = null;
-  clearInterval(ollamaDetectionTimer); ollamaDetectionTimer = null;
-  for (const window of [orcaLoginWindow, ollamaLoginWindow]) {
-    try { if (window && !window.isDestroyed()) window.close(); } catch { /* déjà fermée */ }
-  }
-  orcaLoginWindow = null;
-  ollamaLoginWindow = null;
-  const browser = ollamaBrowser;
-  ollamaBrowser = null;
-  await Promise.allSettled([
-    subscriptionAccounts.closeAll(), openAiAccount.close(), browser?.close?.(), antigravityWork, claudeWork,
-  ].map(item => Promise.resolve(item).catch(() => {})));
+  await providerFlows.closeAll({ reset: true });
+  await Promise.allSettled([subscriptionAccounts.closeAll(), openAiAccount.close()]);
+  // Les parcours fermés peuvent avoir persisté leur état final : on revide
+  // avant de supprimer les fichiers.
+  await Promise.allSettled([store.settle(), credentials.settled()]);
   await Promise.allSettled([orcaSession().clearStorageData(), ollamaSession().clearStorageData()]);
   await credentials.load({});
   claudeReader.clear();
@@ -711,10 +367,6 @@ async function eraseAllData() {
   resetOllamaRateLimit();
   resetOrcaRateLimit();
   announced.clear();
-  orcaConnection = { status: 'idle', message: '' };
-  ollamaConnection = { status: 'idle', message: '' };
-  antigravityConnection = { status: 'idle', message: '' };
-  claudeConnection = { status: 'idle', message: '' };
   await Promise.allSettled([
     store.remove('state.json'),
     store.remove('credentials.json'),
@@ -764,11 +416,7 @@ function registerIpc() {
   handle('orca:open-account', openOrcaAccount);
   handle('orca:verify-account', verifyOrcaAccount);
   handle('ollama:open-account', openOllamaSystemAccount);
-  handle('ollama:open-email', async () => {
-    clearInterval(ollamaDetectionTimer); ollamaDetectionTimer = null;
-    if (ollamaBrowser) { const browser = ollamaBrowser; ollamaBrowser = null; await browser.close(); }
-    return openOllamaAccount();
-  });
+  handle('ollama:open-email', providerFlows.openOllamaEmailAccount);
   handle('ollama:verify-account', () => verifyOllamaAccount());
   handle('account:open', async id => { provider(id); if (disconnecting.has(id) || quitting) throw new Error('Déconnexion en cours.'); return id === 'antigravity' ? verifyAntigravity() : id === 'claude' ? verifyClaudeDesktop({ manual: true }) : id === 'openai' ? openAiAccount.open() : id === 'orcarouter' ? openOrcaAccount() : id === 'ollama' ? openOllamaAccount() : subscriptionAccounts.open(id); });
   handle('account:verify', async id => {
@@ -841,22 +489,17 @@ function registerIpc() {
     if (disconnecting.has(id)) throw new Error('Déconnexion en cours.');
     disconnecting.add(id);
     try {
-      if (id === 'ollama') {
-        clearInterval(ollamaDetectionTimer); ollamaDetectionTimer = null;
-        await ollamaBrowserOpening?.catch(() => {});
-      }
+      if (id === 'ollama') await providerFlows.cancelOllama();
       if (busy.has(id)) await busy.get(id).catch(() => {});
       if (id === 'antigravity') {
-        await antigravityWork?.catch(() => {});
+        await providerFlows.cancelAntigravity();
         delete provider(id).accountSession;
-        antigravityConnection = { status: 'idle', message: '' };
       }
       if (id === 'claude') {
-        await claudeWork?.catch(() => {});
+        await providerFlows.cancelClaude();
         claudeReader.clear();
         delete provider(id).accountSession;
         delete provider(id).claudeSync;
-        claudeConnection = { status: 'idle', message: '' };
         await deleteAccountProfile(dataDir, id);
       }
       if (id === 'openai') { await openAiAccount.disconnect(); await subscriptionAccounts.disconnect(id); delete provider(id).accountSession; }
@@ -865,18 +508,14 @@ function registerIpc() {
         delete provider(id).accountSession;
       }
       if (id === 'orcarouter') {
-        if (orcaLoginWindow && !orcaLoginWindow.isDestroyed()) orcaLoginWindow.close();
+        await providerFlows.cancelOrca();
         await orcaSession().clearStorageData();
         delete provider(id).accountSession;
       }
       if (id === 'ollama') {
-        clearInterval(ollamaDetectionTimer);
-        if (ollamaBrowser) { const browser = ollamaBrowser; ollamaBrowser = null; await browser.close(); }
-        if (ollamaLoginWindow && !ollamaLoginWindow.isDestroyed()) ollamaLoginWindow.close();
         await ollamaSession().clearStorageData();
         await deleteOllamaAccountProfile(dataDir);
         delete provider(id).accountSession;
-        ollamaConnection = { status: 'idle', message: '' };
       }
       await credentials.delete(id);
       provider(id).error = null; await persist(); broadcast(); return publicState();
@@ -935,9 +574,8 @@ else {
     clearInterval(claudeTimer);
     unwatchFile(CREDENTIAL_PATH);
     if (browsersClosed) return;
-    event.preventDefault(); clearInterval(ollamaDetectionTimer);
-    const browser = ollamaBrowser; ollamaBrowser = null;
-    Promise.allSettled([subscriptionAccounts.closeAll(), openAiAccount.close(), browser?.close(), antigravityWork, claudeWork, ...busy.values()])
+    event.preventDefault();
+    Promise.allSettled([providerFlows.closeAll(), subscriptionAccounts.closeAll(), openAiAccount.close(), ...busy.values()])
       .then(() => credentials.settled()).then(() => store.settle()).finally(() => { browsersClosed = true; app.quit(); });
   });
   app.whenReady().then(async () => {

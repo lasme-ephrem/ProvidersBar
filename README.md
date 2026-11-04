@@ -6,11 +6,12 @@ Application desktop Windows pour suivre les abonnements, quotas et crédits de *
 
 ## Robustesse 0.5.0
 
-- **Un relevé illisible ne devient jamais un faux zéro** : il est classé `SCHEMA_DRIFT` et le dernier relevé sain est conservé. La santé de chaque fournisseur (état, stratégie, âge, prochaine tentative) est persistée et visible dans **Connexions**.
+- **Un relevé illisible ne devient jamais un faux zéro** : il est classé `SCHEMA_DRIFT` et le dernier relevé sain est conservé. La santé de chaque fournisseur (état, stratégie, âge, prochaine tentative) est persistée et visible dans **Connexions**. Les réponses HTTP enregistrées sont rejouées dans les tests.
 - **Disjoncteur** : l'actualisation automatique espace les pannes (30 s → 30 min) au lieu de marteler le fournisseur ; **Tester** et **Synchroniser** forcent une tentative immédiate.
 - **Packs signés** : endpoints et métadonnées de parseur peuvent être corrigés via un pack local signé, sans reconstruire l'application. Un pack altéré, non signé, HTTP ou plus ancien est refusé. Outillage `connectors:sign`, `connectors:key`, `connectors:canary`.
 - **Données** : sauvegardes rotatives de `state.json` (5 dernières), restauration contrôlée avec copie préalable, bundle de diagnostic sans clé ni solde, journal local rotatif.
-- **Qualité** : 247 tests, smoke Electron étendu à la santé et à la dérive, CI Windows.
+- **Architecture** : parcours fournisseur dans `lib/provider-flows.cjs`, synchronisation et disjoncteur dans `lib/connector-sync.cjs` ; `main.cjs` ne garde que le cycle de vie, les fenêtres, l'IPC et l'état.
+- **Qualité** : 252 tests, smoke Electron étendu à la santé et à la dérive, CI Windows.
 
 ## Refonte 0.4.0
 

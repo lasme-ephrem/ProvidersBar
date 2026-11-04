@@ -1,0 +1,9 @@
+{
+  "name": "openrouter nominal",
+  "provider": "openrouter",
+  "body": { "data": { "total_credits": 100, "total_usage": 25.5 } },
+  "expect": {
+    "quotaRemaining": null,
+    "balances": [{ "currency": "USD", "remaining": 74.5, "total": 100, "used": 25.5 }]
+  }
+}

@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const fsSync = require('node:fs');
 const path = require('node:path');
 const { parseWallet, fetchWallet, resetOrcaRateLimit, validateAccountRef } = require('../lib/orca-account.cjs');
+const { chooseOrcaAccountRef } = require('../lib/provider-flows.cjs');
 const ref = { userId: 12, workspaceId: 34 };
 const account = { success: true, data: { id: 12, active_workspace: { id: 34, wallet_quota: 26600000 }, quota: 999999999 } };
 const status = { success: true, data: { quota_per_unit: 500000 } };
@@ -32,7 +33,7 @@ function loadMainHelper(name) {
 }
 
 test('A persisted OrcaRouter session is verified without any login window', () => {
-  const choose = loadMainHelper('chooseOrcaAccountRef');
+  const choose = chooseOrcaAccountRef;
   const stored = { userId: 102647, workspaceId: 102238 };
   // Relevé réel constaté : la session persistée suffit, aucune fenêtre requise.
   assert.deepEqual(choose(stored, null), stored);
@@ -53,7 +54,7 @@ test('A persisted OrcaRouter session is verified without any login window', () =
   }
   assert.deepEqual(choose({ userId: 0, workspaceId: 2 }, { userId: 3, workspaceId: 4 }), { userId: 3, workspaceId: 4 });
   // Câblage : verifyOrcaAccount doit choisir à partir de la session persistée.
-  const source = fsSync.readFileSync(path.join(__dirname, '..', 'main.cjs'), 'utf8');
+  const source = fsSync.readFileSync(path.join(__dirname, '..', 'lib', 'provider-flows.cjs'), 'utf8');
   assert.match(source, /chooseOrcaAccountRef\(p\.accountSession, fromWindow\)/);
 });
 
@@ -62,7 +63,7 @@ test('No persisted session and no window yields the actionable reconnection erro
   assert.throws(() => validateAccountRef(null), error => error.code === 'ORCA_AUTH' && /reconnecte/i.test(error.message));
   assert.throws(() => validateAccountRef(undefined), { code: 'ORCA_AUTH' });
   assert.throws(() => validateAccountRef({ userId: 0, workspaceId: 1 }), { code: 'ORCA_AUTH' });
-  const choose = loadMainHelper('chooseOrcaAccountRef');
+  const choose = chooseOrcaAccountRef;
   assert.equal(choose(null, null), null);
 });
 

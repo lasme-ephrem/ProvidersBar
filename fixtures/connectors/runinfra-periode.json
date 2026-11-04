@@ -1,0 +1,23 @@
+{
+  "name": "runinfra avec période et horodatage",
+  "provider": "runinfra",
+  "body": {
+    "object": "credits",
+    "currency": "usd",
+    "balance_cents": 5476,
+    "available_cents": 5476,
+    "held_cents": 34,
+    "period": { "spent_cents": 1500 },
+    "as_of": "2026-11-04T01:30:00Z"
+  },
+  "expect": {
+    "quotaRemaining": null,
+    "updatedAt": "2026-11-04T01:30:00.000Z",
+    "balances": [{ "currency": "USD", "remaining": 54.76 }],
+    "details": [
+      { "label": "Disponible pour de nouveaux appels", "amount": 54.76, "currency": "USD" },
+      { "label": "Réservé par les appels en cours (déjà déduit)", "amount": 0.34, "currency": "USD" },
+      { "label": "Dépenses de la période", "amount": 15, "currency": "USD" }
+    ]
+  }
+}

@@ -1,6 +1,6 @@
 # Architecture
 
-`main.cjs` (processus principal Electron) gère le cycle de vie, les fenêtres, la zone de notification, la surface IPC, l’orchestration des lectures et l’état en mémoire. Il délègue au reste de `lib/` : stockage et migrations, sécurité des fenêtres et du dossier de données, export nettoyé, connecteurs, diagnostic. Le renderer utilise le pont explicite de `preload.cjs` : Node.js est désactivé dans les fenêtres, avec isolation du contexte, sandbox, `devTools:false` et `spellcheck:false`.
+`main.cjs` (processus principal Electron) gère le cycle de vie, les fenêtres, la zone de notification, la surface IPC et l’état en mémoire. Il délègue au reste de `lib/` : stockage et migrations, sécurité des fenêtres et du dossier de données, export nettoyé, connecteurs, diagnostic. Les parcours d’authentification fournisseur sont dans `lib/provider-flows.cjs`, l’orchestration des synchronisations et le disjoncteur dans `lib/connector-sync.cjs`. Le renderer utilise le pont explicite de `preload.cjs` : Node.js est désactivé dans les fenêtres, avec isolation du contexte, sandbox, `devTools:false` et `spellcheck:false`.
 
 ## Processus principal et cycle de vie
 
@@ -123,6 +123,8 @@ La suggestion de modèle et l’ordre de consommation ont été **retirés du pr
 `lib/connector-contract.cjs` est pur et sans dépendance Electron : validation des relevés (`validateSnapshot`, `assertSnapshot`), classification typée des erreurs, calcul de fraîcheur sur `snapshot.updatedAt`, santé (`healthSuccess` / `healthFailure`) et disjoncteur (`breakerOpen`). `main.cjs` valide **avant** `record` : un relevé incohérent devient `SCHEMA_DRIFT` et le snapshot précédent reste intact. La santé est persistée dans `state.connectorHealth` par une migration non destructive et exposée par fournisseur dans `publicState()`.
 
 `lib/connector-packs.cjs` charge des packs JSON signés Ed25519 depuis `assets/connector-packs/` puis `<dataDir>/connector-packs/`. Le dernier dossier gagne à version égale ; un downgrade, une signature invalide, un endpoint HTTP ou un `minApp` futur sont refusés. Les endpoints API sont passés à `fetchUsage` ; les sélecteurs DOM ne sont pas encore surchargeables. La clé publique est versionnée dans `lib/connector-packs-public.pem` ; la clé privée reste dans `.local/`.
+
+`lib/connector-sync.cjs` porte les branches de synchronisation (OrcaRouter, Ollama, OpenAI, Antigravity, Claude, navigateur, API) et le disjoncteur. `lib/provider-flows.cjs` porte les fenêtres, timers et états des parcours Claude, Antigravity, OrcaRouter et Ollama ; `main.cjs` leur injecte les services Electron et expose leurs méthodes à l’IPC. Les décisions pures y sont exportées et testées. `lib/connector-replay.cjs` rejoue les réponses HTTP enregistrées dans `fixtures/connectors/` et les valide avec le contrat.
 
 `lib/state-backups.cjs` copie `state.json` dans `data/backups/` au plus toutes les 6 h avant écriture (5 dernières) et restaure avec validation et copie préalable. `lib/diagnostic-bundle.cjs` produit un JSON sans secret, sans solde et sans chemin absolu. `lib/logger.cjs` écrit un journal rotatif local. Voir le [runbook](runbook-connectors.md).
 

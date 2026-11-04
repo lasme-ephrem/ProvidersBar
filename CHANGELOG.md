@@ -13,6 +13,9 @@ capables d'évoluer sans reconstruire l'application. Toutes les fonctionnalités
   stratégie réellement utilisée, fraîcheur calculée sur la date du relevé.
 - **Un relevé incohérent ne remplace plus le dernier relevé sain** : il devient
   `SCHEMA_DRIFT`, avec conservation des dernières valeurs et un message clair.
+- **Replay de fixtures** : les réponses HTTP enregistrées (OpenRouter, DeepSeek,
+  RunInfra) sont rejouées dans les parseurs et validées par le contrat à chaque
+  test, pour détecter une dérive avant l'application.
 - Santé persistée par fournisseur (migration non destructive) : dernier succès,
   dernier échec, compteur d'échecs, code, message et prochaine tentative.
 - Panneau **Santé des connexions** : dix lignes avec état, stratégie, âge du
@@ -27,6 +30,11 @@ capables d'évoluer sans reconstruire l'application. Toutes les fonctionnalités
   succès remet le compteur à zéro et réactive les mises à jour automatiques.
 - Chaînes de stratégies explicites, sans repli inventé (Claude direct →
   Desktop ; les autres fournisseurs déclarent leur unique stratégie).
+- **Sortie des parcours fournisseur de `main.cjs`** : `lib/connector-sync.cjs`
+  porte les branches de synchronisation et le disjoncteur,
+  `lib/provider-flows.cjs` les fenêtres, timers et états Claude, Antigravity,
+  OrcaRouter et Ollama. `main.cjs` se limite au cycle de vie, aux fenêtres, à
+  l’IPC et à l’état.
 
 ### Packs de connecteurs signés
 
@@ -52,8 +60,9 @@ capables d'évoluer sans reconstruire l'application. Toutes les fonctionnalités
 
 ### Qualité
 
-- 247 tests unitaires, tests dédiés au contrat, aux packs, aux sauvegardes, au
-  diagnostic et au journal ; smoke Electron étendu à la santé et à la dérive.
+- 252 tests unitaires, tests dédiés au contrat, aux packs, aux sauvegardes, au
+  diagnostic, au journal, au replay de fixtures et au runtime de
+  synchronisation ; smoke Electron étendu à la santé et à la dérive.
 - CI Windows (syntaxe, tests, canary) et documentation : matrice fournisseurs,
   runbook de dépannage et de signature.
 
