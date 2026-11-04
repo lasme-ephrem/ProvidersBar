@@ -237,7 +237,7 @@ L’exécutable **n’est pas signé** et conserve les métadonnées binaires El
 
 ## Structure et documentation
 
-- `main.cjs` et `preload.cjs` : processus principal (fenêtres, IPC, orchestration) et pont IPC limité (23 canaux `invoke`).
+- `main.cjs` et `preload.cjs` : processus principal (cycle de vie, fenêtres, IPC, état) et pont IPC limité (23 canaux `invoke`).
 - `lib/` : stockage (`data-store.cjs`), sécurité des fenêtres et des données (`window-security.cjs`), export nettoyé (`privacy-export.cjs`), diagnostic (`diagnostics.cjs`), connecteurs et quotas.
 - `renderer/` : shell, vues, helpers UI, thèmes et réglages ; contrat dans [renderer/CONTRAT-UI.md](renderer/CONTRAT-UI.md).
 - `scripts/` et `tests/` : fabrication, diagnostic, maintenance et validation.
