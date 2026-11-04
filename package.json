@@ -9,7 +9,8 @@
     "test": "node --test tests/*.test.cjs",
     "test:coverage": "node --test --experimental-test-coverage tests/*.test.cjs",
     "verify": "node scripts/check-syntax.cjs",
-    "lint": "node scripts/check-syntax.cjs",
+    "lint": "node scripts/lint.cjs",
+    "lint:fix": "node scripts/lint.cjs --fix",
     "doctor": "node scripts/doctor.cjs",
     "test:desktop": "node scripts/smoke.cjs",
     "test:resources:desktop": "node scripts/smoke-resource-status.cjs",
@@ -30,7 +31,10 @@
     "diagnostic": "node scripts/diagnostic-bundle.cjs"
   },
   "devDependencies": {
+    "@eslint/js": "9.39.5",
     "electron": "44.10.2",
+    "eslint": "9.39.5",
+    "globals": "17.14.0",
     "playwright": "1.63.0"
   },
   "engines": {
