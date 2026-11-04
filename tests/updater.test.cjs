@@ -378,7 +378,7 @@ test('un SHA-256 différent de celui du manifeste est refusé', async t => {
 });
 
 test('le téléchargement refuse une redirection HTTP et une réponse en erreur', async t => {
-  const redirected = portable(t, { archive: (url, options) => rawResponse(redirected.bytes, { url: 'http://example.test/update.zip' }) });
+  const redirected = portable(t, { archive: () => rawResponse(redirected.bytes, { url: 'http://example.test/update.zip' }) });
   const result = await redirected.controller.install();
   assert.equal(result.state, 'error');
   assert.match(result.error, /Redirection de téléchargement non HTTPS/);
