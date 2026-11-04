@@ -9,7 +9,7 @@ const stamp = Date.parse('2026-10-02T00:00:00Z');
 const fresh = () => ({ access_token: 'new-test-access', refresh_token: 'rotated-test-refresh', expires_in: 28800, scope: 'user:profile user:inference' });
 const reply = body => ({ status: 200, ok: true, json: async () => body });
 async function fixture(t, override = {}) {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'providersbar-claude-auth-'));
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'lasmium-claude-auth-'));
   t.after(() => fs.rm(dir, { recursive: true, force: true }));
   const file = path.join(dir, '.credentials.json');
   await fs.writeFile(file, JSON.stringify({ otherAccount: { preserve: true }, claudeAiOauth: {

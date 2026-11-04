@@ -128,7 +128,7 @@ test('default account allowlist contains only the shared Google login origin', (
 
 test('data directory ACL grants the current user and SYSTEM, and never blocks startup on failure', async () => {
   const calls = [];
-  const ok = await applyDataDirAcl('C:\\tmp\\providersbar-data', {
+  const ok = await applyDataDirAcl('C:\\tmp\\lasmium-data', {
     platform: 'win32', account: 'DESKTOP-TEST\\lasme',
     run: async args => { calls.push(args); return { stdout: 'Success', stderr: '' }; },
   });
@@ -136,14 +136,14 @@ test('data directory ACL grants the current user and SYSTEM, and never blocks st
   assert.equal(ok.account, 'DESKTOP-TEST\\lasme');
   assert.equal(calls.length, 1);
   const [dir, inheritance, grantSwitch, userGrant, systemGrant] = calls[0];
-  assert.equal(dir, 'C:\\tmp\\providersbar-data');
+  assert.equal(dir, 'C:\\tmp\\lasmium-data');
   assert.equal(inheritance, '/inheritance:r');
   assert.equal(grantSwitch, '/grant:r');
   assert.equal(userGrant, 'DESKTOP-TEST\\lasme:(OI)(CI)F');
   assert.equal(systemGrant, 'SYSTEM:(OI)(CI)F');
 
   const warnings = [];
-  const failed = await applyDataDirAcl('C:\\tmp\\providersbar-data', {
+  const failed = await applyDataDirAcl('C:\\tmp\\lasmium-data', {
     platform: 'win32', run: async () => { throw new Error('accès refusé'); },
     logger: { warn: message => warnings.push(message) },
   });

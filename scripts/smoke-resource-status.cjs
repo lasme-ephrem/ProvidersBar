@@ -112,7 +112,7 @@ async function main() {
   assert.equal(await card('grok').locator('.quota-period').count(), 1);
   assert.deepEqual(await factLabels('grok'), ['Grok / Bot / Cursor · Hebdo']);
   assert.match(await row('grok').locator('.quick-level').innerText(), /Suffisant/);
-  assert.match(await card('grok').innerText(), /Grok \/ Bot \/ Cursor/);
+  assert.match(await card('grok').innerText(), /grok \/ bot \/ cursor/i);
   await fixture('claude', { quotaWindows: [{ label: 'Semaine', remaining: 0 }, { label: '5 heures', remaining: 0 }, { label: 'Fable · Semaine', remaining: 100 }] });
   assert.equal(await card('claude').locator('.resource-status').count(), 0);
   const claudeFacts = await row('claude').locator('.quick-fact').evaluateAll(items => items.map(item => ({

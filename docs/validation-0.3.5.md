@@ -1,4 +1,4 @@
-# Validation ProvidersBar 0.3.5
+# Validation Lasmium TOKENS-HUB 0.3.5
 
 Vérifications réelles du **4 novembre 2026** (Europe/Paris) sur Windows x64, Node.js **v24.18.0**, Electron **44.10.2**, version applicative **0.3.5**. Cette validation couvre T19 (segmentation Hebdo/Horaire, chips de statut textuelles, police **Inter Variable** autohébergée) et T20 (adaptation des smokes/qualité).
 
@@ -75,7 +75,7 @@ Le seul test ignoré est `tests/packaging.test.cjs` → « preview.cjs sert l'in
 1. **Police OFL** : Inter Variable est embarquée sous SIL Open Font License ; `LICENSE-Inter.txt` doit rester distribué avec le portable (copié via `assets/`). La police variable pèse **352 Ko** dans le paquet ; c'est le seul coût de la fonctionnalité (aucune requête réseau).
 2. **Tailles inchangées** : le widget reste **360×520**, lignes **36 px**, capture de référence **@2x** (720×1040). Aucun auto-dimensionnement ; au zoom ou avec une police système agrandie, la liste défile avec la barre fine (comportement voulu, vérifié à 320 px).
 3. **Aperçu navigateur** : la police ne se charge dans `npm run preview` qu'avec le MIME `font/woff2` (corrigé par le Lead). Dans Electron (`file://`), le chargement est direct et vérifié par le smoke.
-4. **Portable/release** : au moment de la validation, aucun portable 0.3.5 n'était encore reconstruit. Depuis, le Lead a exécuté `npm run package:release` et `npm run update:portable` : la police et sa licence sont présentes dans `dist/ProvidersBar-0.3.5-win32-x64/resources/app/assets/fonts/` **et** dans le portable personnel ; voir §8.
+4. **Portable/release** : au moment de la validation, aucun portable 0.3.5 n'était encore reconstruit. Depuis, le Lead a exécuté `npm run package:release` et `npm run update:portable` : la police et sa licence sont présentes dans `dist/Lasmium TOKENS-HUB-0.3.5-win32-x64/resources/app/assets/fonts/` **et** dans le portable personnel ; voir §8.
 5. **Libellés agrégés** : un même libellé (ex. plusieurs « Hebdo » Gemini/Claude, ou « Hebdo » Semaine/Grok Bot) n'affiche qu'un segment, le plus contraint ; le détail complet reste dans le `title` et le texte accessible de la ligne. Ce choix est conforme au contrat §8.1.
 6. **Chips et couleur** : le texte reste toujours visible sans la couleur (AA conservé) ; les seuils de la légende et des notifications sont distincts.
 7. Le test `preview` reste ignoré tant que le serveur d'aperçu occupe le port 4317 ; relancer `npm test` après l'avoir arrêté pour le voir passer.
@@ -89,6 +89,6 @@ La segmentation Hebdo/Horaire, les libellés `Hebdo Fable` et `Hebdo Argon`, les
 
 - `npm test` rejoué : **227 tests, 227 réussis, 0 échec, 0 ignoré** (~4,3 s, port d'aperçu libéré) ; `npm run verify` : **66 fichiers**.
 - Smokes rejoués par le Lead : `test:desktop` **PASS**, `test:resources:desktop` **PASS**, `test:claude:desktop` **PASS** (rejoué seul après un premier échec d'enchaînement : les trois commandes lancées consécutivement dans le même shell peuvent se chevaucher ; les exécuter séparément ou avec une pause, comme en CI où chaque étape est isolée).
-- `npm run package:release` : `dist/ProvidersBar-0.3.5-win32-x64/` créé, **sans `data/`**, avec la police et la licence OFL dans `resources/app/assets/fonts/` ; `README.md`, `CHANGELOG.md`, `PRIVACY.md`, `SECURITY.md` embarqués.
-- `npm run release:artifacts` : `dist/ProvidersBar-0.3.5-win32-x64.zip` (**151,5 Mo**), SHA-256 `0b3445cefb7b62cd34e1e319393c054c2d152366c609d7631d4548b72c8b0ef8` (`dist/SHA256SUMS-0.3.5.txt`).
-- `npm run update:portable` : portable personnel `dist/ProvidersBar-win32-x64/` passé en **0.3.5**, données conservées (`data/state.json` intact), police et licence présentes. Quitter l'application encore ouverte puis la relancer pour charger la nouvelle version.
+- `npm run package:release` : `dist/Lasmium TOKENS-HUB-0.3.5-win32-x64/` créé, **sans `data/`**, avec la police et la licence OFL dans `resources/app/assets/fonts/` ; `README.md`, `CHANGELOG.md`, `PRIVACY.md`, `SECURITY.md` embarqués.
+- `npm run release:artifacts` : `dist/Lasmium TOKENS-HUB-0.3.5-win32-x64.zip` (**151,5 Mo**), SHA-256 `0b3445cefb7b62cd34e1e319393c054c2d152366c609d7631d4548b72c8b0ef8` (`dist/SHA256SUMS-0.3.5.txt`).
+- `npm run update:portable` : portable personnel `dist/Lasmium TOKENS-HUB-win32-x64/` passé en **0.3.5**, données conservées (`data/state.json` intact), police et licence présentes. Quitter l'application encore ouverte puis la relancer pour charger la nouvelle version.

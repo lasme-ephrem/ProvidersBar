@@ -51,7 +51,7 @@ function checkFile(file) {
 
 function main() {
   const { files, missing } = listFiles();
-  console.log('ProvidersBar — vérification syntaxique (node --check)');
+  console.log('Lasmium TOKENS-HUB — vérification syntaxique (node --check)');
   console.log(`${process.version} · ${files.length} fichier(s) · ${path.relative(process.cwd(), root) || '.'}`);
   const failures = [];
   for (const file of files) {

@@ -12,7 +12,7 @@ const {
 
 const tick = () => new Promise(resolve => setImmediate(resolve));
 async function tempDir(t) {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'providersbar-browser-'));
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'lasmium-browser-'));
   t.after(async () => { await fs.rm(dir, { recursive: true, force: true, maxRetries: 8, retryDelay: 100 }); });
   return dir;
 }

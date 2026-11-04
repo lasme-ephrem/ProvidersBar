@@ -27,7 +27,7 @@ async function updateAppResources(root, portable) {
     }
     await copyRuntimeDependencies(root, stage);
     const { version } = require(path.join(root, 'package.json'));
-    await fs.writeFile(path.join(stage, 'package.json'), JSON.stringify({ name: 'providersbar', productName: 'ProvidersBar', version, main: 'main.cjs' }));
+    await fs.writeFile(path.join(stage, 'package.json'), JSON.stringify({ name: 'lasmium-tokens-hub', productName: 'Lasmium TOKENS-HUB', version, main: 'main.cjs' }));
     try { await fs.rename(appDir, previous); replaced = true; } catch (error) { if (error.code !== 'ENOENT') throw error; }
     try { await fs.rename(stage, appDir); }
     catch (error) { if (replaced) await fs.rename(previous, appDir); throw error; }

@@ -1,5 +1,6 @@
 // Updates application resources only, preserving the portable data directory.
 const fs = require('node:fs/promises');
+const fss = require('node:fs');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { updateAppResources } = require('./app-resources.cjs');
@@ -28,9 +29,21 @@ async function closeRunningApp() {
     ws.addEventListener('close', () => { clearTimeout(timeout); resolve(); });
   });
 }
+async function ensureBrandedExecutable() {
+  const legacy = path.join(portable, 'ProvidersBar.exe');
+  const branded = path.join(portable, 'LasmiumTokensHub.exe');
+  // L'application peut être ouverte : une copie du binaire historique est possible
+  // même si Windows verrouille le fichier source ; le renommage n'est pas requis.
+  if (!fss.existsSync(branded) && fss.existsSync(legacy)) {
+    try { await fs.rename(legacy, branded); }
+    catch { await fs.copyFile(legacy, branded); }
+  }
+}
+
 async function main() {
   await closeRunningApp();
   await updateAppResources(root, portable);
+  await ensureBrandedExecutable();
   console.log('Portable application resources updated. Existing account data preserved.');
 }
 if (require.main === module) main().catch(error => { console.error(error.message); process.exitCode = 1; });

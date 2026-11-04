@@ -36,8 +36,8 @@ async function launch(dataDir, home) {
 // sur le renderer, donc les assertions visuelles restent déterministes.
 async function setMainClockOffset(offsetMs) {
   await desktop.evaluate((_electron, offset) => {
-    const RealDate = globalThis.__providersBarRealDate || Date;
-    globalThis.__providersBarRealDate = RealDate;
+    const RealDate = globalThis.__lasmiumRealDate || Date;
+    globalThis.__lasmiumRealDate = RealDate;
     globalThis.Date = class extends RealDate {
       constructor(...args) { if (args.length === 0) super(RealDate.now() + offset); else super(...args); }
       static now() { return RealDate.now() + offset; }
@@ -47,9 +47,9 @@ async function setMainClockOffset(offsetMs) {
 
 async function resetMainClock() {
   await desktop.evaluate(() => {
-    if (globalThis.__providersBarRealDate) {
-      globalThis.Date = globalThis.__providersBarRealDate;
-      delete globalThis.__providersBarRealDate;
+    if (globalThis.__lasmiumRealDate) {
+      globalThis.Date = globalThis.__lasmiumRealDate;
+      delete globalThis.__lasmiumRealDate;
     }
   });
 }
@@ -99,7 +99,15 @@ async function main() {
   const workspaceText = await page.locator('.workspace').innerText();
   assert.match(workspaceText, /Espace local/);
   assert.doesNotMatch(workspaceText, /Lasme/);
-  assert.equal(await page.locator('.sidebar').evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(234, 240, 233)');
+  assert.equal(await page.locator('.sidebar').evaluate(el => getComputedStyle(el).backgroundColor), 'rgba(0, 0, 0, 0)');
+  const sidebarBackground = await page.locator('.sidebar').evaluate(el => getComputedStyle(el).backgroundImage);
+  assert.match(sidebarBackground, /linear-gradient/, 'le rail doit porter la signature obsidian');
+  assert.equal(await page.locator('.brand-name').innerText(), 'Lasmium');
+  assert.equal(await page.locator('.brand-sub').innerText(), 'TOKENS-HUB');
+  const brandLogo = await page.locator('.brand-logo img').evaluate(img => ({ loaded: img.complete && img.naturalWidth > 0, width: img.getBoundingClientRect().width }));
+  assert.equal(brandLogo.loaded, true, 'le logo Lasmium doit être chargé');
+  assert.ok(brandLogo.width >= 32, `logo Lasmium trop petit : ${brandLogo.width}px`);
+  assert.equal(await page.title(), 'Lasmium TOKENS-HUB');
   assert.equal(await page.locator('.cards .card').count(), 10);
   // Recommandations/ordre de consommation retirés (T16) : aucun panneau, action ni
   // texte de stratégie dans le tableau de bord.
@@ -110,14 +118,14 @@ async function main() {
   }
   assert.equal(await page.evaluate(() => typeof strategyResult), 'undefined');
   assert.equal(await page.evaluate(() => typeof UsageStrategy), 'undefined');
-  assert.equal(await page.evaluate(async () => 'strategy' in (await window.providersBar.getState())), false);
-  const appInfo = await page.evaluate(() => window.providersBar.getAppInfo());
+  assert.equal(await page.evaluate(async () => 'strategy' in (await window.lasmium.getState())), false);
+  const appInfo = await page.evaluate(() => window.lasmium.getAppInfo());
   assert.equal(appInfo.version, packageJson.version);
   assert.match(String(appInfo.electron), /^44\./);
   assert.equal(appInfo.platform, 'win32');
   assert.equal(appInfo.packaged, false);
   assert.equal(appInfo.dataDir, dataDir);
-  const publicApp = await page.evaluate(async () => (await window.providersBar.getState()).app);
+  const publicApp = await page.evaluate(async () => (await window.lasmium.getState()).app);
   assert.equal(publicApp.version, packageJson.version);
   assert.equal(publicApp.dataDir, undefined, 'publicState ne doit pas exposer de chemin absolu');
   await page.screenshot({ path: path.join(results, 'dashboard.png'), fullPage: true });
@@ -189,13 +197,13 @@ async function main() {
   await page.locator('#statusMessage').fill('Renouvellement indisponible pour ce plan.');
   await page.locator('#provider-form button[type="submit"]').click();
   await page.waitForFunction(() => !document.querySelector('dialog').open);
-  const expiredState = await page.evaluate(() => window.providersBar.getState());
+  const expiredState = await page.evaluate(() => window.lasmium.getState());
   assert.equal(expiredState.providers.find(p => p.id === 'openai').active, false);
   assert.equal(expiredState.providers.find(p => p.id === 'openai').subscriptionStatus, 'expired');
   assert.deepEqual(expiredState.summary.monthly, {});
   assert.match(await page.locator('.expired-card').innerText(), /Renouvellement indisponible pour ce plan/);
   await page.screenshot({ path: path.join(results, 'expired-subscription.png'), fullPage: true });
-  await assert.rejects(page.evaluate(() => window.providersBar.syncOne('openai')), /expiré/);
+  await assert.rejects(page.evaluate(() => window.lasmium.syncOne('openai')), /expiré/);
   await page.locator('[data-nav="subscriptions"]').click();
   assert.match(await page.locator('.expired-row').innerText(), /Fin du forfait/);
   await page.locator('[data-nav="overview"]').click();
@@ -251,16 +259,16 @@ async function main() {
       return { ok: true, json: async () => ({ data: { total_credits: 100, total_usage: 25.5 } }) };
     };
   });
-  await page.evaluate(() => { globalThis.pendingReplacement = window.providersBar.connect('openrouter', 'test-pending-replacement'); });
+  await page.evaluate(() => { globalThis.pendingReplacement = window.lasmium.connect('openrouter', 'test-pending-replacement'); });
   await page.waitForFunction(() => state.providers.find(p => p.id === 'openrouter').syncing);
-  await page.evaluate(() => { globalThis.pendingDisconnect = window.providersBar.disconnect('openrouter'); });
-  await assert.rejects(page.evaluate(() => window.providersBar.connect('openrouter', 'test-overlapping')), /opération.*en cours/);
+  await page.evaluate(() => { globalThis.pendingDisconnect = window.lasmium.disconnect('openrouter'); });
+  await assert.rejects(page.evaluate(() => window.lasmium.connect('openrouter', 'test-overlapping')), /opération.*en cours/);
   await desktop.evaluate(() => globalThis.releaseApiConnection());
   await page.evaluate(async () => { await Promise.all([globalThis.pendingReplacement, globalThis.pendingDisconnect]); });
-  const disconnectedDuringConnect = await page.evaluate(() => window.providersBar.getState());
+  const disconnectedDuringConnect = await page.evaluate(() => window.lasmium.getState());
   assert.equal(disconnectedDuringConnect.providers.find(p => p.id === 'openrouter').connected, false);
   assert.equal(JSON.parse(await fs.readFile(path.join(dataDir, 'credentials.json'), 'utf8')).openrouter, undefined);
-  await page.evaluate(() => window.providersBar.connect('openrouter', 'test-secret-never-export'));
+  await page.evaluate(() => window.lasmium.connect('openrouter', 'test-secret-never-export'));
   // Panne transitoire : la clé reste connectée, le dernier relevé est conservé,
   // puis une synchronisation réussie efface l'erreur sans ressaisie.
   await desktop.evaluate(({ session }) => {
@@ -269,14 +277,14 @@ async function main() {
       return { ok: true, json: async () => ({ data: { total_credits: 100, total_usage: 25.5 } }) };
     };
   });
-  let transient = await page.evaluate(() => window.providersBar.syncOne('openrouter'));
+  let transient = await page.evaluate(() => window.lasmium.syncOne('openrouter'));
   assert.match(transient.providers.find(p => p.id === 'openrouter').error, /Connexion impossible/);
   assert.equal(transient.providers.find(p => p.id === 'openrouter').connected, true);
   assert.equal(transient.providers.find(p => p.id === 'openrouter').snapshot.balances[0].remaining, 74.5);
   await desktop.evaluate(({ session }) => {
     session.defaultSession.fetch = async () => ({ ok: true, json: async () => ({ data: { total_credits: 100, total_usage: 25.5 } }) });
   });
-  const recovered = await page.evaluate(() => window.providersBar.syncOne('openrouter'));
+  const recovered = await page.evaluate(() => window.lasmium.syncOne('openrouter'));
   assert.equal(recovered.providers.find(p => p.id === 'openrouter').error, null);
   assert.equal(recovered.providers.find(p => p.id === 'openrouter').connected, true);
   await closeDialog(page);
@@ -291,7 +299,7 @@ async function main() {
   await page.locator('#api-key').fill('test-secret-runinfra');
   await page.locator('#connection-form button[type="submit"]').click();
   await page.waitForSelector('.connection-success');
-  const connectedRuninfra = await page.evaluate(() => window.providersBar.getState());
+  const connectedRuninfra = await page.evaluate(() => window.lasmium.getState());
   assert.equal(connectedRuninfra.providers.find(p => p.id === 'runinfra').snapshot.balances[0].remaining, 54.76);
   assert.equal(connectedRuninfra.providers.find(p => p.id === 'runinfra').connected, true);
   assert.ok(!(await fs.readFile(path.join(dataDir, 'credentials.json'), 'utf8')).includes('test-secret'));
@@ -320,14 +328,14 @@ async function main() {
   const accountWindow = await accountOpened;
   await accountWindow.waitForURL('https://www.orcarouter.ai/console');
   assert.equal(await accountWindow.evaluate(() => typeof window.require), 'undefined');
-  assert.equal(await accountWindow.evaluate(() => typeof window.providersBar), 'undefined');
+  assert.equal(await accountWindow.evaluate(() => typeof window.lasmium), 'undefined');
   assert.ok((await page.locator('#orca-connection-progress').innerText()).includes('automatiquement'));
   assert.equal(await page.locator('.connection-success').count(), 0);
   await accountWindow.evaluate(() => { localStorage.setItem('user', JSON.stringify({ id: 12 })); localStorage.setItem('active_workspace_id', '34'); });
   await page.waitForSelector('.connection-success');
   assert.ok((await page.locator('.dialog-body').innerText()).includes('53,20'));
   await page.screenshot({ path: path.join(results, 'orca-account.png') });
-  let orcaState = await page.evaluate(() => window.providersBar.getState());
+  let orcaState = await page.evaluate(() => window.lasmium.getState());
   assert.equal(orcaState.providers.find(p => p.id === 'orcarouter').snapshot.balances[0].remaining, 53.2);
   assert.equal(orcaState.providers.find(p => p.id === 'orcarouter').connected, true);
   // Erreur transitoire (5xx) : session et relevé conservés, reprise possible
@@ -339,33 +347,33 @@ async function main() {
     };
   });
   await desktop.evaluate(({ session }) => { session.fromPartition('persist:orcarouter-account').fetch = async () => ({ ok: false, status: 500 }); });
-  orcaState = await page.evaluate(() => window.providersBar.syncOne('orcarouter'));
+  orcaState = await page.evaluate(() => window.lasmium.syncOne('orcarouter'));
   const orcaTransient = orcaState.providers.find(p => p.id === 'orcarouter');
   assert.match(orcaTransient.error, /indisponible \(HTTP 500\)/);
   assert.equal(orcaTransient.connected, true);
   assert.equal(orcaTransient.accountSession.userId, 12);
   assert.equal(orcaTransient.snapshot.balances[0].remaining, 53.2);
   await patchOrcaSuccess();
-  orcaState = await page.evaluate(() => window.providersBar.syncOne('orcarouter'));
+  orcaState = await page.evaluate(() => window.lasmium.syncOne('orcarouter'));
   assert.equal(orcaState.providers.find(p => p.id === 'orcarouter').error, null);
   assert.equal(orcaState.providers.find(p => p.id === 'orcarouter').connected, true);
   // 429 : cooldown serveur honoré (persisté en mémoire) et relevé conservé ;
   // la reprise n'a lieu qu'après le délai, pas immédiatement.
   await desktop.evaluate(({ session }) => { session.fromPartition('persist:orcarouter-account').fetch = async () => ({ ok: false, status: 429 }); });
-  orcaState = await page.evaluate(() => window.providersBar.syncOne('orcarouter'));
+  orcaState = await page.evaluate(() => window.lasmium.syncOne('orcarouter'));
   assert.match(orcaState.providers.find(p => p.id === 'orcarouter').error, /Trop de demandes/);
-  orcaState = await page.evaluate(() => window.providersBar.syncOne('orcarouter'));
+  orcaState = await page.evaluate(() => window.lasmium.syncOne('orcarouter'));
   assert.match(orcaState.providers.find(p => p.id === 'orcarouter').error, /Trop de demandes/);
   assert.equal(orcaState.providers.find(p => p.id === 'orcarouter').connected, true);
   // Délai écoulé : le store de cooldown est réinitialisé par l'application
   // (équivalent d'une nouvelle tentative après 60 s) ; la lecture réussit.
   await desktop.evaluate(() => process.mainModule.require('./lib/orca-account.cjs').resetOrcaRateLimit());
   await patchOrcaSuccess();
-  orcaState = await page.evaluate(() => window.providersBar.syncOne('orcarouter'));
+  orcaState = await page.evaluate(() => window.lasmium.syncOne('orcarouter'));
   assert.equal(orcaState.providers.find(p => p.id === 'orcarouter').error, null);
   // Session expirée : la connexion repasse « non connectée », le relevé reste.
   await desktop.evaluate(({ session }) => { session.fromPartition('persist:orcarouter-account').fetch = async () => ({ ok: false, status: 401 }); });
-  orcaState = await page.evaluate(() => window.providersBar.syncOne('orcarouter'));
+  orcaState = await page.evaluate(() => window.lasmium.syncOne('orcarouter'));
   const orcaExpired = orcaState.providers.find(p => p.id === 'orcarouter');
   assert.match(orcaExpired.error, /expirée/);
   assert.equal(orcaExpired.connected, false);
@@ -385,7 +393,7 @@ async function main() {
   const reconnectWindow = await reconnected;
   await reconnectWindow.waitForURL('https://www.orcarouter.ai/console');
   await page.waitForSelector('.connection-success');
-  orcaState = await page.evaluate(() => window.providersBar.getState());
+  orcaState = await page.evaluate(() => window.lasmium.getState());
   assert.equal(orcaState.providers.find(p => p.id === 'orcarouter').connected, true);
   await closeDialog(page);
   await page.locator('[data-nav="overview"]').click();
@@ -408,14 +416,14 @@ async function main() {
   // Le parcours email/IPC conservé par main.cjs est exercé directement : le
   // renderer 0.3.0 propose le navigateur système (ollama-open) en priorité.
   const ollamaOpened = desktop.waitForEvent('window');
-  await page.evaluate(() => window.providersBar.openOllamaEmail());
+  await page.evaluate(() => window.lasmium.openOllamaEmail());
   const ollamaWindow = await ollamaOpened;
   await ollamaWindow.waitForURL('https://ollama.com/settings');
-  assert.equal(await ollamaWindow.evaluate(() => typeof window.providersBar), 'undefined');
+  assert.equal(await ollamaWindow.evaluate(() => typeof window.lasmium), 'undefined');
   assert.equal(await desktop.evaluate(({ BrowserWindow, session }) => BrowserWindow.getAllWindows().find(w => w.webContents.getURL().startsWith('https://ollama.com')).webContents.session === session.fromPartition('persist:orcarouter-account')), false);
   await page.waitForSelector('.connection-success');
   await page.screenshot({ path: path.join(results, 'ollama-account.png') });
-  let ollamaState = await page.evaluate(() => window.providersBar.getState());
+  let ollamaState = await page.evaluate(() => window.lasmium.getState());
   assert.equal(ollamaState.providers.find(p => p.id === 'ollama').snapshot.balances[0].remaining, 47.5);
   assert.equal(ollamaState.providers.find(p => p.id === 'ollama').snapshot.usageCredits.remaining, 2.98);
   assert.match(await page.locator('.dialog-body').innerText(), /Réserve supplémentaire/);
@@ -423,7 +431,7 @@ async function main() {
   assert.equal(ollamaState.providers.find(p => p.id === 'ollama').connected, true);
   // Session invalide : la connexion est retirée mais le dernier relevé reste.
   await desktop.evaluate(({ session }) => { session.fromPartition('persist:ollama-account').fetch = async () => ({ ok: false, status: 302 }); });
-  ollamaState = await page.evaluate(() => window.providersBar.syncOne('ollama'));
+  ollamaState = await page.evaluate(() => window.lasmium.syncOne('ollama'));
   const ollamaExpired = ollamaState.providers.find(p => p.id === 'ollama');
   assert.match(ollamaExpired.error, /expirée/);
   assert.equal(ollamaExpired.connected, false);
@@ -433,7 +441,7 @@ async function main() {
   await desktop.evaluate(({ session }) => {
     session.fromPartition('persist:ollama-account').fetch = async url => ({ ok: true, status: 200, url, text: async () => '<h2>Included usage Pro</h2><h3>Monthly usage</h3><span>$12.50 of $60.00 used</span><h3>Usage credits</h3><span>$2.98</span><small>Current balance</small>' });
   });
-  ollamaState = await page.evaluate(() => window.providersBar.verifyOllamaAccount());
+  ollamaState = await page.evaluate(() => window.lasmium.verifyOllamaAccount());
   assert.equal(ollamaState.providers.find(p => p.id === 'ollama').connected, true);
   assert.ok((await router.innerText()).includes('74,50'));
   // Un échec de rafraîchissement (429) conserve le dernier relevé valide.
@@ -441,7 +449,7 @@ async function main() {
   await page.locator('[data-action="sync"]').click();
   await page.waitForFunction(() => [...document.querySelectorAll('.card-error')].some(el => el.textContent.includes('Trop de demandes')));
   assert.ok((await router.innerText()).includes('74,50'));
-  const afterCooldown = await page.evaluate(() => window.providersBar.getState());
+  const afterCooldown = await page.evaluate(() => window.lasmium.getState());
   assert.ok(Object.keys(afterCooldown.apiCooldowns || {}).length >= 1, 'le cooldown 429 doit être persisté dans apiCooldowns');
   const persistedCooldown = JSON.parse(await fs.readFile(path.join(dataDir, 'state.json'), 'utf8'));
   assert.ok(Object.keys(persistedCooldown.apiCooldowns || {}).length >= 1, 'apiCooldowns doit être écrit sur disque');
@@ -460,7 +468,8 @@ async function main() {
   await page.locator('#settings-form button[type="submit"]').click();
   await page.waitForFunction(() => document.querySelector('#toast').textContent === 'Préférences enregistrées.');
   await page.waitForFunction(() => document.documentElement.dataset.theme === 'dark');
-  assert.equal(await page.locator('.sidebar').evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(20, 22, 23)');
+  assert.match(await page.locator('.sidebar').evaluate(el => getComputedStyle(el).backgroundImage), /linear-gradient/);
+  assert.equal(await page.locator('.brand-name').evaluate(el => getComputedStyle(el).color), 'rgb(234, 242, 248)');
   await page.screenshot({ path: path.join(results, 'settings-dark.png') });
   await page.locator('[name="theme"]').selectOption('system');
   await page.locator('#settings-form button[type="submit"]').click();
@@ -469,7 +478,7 @@ async function main() {
   await page.waitForFunction(expected => document.documentElement.dataset.theme === expected, systemTheme);
   const quickForTheme = desktop.windows().find(w => w.url().includes('mode=quick'));
   await quickForTheme.waitForFunction(expected => document.documentElement.dataset.theme === expected, systemTheme);
-  await assert.rejects(page.evaluate(() => window.providersBar.updateSettings({ ...state.settings, theme: 'bogus' })), /invalides/);
+  await assert.rejects(page.evaluate(() => window.lasmium.updateSettings({ ...state.settings, theme: 'bogus' })), /invalides/);
   await page.locator('[name="theme"]').selectOption('light');
   await page.locator('#settings-form button[type="submit"]').click();
   await page.waitForFunction(() => document.documentElement.dataset.theme === 'light');
@@ -480,7 +489,7 @@ async function main() {
   // Export nettoyé (sans session, identité, clé ni cooldown)
   // ------------------------------------------------------------------ *
   const exportPath = path.join(results, 'export-test.json');
-  const historyCountBeforeExport = await page.evaluate(async () => (await window.providersBar.getHistory()).length);
+  const historyCountBeforeExport = await page.evaluate(async () => (await window.lasmium.getHistory()).length);
   await desktop.evaluate(({ dialog }, exportPath) => { dialog.showSaveDialog = async () => ({ canceled: false, filePath: exportPath }); }, exportPath);
   await page.locator('[data-action="export"]').click();
   await page.waitForFunction(() => document.querySelector('#toast').textContent === 'Données exportées, sans les clés.');
@@ -509,18 +518,28 @@ async function main() {
   const fontDirectory = path.join(root, 'assets', 'fonts');
   const fontFile = path.join(fontDirectory, 'InterVariable.woff2');
   const licenseFile = path.join(fontDirectory, 'LICENSE-Inter.txt');
-  const fontBytes = await fs.readFile(fontFile);
+  const soraFile = path.join(fontDirectory, 'SoraVariable.woff2');
+const soraLicense = path.join(fontDirectory, 'LICENSE-Sora.txt');
+const soraBytes = await fs.readFile(soraFile);
+assert.equal(soraBytes.subarray(0, 4).toString('latin1'), 'wOF2', 'SoraVariable.woff2 doit être une police WOFF2 valide');
+assert.ok(soraBytes.length > 20000, `police Sora trop petite : ${soraBytes.length} octets`);
+assert.match(await fs.readFile(soraLicense, 'utf8'), /SIL OPEN FONT LICENSE|SIL Open Font License/i, 'licence Sora (OFL) manquante');
+const fontBytes = await fs.readFile(fontFile);
   assert.equal(fontBytes.subarray(0, 4).toString('latin1'), 'wOF2', 'InterVariable.woff2 doit être une police WOFF2 valide');
   assert.ok(fontBytes.length > 100000, `police Inter trop petite : ${fontBytes.length} octets`);
   assert.match(await fs.readFile(licenseFile, 'utf8'), /SIL OPEN FONT LICENSE|SIL Open Font License/i, 'licence Inter (OFL) manquante');
   for (const surface of [page, quick]) {
     const fontState = await surface.evaluate(async () => {
       try { await document.fonts.load('400 13px "Inter Variable"'); } catch { /* repli mesuré ci-dessous */ }
+      try { await document.fonts.load('600 16px "Sora Variable"'); } catch { /* repli mesuré ci-dessous */ }
       await document.fonts.ready;
       const body = getComputedStyle(document.body);
-      return { check: document.fonts.check('400 13px "Inter Variable"'), family: body.fontFamily, numeric: body.fontVariantNumeric };
+      const heading = document.querySelector('h1, .brand-name');
+      return { check: document.fonts.check('400 13px "Inter Variable"'), sora: document.fonts.check('600 16px "Sora Variable"'), family: body.fontFamily, headingFamily: heading ? getComputedStyle(heading).fontFamily : '', numeric: body.fontVariantNumeric };
     });
     assert.equal(fontState.check, true, 'Inter Variable doit être chargée dans la surface');
+    assert.equal(fontState.sora, true, 'Sora Variable doit être chargée dans la surface');
+    assert.match(fontState.headingFamily, /Sora Variable/, 'les titres et la marque doivent utiliser Sora Variable');
     assert.match(fontState.family, /Inter Variable/, 'la famille calculée doit commencer par Inter Variable');
     assert.match(fontState.numeric, /tabular-nums/, 'les chiffres doivent être tabulaires');
   }
@@ -528,7 +547,7 @@ async function main() {
   // déjà été reconstruit avec la nouvelle feuille de style (sinon build antérieur).
   try {
     const distEntries = await fs.readdir(path.join(root, 'dist'), { withFileTypes: true });
-    for (const entry of distEntries.filter(item => item.isDirectory() && item.name.startsWith('ProvidersBar'))) {
+    for (const entry of distEntries.filter(item => item.isDirectory() && item.name.startsWith('Lasmium TOKENS-HUB'))) {
       const app = path.join(root, 'dist', entry.name, 'resources', 'app');
       const appStyles = path.join(app, 'renderer', 'styles.css');
       if (!fss.existsSync(appStyles)) continue;
@@ -825,7 +844,7 @@ async function main() {
   await desktop.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find(w => !w.webContents.getURL().includes('mode=quick')).setSize(960, 760));
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
   await page.screenshot({ path: path.join(results, 'compact-window.png') });
-  const loaded = await page.evaluate(() => window.providersBar.getState());
+  const loaded = await page.evaluate(() => window.lasmium.getState());
   assert.equal(loaded.providers.find(p => p.id === 'openai').plan, 'Offre de test');
   assert.equal(loaded.providers.find(p => p.id === 'openai').snapshot.quotaRemaining, 62);
   assert.equal(loaded.providers.find(p => p.id === 'grok').favorite, true);
@@ -837,7 +856,7 @@ async function main() {
   const persistedState = JSON.parse(await fs.readFile(path.join(dataDir, 'state.json'), 'utf8'));
   assert.equal(Object.hasOwn(persistedState, 'strategy'), false);
   assert.equal(loaded.historyCount, historyCountBeforeExport);
-  assert.equal((await page.evaluate(() => window.providersBar.getHistory())).length, historyCountBeforeExport);
+  assert.equal((await page.evaluate(() => window.lasmium.getHistory())).length, historyCountBeforeExport);
   assert.ok(Object.keys(loaded.apiCooldowns || {}).length >= 0, 'apiCooldowns doit être un objet persistant');
   assert.equal(typeof loaded.apiCooldowns, 'object');
   assert.equal(loaded.providers.find(p => p.id === 'ollama').connected, true);
@@ -852,7 +871,7 @@ async function main() {
   // ------------------------------------------------------------------ *
   // Ollama Free : conservation des crédits achetés et de la réserve
   // ------------------------------------------------------------------ *
-  let freeState = await page.evaluate(renewalDate => window.providersBar.updateProvider('ollama', { amount: 18, billingCycle: 'monthly', renewalDate }), pastDate);
+  let freeState = await page.evaluate(renewalDate => window.lasmium.updateProvider('ollama', { amount: 18, billingCycle: 'monthly', renewalDate }), pastDate);
   let free = freeState.providers.find(p => p.id === 'ollama');
   assert.equal(free.subscriptionStatus, 'expired');
   assert.equal(free.active, true);
@@ -862,13 +881,13 @@ async function main() {
   assert.match(await page.locator('.card:has([data-open="ollama"])').innerText(), /Free · 0 \$\/mo/);
   await page.screenshot({ path: path.join(results, 'ollama-free.png'), fullPage: true });
   await desktop.evaluate(({ session }) => { session.fromPartition('persist:ollama-account').fetch = async url => ({ ok: true, status: 200, url, text: async () => '<h2>Included usage Free</h2><h3>Monthly usage</h3><p>25% used</p><h3>Usage credits</h3><span>$2.98</span><small>Current balance</small>' }); });
-  freeState = await page.evaluate(() => window.providersBar.syncOne('ollama'));
+  freeState = await page.evaluate(() => window.lasmium.syncOne('ollama'));
   free = freeState.providers.find(p => p.id === 'ollama');
   assert.equal(free.snapshot.quotaRemaining, 75);
   assert.equal(free.snapshot.usageCredits.remaining, 2.98);
   // Page officielle actuelle : ni section mensuelle ni légende « Current balance ».
   await desktop.evaluate(({ session }) => { session.fromPartition('persist:ollama-account').fetch = async url => ({ ok: true, status: 200, url, text: async () => '<main><h1>Usage credits <span>Free</span></h1><p>$1.05</p><p>Add usage credits to pay as you go on any cloud model.</p><button>Add funds</button><h2>Usage credits used this month</h2><p>model A $1.03</p><p>model B $0.90</p><h2>Usage breakdown</h2><p>62.8%</p></main>' }); });
-  freeState = await page.evaluate(() => window.providersBar.syncOne('ollama'));
+  freeState = await page.evaluate(() => window.lasmium.syncOne('ollama'));
   free = freeState.providers.find(p => p.id === 'ollama');
   assert.equal(free.error, null); assert.equal(free.connected, true);
   assert.equal(free.snapshot.usageCredits.remaining, 1.05);
@@ -902,7 +921,7 @@ async function main() {
   });
   await currentReserveRow.screenshot({ path: path.join(results, 'ollama-current-row.png') });
   await desktop.evaluate(({ session }) => { session.fromPartition('persist:ollama-account').fetch = async url => ({ ok: true, status: 200, url, text: async () => '<main><h1>Usage credits Free</h1><h2>Usage breakdown</h2></main>' }); });
-  freeState = await page.evaluate(() => window.providersBar.syncOne('ollama'));
+  freeState = await page.evaluate(() => window.lasmium.syncOne('ollama'));
   free = freeState.providers.find(p => p.id === 'ollama');
   assert.equal(free.snapshot.usageCredits.remaining, 1.05);
   assert.equal(free.snapshot.usageCredits.stale, true);
@@ -911,7 +930,7 @@ async function main() {
   assert.match(await currentReserveCard.innerText(), /Dernière valeur connue[\s\S]*1,05/);
   assert.match((await currentReserveRow.locator('.quick-fact').nth(1).innerText()), /1,05/);
   assert.equal(await currentReserveRow.locator('.quick-stale').count(), 0);
-  await assert.rejects(page.evaluate(renewalDate => window.providersBar.updateProvider('ollama', { subscriptionStatus: 'active', renewalDate }), futureDate), /Confirme le renouvellement/);
+  await assert.rejects(page.evaluate(renewalDate => window.lasmium.updateProvider('ollama', { subscriptionStatus: 'active', renewalDate }), futureDate), /Confirme le renouvellement/);
 
   // ------------------------------------------------------------------ *
   // Comptes à navigateur : OpenAI (Codex), Grok, Z.ai, Claude, Antigravity
@@ -936,7 +955,7 @@ async function main() {
     await page.waitForSelector('#account-connection-progress');
     if (id !== 'openai') await page.locator('[data-action="account-verify"]').click();
     await page.waitForSelector('.connection-success');
-    const connected = await page.evaluate(() => window.providersBar.getState());
+    const connected = await page.evaluate(() => window.lasmium.getState());
     assert.ok(connected.providers.find(p => p.id === id).snapshot.quotaWindows.some(w => w.label.includes('Semaine')), `${id} doit exposer une fenêtre hebdomadaire`);
     assert.equal(connected.providers.find(p => p.id === id).connected, true);
     assert.equal(connected.providers.find(p => p.id === id).snapshot.balances.length, 0);
@@ -957,11 +976,11 @@ async function main() {
   assert.match(await page.locator('#resets-form').innerText(), /manuel/);
   assert.match(await page.locator('#resets-form').innerText(), /heure non précisée/);
   await page.screenshot({ path: path.join(results, 'reset-editor.png') });
-  const resetState = await page.evaluate(() => window.providersBar.getState());
+  const resetState = await page.evaluate(() => window.lasmium.getState());
   assert.equal(resetState.providers.find(p => p.id === 'zai').connected, true);
   assert.equal(resetState.providers.find(p => p.id === 'zai').manualResets.Semaine.date, '2099-09-19');
   assert.equal(resetState.providers.find(p => p.id === 'zai').manualResets.Semaine.at, null);
-  await assert.rejects(page.evaluate(() => window.providersBar.saveResets('zai', { Semaine: { date: '2099-02-30' } })), /invalide/);
+  await assert.rejects(page.evaluate(() => window.lasmium.saveResets('zai', { Semaine: { date: '2099-02-30' } })), /invalide/);
   await closeDialog(page);
   // Claude Desktop : relevé ancien actionnable, puis relevé frais.
   await openProvider(page, 'claude', 'connection');
@@ -971,14 +990,14 @@ async function main() {
     globalThis.savedClaudeRead = local.readClaudeDesktopUsage;
     local.readClaudeDesktopUsage = async () => { throw new Error('Relevé Claude Desktop ancien : aucun nouveau quota depuis plus de 45 minutes.'); };
   });
-  await page.evaluate(() => window.providersBar.verifyAccount('claude')).catch(() => {});
-  const staleClaude = await page.evaluate(() => window.providersBar.getState());
+  await page.evaluate(() => window.lasmium.verifyAccount('claude')).catch(() => {});
+  const staleClaude = await page.evaluate(() => window.lasmium.getState());
   assert.equal(staleClaude.providers.find(p => p.id === 'claude').accountSession.kind, 'claude-desktop-local');
   assert.match(await page.evaluate(() => statusBadge(state.providers.find(p => p.id === 'claude'))), /Relevé ancien/);
   await desktop.evaluate(() => { process.mainModule.require('./lib/claude-desktop-usage.cjs').readClaudeDesktopUsage = globalThis.savedClaudeRead; });
   await page.locator('[data-action="account-verify"]').click();
   await page.waitForFunction(() => !state.providers.find(p => p.id === 'claude').error);
-  const claudeState = await page.evaluate(() => window.providersBar.getState());
+  const claudeState = await page.evaluate(() => window.lasmium.getState());
   assert.equal(claudeState.providers.find(p => p.id === 'claude').accountSession.kind, 'claude-desktop-local');
   assert.deepEqual(claudeState.providers.find(p => p.id === 'claude').snapshot.quotaWindows.map(w => w.remaining), [80, 91]);
   // Lecture directe opt-in : le lecteur réel utilise un faux profil Claude Code
@@ -996,19 +1015,19 @@ async function main() {
   assert.equal(await page.locator('[data-action="claude-enable-live"]').count(), 0);
   assert.match(await page.locator('.connection-success').innerText(), /chaque minute/);
   assert.match(await page.locator('.dialog-body').innerText(), /9 % utilisés/);
-  const directClaude = await page.evaluate(() => window.providersBar.getState());
+  const directClaude = await page.evaluate(() => window.lasmium.getState());
   assert.deepEqual(directClaude.providers.find(p => p.id === 'claude').snapshot.quotaWindows.map(w => w.remaining), [91, 58, 69]);
   await desktop.evaluate(() => { process.mainModule.require('./lib/claude-desktop-usage.cjs').readClaudeDesktopUsage = async () => { throw new Error('Must not read old Desktop history in direct mode'); }; });
   await page.locator('[data-action="account-verify"]').click();
-  assert.equal((await page.evaluate(() => window.providersBar.getState())).providers.find(p => p.id === 'claude').error, null);
+  assert.equal((await page.evaluate(() => window.lasmium.getState())).providers.find(p => p.id === 'claude').error, null);
   await page.screenshot({ path: path.join(results, 'claude-live-connection.png') });
   // Panne du service : dernier relevé conservé, puis reprise après backoff.
   await setMainClockOffset(61000);
   await desktop.evaluate(({ session }, usageUrl) => {
     session.defaultSession.fetch = async url => { if (String(url) === usageUrl) throw new Error('Claude smoke offline'); throw new Error('Unexpected Claude endpoint'); };
   }, CLAUDE_USAGE_URL);
-  await page.evaluate(() => window.providersBar.verifyAccount('claude')).catch(() => {});
-  const failedClaude = (await page.evaluate(() => window.providersBar.getState())).providers.find(p => p.id === 'claude');
+  await page.evaluate(() => window.lasmium.verifyAccount('claude')).catch(() => {});
+  const failedClaude = (await page.evaluate(() => window.lasmium.getState())).providers.find(p => p.id === 'claude');
   assert.equal(failedClaude.snapshot.updatedAt, directClaude.providers.find(p => p.id === 'claude').snapshot.updatedAt);
   assert.deepEqual(failedClaude.snapshot.quotaWindows.map(w => w.remaining), [91, 58, 69]);
   assert.ok(failedClaude.error);
@@ -1019,8 +1038,8 @@ async function main() {
       throw new Error('Unexpected Claude endpoint');
     };
   }, CLAUDE_USAGE_URL);
-  await page.evaluate(() => window.providersBar.verifyAccount('claude'));
-  const recoveredClaude = (await page.evaluate(() => window.providersBar.getState())).providers.find(p => p.id === 'claude');
+  await page.evaluate(() => window.lasmium.verifyAccount('claude'));
+  const recoveredClaude = (await page.evaluate(() => window.lasmium.getState())).providers.find(p => p.id === 'claude');
   assert.equal(recoveredClaude.error, null);
   assert.notEqual(recoveredClaude.snapshot.updatedAt, directClaude.providers.find(p => p.id === 'claude').snapshot.updatedAt);
   await resetMainClock();
@@ -1080,9 +1099,9 @@ async function main() {
   // ------------------------------------------------------------------ *
   // Antigravity : lecture locale simulée, erreur conservant le dernier relevé
   // ------------------------------------------------------------------ *
-  await page.evaluate(() => window.providersBar.disconnect('ollama'));
-  await page.evaluate(() => window.providersBar.disconnect('zai'));
-  const clearedDates = await page.evaluate(() => window.providersBar.saveResets('zai', {}));
+  await page.evaluate(() => window.lasmium.disconnect('ollama'));
+  await page.evaluate(() => window.lasmium.disconnect('zai'));
+  const clearedDates = await page.evaluate(() => window.lasmium.saveResets('zai', {}));
   assert.deepEqual(clearedDates.providers.find(p => p.id === 'zai').manualResets, {});
   await desktop.evaluate(() => {
     const transport = process.mainModule.require('./lib/antigravity-account.cjs');
@@ -1094,21 +1113,21 @@ async function main() {
       { bucketId: '3p-5h', window: '5h', remainingFraction: 1 },
     ] }] } });
   });
-  await assert.rejects(page.evaluate(() => window.providersBar.verifyAccount('gemini')), /introuvable|inconnu/i);
+  await assert.rejects(page.evaluate(() => window.lasmium.verifyAccount('gemini')), /introuvable|inconnu/i);
   await page.locator('[data-nav="connections"]').click();
   await openProvider(page, 'antigravity');
   await page.locator('[data-action="account-open"]').click();
   await page.waitForFunction(() => document.querySelector('dialog').innerText.includes('Claude et GPT · Semaine : 100 %'));
-  let local = await page.evaluate(() => window.providersBar.getState());
+  let local = await page.evaluate(() => window.lasmium.getState());
   assert.equal(local.providers.find(p => p.id === 'antigravity').snapshot.quotaRemaining, 94);
   assert.equal(local.providers.some(p => p.id === 'gemini'), false);
   await desktop.evaluate(() => { process.mainModule.require('./lib/antigravity-account.cjs').fetchAntigravityQuota = async () => { throw new Error('Antigravity fermé'); }; });
-  await assert.rejects(page.evaluate(() => window.providersBar.verifyAccount('antigravity')), /Antigravity fermé/);
-  local = await page.evaluate(() => window.providersBar.getState());
+  await assert.rejects(page.evaluate(() => window.lasmium.verifyAccount('antigravity')), /Antigravity fermé/);
+  local = await page.evaluate(() => window.lasmium.getState());
   assert.equal(local.providers.find(p => p.id === 'antigravity').snapshot.quotaRemaining, 94);
   assert.match(local.providers.find(p => p.id === 'antigravity').error, /Antigravity fermé/);
-  await page.evaluate(() => window.providersBar.disconnect('antigravity'));
-  local = await page.evaluate(() => window.providersBar.getState());
+  await page.evaluate(() => window.lasmium.disconnect('antigravity'));
+  local = await page.evaluate(() => window.lasmium.getState());
   assert.equal(local.providers.find(p => p.id === 'antigravity').connected, false);
   assert.equal(local.providers.some(p => p.id === 'gemini'), false);
   await closeDialog(page);
@@ -1121,11 +1140,11 @@ async function main() {
   await page.waitForSelector('.danger-zone');
   await page.locator('[data-action="erase-data"]').click();
   await page.waitForFunction(() => document.querySelector('#toast').textContent.includes('Données effacées'));
-  const erased = await page.evaluate(() => window.providersBar.getState());
+  const erased = await page.evaluate(() => window.lasmium.getState());
   assert.equal(erased.providers.length, 10);
   assert.equal(erased.historyCount, 0);
   assert.equal(erased.providers.every(p => !p.connected), true);
-  assert.equal(await page.evaluate(async () => (await window.providersBar.getHistory()).length), 0);
+  assert.equal(await page.evaluate(async () => (await window.lasmium.getHistory()).length), 0);
   assert.equal(await page.locator('#app-version').innerText(), `Version ${packageJson.version}`);
   await page.screenshot({ path: path.join(results, 'erase-data.png'), fullPage: true });
   for (const name of ['credentials.json', 'account-browsers', 'temporary-account-browsers', 'state.before-subscription-removal.json', 'state.before-orca-balance-fix.json']) {
@@ -1135,7 +1154,7 @@ async function main() {
   assert.equal(Array.isArray(erasedState.providers) && erasedState.providers.length, 10);
   assert.deepEqual(erasedState.history, []);
   await desktop.close(); desktop = null;
-  console.log('PASS: marque neutre, thème système, version dynamique, app:info, erase-data, recommandations retirées, inventaire 10 fournisseurs, recherche/filtres, édition, historique, clés chiffrées, course connect/disconnect, reprise transitoire, cooldown persistant, Orca/Ollama (session conservée puis auth invalide), Claude Desktop/direct, lecteurs DOM réels, police Inter Variable (fichiers+OFL+chargement dashboard/widget, tabular-nums), libellés Hebdo/Horaire/Hebdo Fable/Hebdo Argon et chips, widget vertical complet 360×660 (10 lignes, une information par fenêtre, Ollama Free + crédits, soldes multi-devises, sans défilement ; scroll fin à 320), niveaux textuels, tray, redémarrage, Ollama Free, Antigravity, export nettoyé.');
+  console.log('PASS: marque Lasmium TOKENS-HUB, logo, thèmes clair/sombre/système, version dynamique, app:info, erase-data, recommandations retirées, inventaire 10 fournisseurs, recherche/filtres, édition, historique, clés chiffrées, course connect/disconnect, reprise transitoire, cooldown persistant, Orca/Ollama (session conservée puis auth invalide), Claude Desktop/direct, lecteurs DOM réels, polices Inter + Sora (fichiers+OFL+chargement dashboard/widget, tabular-nums), libellés Hebdo/Horaire/Hebdo Fable/Hebdo Argon et chips, widget vertical Lasmium 360×660 (10 lignes, une information par fenêtre, Ollama Free + crédits, soldes multi-devises, sans défilement ; scroll fin à 320), niveaux textuels, tray, redémarrage, Ollama Free, Antigravity, export nettoyé.');
 }
 
 main().catch(error => { console.error(error); process.exitCode = 1; }).finally(async () => { if (desktop) await desktop.close(); });

@@ -16,7 +16,7 @@ const execFileAsync = promisify(execFile);
 const root = path.resolve(__dirname, '..');
 const scriptsDirectory = path.join(root, 'scripts');
 const FIXTURE_VERSION = '9.8.7';
-const RELEASE_DIRECTORY = `ProvidersBar-${FIXTURE_VERSION}-win32-x64`;
+const RELEASE_DIRECTORY = `LasmiumTokensHub-${FIXTURE_VERSION}-win32-x64`;
 const PORTABLE_DIRECTORY = 'ProvidersBar-win32-x64';
 const fakeElectronBytes = Buffer.from('fake-electron-binary\n');
 const FIXTURE_MAIN = 'module.exports = "fixture-main-v1";\n';
@@ -43,7 +43,7 @@ async function writeTree(base, files) {
 // Dépôt temporaire minimal : scripts réels + lib réelle (petite) + faux Electron
 // et faux module de production, pour exercer le vrai code de packaging.
 async function createFixture(t) {
-  const base = await fs.mkdtemp(path.join(os.tmpdir(), 'providersbar-package-'));
+  const base = await fs.mkdtemp(path.join(os.tmpdir(), 'lasmium-package-'));
   t.after(() => fs.rm(base, { recursive: true, force: true }));
   await fs.mkdir(path.join(base, 'scripts'), { recursive: true });
   for (const name of await fs.readdir(scriptsDirectory)) {
@@ -51,7 +51,7 @@ async function createFixture(t) {
   }
   await fs.cp(path.join(root, 'lib'), path.join(base, 'lib'), { recursive: true });
   await writeTree(base, {
-    'package.json': JSON.stringify({ name: 'providersbar-fixture', version: FIXTURE_VERSION, private: true, main: 'main.cjs', dependencies: { 'proper-lockfile': '4.1.2' } }),
+    'package.json': JSON.stringify({ name: 'lasmium-fixture', version: FIXTURE_VERSION, private: true, main: 'main.cjs', dependencies: { 'proper-lockfile': '4.1.2' } }),
     'main.cjs': FIXTURE_MAIN,
     'preload.cjs': FIXTURE_PRELOAD,
     'renderer/index.html': FIXTURE_RENDERER,
@@ -83,15 +83,15 @@ test('package.cjs --release construit une distribution versionnée complète san
   const out = path.join(base, 'dist', RELEASE_DIRECTORY);
   const app = path.join(out, 'resources', 'app');
 
-  assert.ok(fss.existsSync(path.join(out, 'ProvidersBar.exe')), 'ProvidersBar.exe doit exister.');
+  assert.ok(fss.existsSync(path.join(out, 'LasmiumTokensHub.exe')), 'Lasmium TOKENS-HUB.exe doit exister.');
   assert.equal(fss.existsSync(path.join(out, 'electron.exe')), false, 'electron.exe doit être renommé.');
-  assert.deepEqual(await fs.readFile(path.join(out, 'ProvidersBar.exe')), fakeElectronBytes);
+  assert.deepEqual(await fs.readFile(path.join(out, 'LasmiumTokensHub.exe')), fakeElectronBytes);
 
   assert.equal(await fs.readFile(path.join(app, 'main.cjs'), 'utf8'), FIXTURE_MAIN);
   assert.equal(await fs.readFile(path.join(app, 'preload.cjs'), 'utf8'), FIXTURE_PRELOAD);
   assert.equal(await fs.readFile(path.join(app, 'renderer', 'index.html'), 'utf8'), FIXTURE_RENDERER);
   assert.deepEqual(JSON.parse(await fs.readFile(path.join(app, 'package.json'), 'utf8')), {
-    name: 'providersbar', productName: 'ProvidersBar', version: FIXTURE_VERSION, main: 'main.cjs',
+    name: 'lasmium-tokens-hub', productName: 'Lasmium TOKENS-HUB', version: FIXTURE_VERSION, main: 'main.cjs',
   });
 
   // Dépendances de production copiées, y compris imbriquées.
@@ -117,7 +117,7 @@ test('package.cjs refuse d’écraser une release déjà construite', { timeout:
   assert.match(`${result.stderr}${result.stdout}`, /EEXIST|existe déjà|already exists/i);
   assert.equal(await fs.readFile(path.join(out, 'keep.txt'), 'utf8'), 'release existante\n');
   assert.equal(await fs.readFile(path.join(out, 'resources', 'app', 'main.cjs'), 'utf8'), 'module.exports = "release-existante";\n');
-  assert.equal(fss.existsSync(path.join(out, 'ProvidersBar.exe')), false);
+  assert.equal(fss.existsSync(path.join(out, 'LasmiumTokensHub.exe')), false);
 });
 
 // ---------------------------------------------------------------------------
@@ -150,7 +150,7 @@ test('package.cjs met à jour le portable en préservant data/ et en retirant le
   const app = path.join(portable, 'resources', 'app');
   assert.equal(await fs.readFile(path.join(app, 'main.cjs'), 'utf8'), FIXTURE_MAIN);
   assert.equal(fss.existsSync(path.join(app, 'obsolete-module.cjs')), false, 'Les fichiers supprimés des sources doivent disparaître.');
-  assert.ok(fss.existsSync(path.join(portable, 'ProvidersBar.exe')));
+  assert.ok(fss.existsSync(path.join(portable, 'LasmiumTokensHub.exe')));
   assert.equal(fss.existsSync(path.join(portable, 'electron.exe')), false);
 
   for (const [relative, expected] of Object.entries(dataFiles)) {
@@ -166,7 +166,7 @@ test('package.cjs met à jour le portable en préservant data/ et en retirant le
 
 test('app-resources refuse une cible hors du dossier dist et ne crée rien', async t => {
   const { updateAppResources } = require('../scripts/app-resources.cjs');
-  const base = await fs.mkdtemp(path.join(os.tmpdir(), 'providersbar-resources-'));
+  const base = await fs.mkdtemp(path.join(os.tmpdir(), 'lasmium-resources-'));
   t.after(() => fs.rm(base, { recursive: true, force: true }));
   const outside = path.join(base, 'portable-outside-dist');
   await assert.rejects(updateAppResources(base, outside));

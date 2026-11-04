@@ -163,7 +163,7 @@ test('la version de package.json est documentée dans README et CHANGELOG', asyn
 
 test('package.json respecte les prérequis de la refonte (Node ≥ 24, Electron 44)', async () => {
   const pkg = JSON.parse(await read('package.json'));
-  assert.equal(pkg.name, 'providersbar');
+  assert.equal(pkg.name, 'lasmium-tokens-hub');
   assert.equal(pkg.private, true);
   assert.match(String(pkg.engines?.node || ''), />=\s*24/, 'engines.node doit exiger Node ≥ 24.');
   assert.match(String(pkg.devDependencies?.electron || ''), /^(?:\^|~)?44\./, 'Electron 44.x est requis par la refonte 0.3.0.');
@@ -341,7 +341,7 @@ test('diagnostic : rapport sans secret et code retour correct', () => {
 });
 
 test('diagnostic : readDiagnosticPort gère absence et contenu invalide', async t => {
-  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'providersbar-diagnostic-'));
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'lasmium-diagnostic-'));
   t.after(() => fs.rm(directory, { recursive: true, force: true }));
   await assert.rejects(diagnostics.readDiagnosticPort(directory), /Aucun port de diagnostic local/);
   await fs.mkdir(path.join(directory, 'data'), { recursive: true });
@@ -469,7 +469,7 @@ test('la fonctionnalité de recommandation et d’ordre de consommation a été 
   assert.doesNotMatch(await read('preload.cjs'), /strategy|updateStrategy/i, 'preload ne doit plus exposer updateStrategy');
   // L'état public et l'export ne contiennent plus `strategy` (vérifié par le smoke).
   const dashboard = await read('scripts/smoke.cjs');
-  assert.match(dashboard, /'strategy' in \(await window\.providersBar\.getState\(\)\)/);
+  assert.match(dashboard, /'strategy' in \(await window\.lasmium\.getState\(\)\)/);
   assert.match(dashboard, /'strategy' in exportedDocument/);
 });
 
@@ -520,10 +520,11 @@ test('la police Inter Variable est empaquetée avec sa licence OFL', async () =>
   assert.match(await read(licensePath), /SIL OPEN FONT LICENSE|SIL Open Font License/i, 'licence OFL absente ou incorrecte');
   // Déclaration locale, sans réseau : CSP 'self' et aucun CDN de police.
   const styles = await read('renderer/styles.css');
-  assert.match(styles, /@font-face\s*\{[\s\S]*?font-family:\s*"Inter Variable"/);
-  assert.match(styles, /url\("\.\.\/assets\/fonts\/InterVariable\.woff2"\)\s*format\("woff2"\)/);
-  assert.match(styles, /font-display:\s*swap/);
-  assert.match(styles, /font-weight:\s*100 900/);
+  const theme = await read('renderer/theme.css');
+  assert.match(theme, /@font-face\s*\{[\s\S]*?font-family:\s*"Inter Variable"/);
+  assert.match(theme, /url\("\.\.\/assets\/fonts\/InterVariable\.woff2"\)\s*format\("woff2"\)/);
+  assert.match(theme, /font-display:\s*swap/);
+  assert.match(theme, /font-weight:\s*100 900/);
   assert.match(await read('renderer/theme.css'), /--font-ui:\s*"Inter Variable",\s*"Inter"/);
   assert.match(await read('renderer/index.html'), /href="styles\.css"/);
   for (const script of ['renderer/styles.css', 'renderer/theme.css', 'renderer/ui-core.js', 'renderer/views.js', 'renderer/app.js', 'renderer/index.html']) {
@@ -532,6 +533,29 @@ test('la police Inter Variable est empaquetée avec sa licence OFL', async () =>
   // Le packaging copie le dossier assets (police + licence) dans le portable.
   const packaging = await read('scripts/app-resources.cjs');
   assert.match(packaging, /'assets'/);
+});
+
+test('l’identité Lasmium est présente dans le renderer et les assets', async () => {
+  const markPath = 'assets/brand/lasmium-mark.svg';
+  assert.ok(fss.existsSync(path.join(root, markPath)), 'assets/brand/lasmium-mark.svg manquant');
+  const mark = await read(markPath);
+  assert.match(mark, /viewBox="0 0 512 512"/);
+  assert.match(mark, /linearGradient/);
+  const icon = fss.readFileSync(path.join(root, 'assets', 'icon.png'));
+  assert.equal(icon.subarray(1, 4).toString('latin1'), 'PNG', 'assets/icon.png doit être un PNG valide');
+  const views = await read('renderer/views.js');
+  assert.match(views, /lasmium-mark\.svg/);
+  assert.match(views, /brand-name">Lasmium/);
+  assert.match(views, /brand-sub">TOKENS-HUB/);
+  const index = await read('renderer/index.html');
+  assert.match(index, /<title>Lasmium TOKENS-HUB<\/title>/);
+  const theme = await read('renderer/theme.css');
+  assert.match(theme, /"Sora Variable"/);
+  assert.match(theme, /assets\/fonts\/SoraVariable\.woff2/);
+  const license = await read('assets/fonts/LICENSE-Sora.txt');
+  assert.match(license, /SIL OPEN FONT LICENSE|SIL Open Font License/i);
+  assert.doesNotMatch(views, /ProvidersBar/);
+  assert.doesNotMatch(await read('renderer/styles.css'), /\.quick-segment|\.quick-extra/);
 });
 
 test('les libellés segmentés et les chips sont couverts par les smokes', async () => {

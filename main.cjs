@@ -1,4 +1,4 @@
-// ProvidersBar — processus principal Electron (Windows).
+// Lasmium TOKENS-HUB — processus principal Electron (Windows).
 // Rôle : cycle de vie (fenêtres, tray, widget, single-instance), surface IPC
 // exposée par preload.cjs, orchestration des lectures via les connecteurs de
 // lib/, état en mémoire et persistance (lib/data-store.cjs), durcissement des
@@ -32,11 +32,11 @@ const claudeLive = require('./lib/claude-live-usage.cjs');
 const { CREDENTIAL_PATH } = require('./lib/claude-connection.cjs');
 const { watchFile, unwatchFile } = require('node:fs');
 
-app.setName('ProvidersBar');
+app.setName('Lasmium TOKENS-HUB');
 // Identité stable des notifications Windows (toasts), indépendante du raccourci
 // que l'utilisateur a éventuellement créé pour l'application.
-if (process.platform === 'win32') app.setAppUserModelId('com.providersbar.app');
-const dataDir = process.env.PROVIDERSBAR_DATA_DIR || (app.isPackaged ? path.join(path.dirname(process.execPath), 'data') : path.join(__dirname, '.local'));
+if (process.platform === 'win32') app.setAppUserModelId('com.lasmium.tokenshub');
+const dataDir = (process.env.LASMIUM_DATA_DIR || process.env.PROVIDERSBAR_DATA_DIR) || (app.isPackaged ? path.join(path.dirname(process.execPath), 'data') : path.join(__dirname, '.local'));
 app.setPath('userData', dataDir);
 const store = createDataStore({ dataDir });
 // Origines autorisées dans les fenêtres de connexion Electron. Seules les deux
@@ -158,8 +158,8 @@ async function verifyClaudeDesktop({ enableLive = false, manual = false } = {}) 
           record(p, snapshot);
           p.claudeSync = claudeReader.info();
           claudeConnection = { status: 'connected', message: snapshot.stale
-            ? 'Lecture directe indisponible (renouvellement du jeton Claude Code limité) ; ProvidersBar utilise le dernier relevé Claude Desktop connu (relevé ancien).'
-            : 'Lecture directe indisponible (renouvellement du jeton Claude Code limité) ; ProvidersBar utilise le relevé Claude Desktop.' };
+            ? 'Lecture directe indisponible (renouvellement du jeton Claude Code limité) ; Lasmium TOKENS-HUB utilise le dernier relevé Claude Desktop connu (relevé ancien).'
+            : 'Lecture directe indisponible (renouvellement du jeton Claude Code limité) ; Lasmium TOKENS-HUB utilise le relevé Claude Desktop.' };
           return publicState();
         } catch {
           // Relevé Desktop aussi indisponible : conserver mode, snapshot et
@@ -269,7 +269,7 @@ function publicState() {
 }
 function broadcast() {
   for (const window of [mainWindow, quickWindow]) if (window && !window.isDestroyed()) window.webContents.send('state:changed', publicState());
-  if (tray) tray.setToolTip(`ProvidersBar · ${state.providers.filter(isTracked).length} services · ${state.providers.filter(isConnected).length} connecté(s)`);
+  if (tray) tray.setToolTip(`Lasmium TOKENS-HUB · ${state.providers.filter(isTracked).length} services · ${state.providers.filter(isConnected).length} connecté(s)`);
 }
 function provider(id) {
   const p = state.providers.find(p => p.id === id);
@@ -373,9 +373,9 @@ async function openOrcaAccount() {
   const accountSession = orcaSession();
   accountSession.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
   accountSession.setPermissionCheckHandler(() => false);
-  if (!accountSession.providersBarConfigured) {
+  if (!accountSession.lasmiumConfigured) {
     accountSession.on('will-download', event => event.preventDefault());
-    accountSession.providersBarConfigured = true;
+    accountSession.lasmiumConfigured = true;
   }
   orcaLoginWindow = new BrowserWindow({ width: 1100, height: 850, title: 'Connexion au compte OrcaRouter', parent: mainWindow,
     webPreferences: { partition: 'persist:orcarouter-account', nodeIntegration: false, contextIsolation: true, sandbox: true, webSecurity: true, devTools: false } });
@@ -509,7 +509,7 @@ async function openOllamaAccount() {
   const isolated = ollamaSession();
   isolated.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
   isolated.setPermissionCheckHandler(() => false);
-  if (!isolated.providersBarConfigured) { isolated.on('will-download', event => event.preventDefault()); isolated.providersBarConfigured = true; }
+  if (!isolated.lasmiumConfigured) { isolated.on('will-download', event => event.preventDefault()); isolated.lasmiumConfigured = true; }
   ollamaLoginWindow = new BrowserWindow({ width: 1100, height: 850, title: 'Connexion au compte Ollama', parent: mainWindow,
     webPreferences: { partition: 'persist:ollama-account', nodeIntegration: false, contextIsolation: true, sandbox: true, webSecurity: true, devTools: false } });
   secureAccountWindow(ollamaLoginWindow, ACCOUNT_ORIGINS);
@@ -816,7 +816,7 @@ function registerIpc() {
     return publicState();
   });
   handle('export', async () => {
-    const result = await dialog.showSaveDialog(mainWindow, { title: 'Exporter mes données', defaultPath: `ProvidersBar-${new Date().toISOString().slice(0, 10)}.json`, filters: [{ name: 'Données JSON', extensions: ['json'] }] });
+    const result = await dialog.showSaveDialog(mainWindow, { title: 'Exporter mes données', defaultPath: `Lasmium TOKENS-HUB-${new Date().toISOString().slice(0, 10)}.json`, filters: [{ name: 'Données JSON', extensions: ['json'] }] });
     if (result.canceled) return false;
     // Export nettoyé : ni session, ni identité, ni empreinte de clé (contrat §3.5).
     const document = sanitizeStateForExport(state, { version: app.getVersion() });
@@ -863,17 +863,17 @@ else {
       registerIpc();
       const webPreferences = { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true, spellcheck: false, devTools: false };
       const windowBackground = windowBackgroundFor(state.settings.theme);
-      mainWindow = new BrowserWindow({ width: 1360, height: 940, minWidth: 900, minHeight: 680, show: false, title: 'ProvidersBar', backgroundColor: windowBackground, icon: path.join(__dirname, 'assets/icon.png'), autoHideMenuBar: true, webPreferences });
+      mainWindow = new BrowserWindow({ width: 1360, height: 940, minWidth: 900, minHeight: 680, show: false, title: 'Lasmium TOKENS-HUB', icon: path.join(__dirname, 'assets/icon.png'), backgroundColor: windowBackground, icon: path.join(__dirname, 'assets/icon.png'), autoHideMenuBar: true, webPreferences });
       secureWindow(mainWindow);
       mainWindow.on('close', event => { if (!quitting) { event.preventDefault(); mainWindow.hide(); } });
       mainWindow.once('ready-to-show', () => mainWindow.show());
       await mainWindow.loadFile(uiPath);
-      quickWindow = new BrowserWindow({ width: 360, height: Math.min(660, screen.getPrimaryDisplay().workAreaSize.height - 16), show: false, frame: false, resizable: false, skipTaskbar: true, alwaysOnTop: true, backgroundColor: windowBackground, webPreferences });
+      quickWindow = new BrowserWindow({ width: 360, height: Math.min(660, screen.getPrimaryDisplay().workAreaSize.height - 16), show: false, frame: false, resizable: false, skipTaskbar: true, alwaysOnTop: true, icon: path.join(__dirname, 'assets/icon.png'), backgroundColor: windowBackground, webPreferences });
       secureWindow(quickWindow);
       quickWindow.on('blur', () => quickWindow.hide());
       await quickWindow.loadFile(uiPath, { query: { mode: 'quick' } });
       tray = new Tray(nativeImage.createFromPath(path.join(__dirname, 'assets/icon.png')));
-      tray.setContextMenu(Menu.buildFromTemplate([{ label: 'Ouvrir ProvidersBar', click: showMain }, { label: 'Synchroniser', click: () => syncAll().catch(error => console.error('Synchronisation manuelle :', error)) }, { type: 'separator' }, { label: 'Quitter', click: () => app.quit() }]));
+      tray.setContextMenu(Menu.buildFromTemplate([{ label: 'Ouvrir Lasmium TOKENS-HUB', click: showMain }, { label: 'Synchroniser', click: () => syncAll().catch(error => console.error('Synchronisation manuelle :', error)) }, { type: 'separator' }, { label: 'Quitter', click: () => app.quit() }]));
       tray.on('click', toggleQuick); tray.on('double-click', showMain);
       broadcast();
       stopClaudeWatcher = claudeDesktop.watchClaudeDesktopUsage(() => {
@@ -906,6 +906,6 @@ else {
         } catch (error) { console.error('Actualisation automatique :', error); }
       }, 5 * 60 * 1000).unref();
       if (state.settings.autoRefresh) syncAll().catch(error => console.error('Synchronisation initiale :', error));
-    } catch (error) { dialog.showErrorBox('ProvidersBar ne peut pas démarrer', error.message + '\nLes fichiers existants ont été conservés.'); app.quit(); }
+    } catch (error) { dialog.showErrorBox('Lasmium TOKENS-HUB ne peut pas démarrer', error.message + '\nLes fichiers existants ont été conservés.'); app.quit(); }
   });
 }

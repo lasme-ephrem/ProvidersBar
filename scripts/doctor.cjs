@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// `npm run doctor` — préflight des prérequis ProvidersBar.
+// `npm run doctor` — préflight des prérequis Lasmium TOKENS-HUB.
 // Lecture seule, aucun secret, aucun service authentifié interrogé.
 const path = require('node:path');
 const { collectDiagnostics, CRITICAL_IDS } = require('../lib/diagnostics.cjs');
@@ -14,7 +14,7 @@ function exitCode(items) {
 function formatReport(items) {
   const failures = items.filter(item => !item.ok);
   const critical = criticalFailures(items);
-  const lines = [`ProvidersBar ${version} — diagnostic des prérequis`, ''];
+  const lines = [`Lasmium TOKENS-HUB ${version} — diagnostic des prérequis`, ''];
   for (const item of items) {
     lines.push(`[${item.ok ? 'OK' : 'ÉCHEC'}] ${item.label} — ${item.detail}`);
     if (!item.ok && item.hint) lines.push(`        → ${item.hint}`);
@@ -27,7 +27,7 @@ function formatReport(items) {
   return lines.join('\n');
 }
 async function runDoctor(options = {}) {
-  const dataDir = options.dataDir || process.env.PROVIDERSBAR_DATA_DIR || path.join(process.cwd(), '.local');
+  const dataDir = options.dataDir || (process.env.LASMIUM_DATA_DIR || process.env.PROVIDERSBAR_DATA_DIR) || path.join(process.cwd(), '.local');
   return collectDiagnostics({ ...options, dataDir });
 }
 async function main(argv = process.argv.slice(2)) {

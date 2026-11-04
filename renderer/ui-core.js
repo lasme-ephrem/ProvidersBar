@@ -1,4 +1,4 @@
-/* ProvidersBar — noyau d'interface partagé (renderer).
+/* Lasmium TOKENS-HUB — noyau d'interface partagé (renderer).
  * Aucun accès réseau, aucun secret : uniquement formatage, thème, focus et composants de base.
  * Chargé avant views.js et app.js ; expose des bindings globaux utilisés par les autres scripts.
  */
@@ -190,7 +190,7 @@ function meterMarkup(value, label, { compact = false } = {}) {
 /* ------------------------------------------------------------------ *
  * 5. Thème clair / sombre / système
  * ------------------------------------------------------------------ */
-const THEME_STORAGE_KEY = 'providersbar-theme';
+const THEME_STORAGE_KEY = 'lasmium-theme';
 const THEME_PREFERENCES = ['light', 'dark', 'system'];
 let themePreference = 'light';
 let systemThemeQuery = null;
@@ -217,14 +217,6 @@ function applyTheme(preference, { persist = true } = {}) {
     try { localStorage.setItem(THEME_STORAGE_KEY, themePreference); } catch {}
   }
   return resolved;
-}
-
-function readStoredThemePreference() {
-  try {
-    return normalizeThemePreference(localStorage.getItem(THEME_STORAGE_KEY) || 'light');
-  } catch {
-    return 'light';
-  }
 }
 
 // Le thème « système » doit suivre les changements de Windows en direct.

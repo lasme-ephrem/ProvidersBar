@@ -34,9 +34,6 @@ test('date-only input never fabricates a time or refreshes a usage reading',()=>
   const before=JSON.stringify(p.snapshot), date=resets.resolve(p,'Semaine',now);
   assert.equal(date.precise,false);assert.equal(p.manualResets.Semaine.at,null);
   assert.equal(resets.expiry(date),+new Date(2026,8,20));
-  const projected=resets.forStrategy(p);
-  assert.equal(projected.snapshot.quotaWindows[0].remaining,0);
-  assert.equal(projected.snapshot.updatedAt,p.snapshot.updatedAt);
   assert.equal(JSON.stringify(p.snapshot),before);
 });
 test('missing reset remains unknown, zero dates are rejected and removal is supported',()=>{

@@ -1,4 +1,4 @@
-/* ProvidersBar — état, événements et boucle de rendu (renderer).
+/* Lasmium TOKENS-HUB — état, événements et boucle de rendu (renderer).
  * Chargé après ui-core.js, reset-ui.js et views.js.
  * Globals conservés pour le smoke et le diagnostic : state, page, filter, query,
  * render, receiveState, renderQuick, statusBadge.
@@ -21,7 +21,7 @@ let historyError = '';
 let erasePending = false;
 let eraseTimer = null;
 
-let api = window.providersBar;
+let api = window.lasmium;
 const quick = new URLSearchParams(location.search).get('mode') === 'quick';
 
 const PREVIEW_BANNER = '<p class="preview-banner" role="status">Aperçu en lecture seule. '
@@ -32,7 +32,7 @@ if (!api) {
   api = {
     getState: async () => {
       const response = await fetch('/preview-state');
-      if (!response.ok) throw new Error('Ouvre ProvidersBar avec son lanceur Windows.');
+      if (!response.ok) throw new Error('Ouvre Lasmium TOKENS-HUB avec son lanceur Windows.');
       return response.json();
     },
     onChange: () => () => {},
@@ -554,7 +554,7 @@ async function start() {
   } catch (error) {
     document.getElementById('app').innerHTML = '<div class="loading loading-error" role="alert">'
       + `${icon('warning', 28)}<p>${escapeHtml(error.message)}</p>`
-      + '<p class="hint">Ferme puis relance ProvidersBar avec son lanceur Windows.</p></div>';
+      + '<p class="hint">Ferme puis relance Lasmium TOKENS-HUB avec son lanceur Windows.</p></div>';
   }
 }
 

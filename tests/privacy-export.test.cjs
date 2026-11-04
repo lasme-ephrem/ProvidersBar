@@ -31,11 +31,11 @@ function collectKeys(value, keys = []) {
 test('privacy export exposes the documented structure without sessions, identities or cooldowns', () => {
   const state = fixtureState();
   const before = structuredClone(state);
-  const exported = sanitizeStateForExport(state, { version: '0.3.0', app: 'ProvidersBar', exportedAt: '2026-11-03T20:30:00.000Z' });
+  const exported = sanitizeStateForExport(state, { version: '0.3.0', app: 'Lasmium TOKENS-HUB', exportedAt: '2026-11-03T20:30:00.000Z' });
 
   assert.deepEqual(Object.keys(exported).sort(), ['app', 'exportedAt', 'history', 'inventory', 'manualResets', 'settings', 'version']);
   assert.equal(Object.hasOwn(exported, 'strategy'), false, 'le moteur d’ordre de consommation retiré n’est plus exporté');
-  assert.equal(exported.app, 'ProvidersBar');
+  assert.equal(exported.app, 'Lasmium TOKENS-HUB');
   assert.equal(exported.version, '0.3.0');
   assert.equal(exported.exportedAt, '2026-11-03T20:30:00.000Z');
   assert.equal(exported.inventory.length, state.providers.length);
@@ -68,7 +68,7 @@ test('privacy export keeps inventory fields and settings and tolerates legacy st
   assert.deepEqual(exported.settings, state.settings);
   // Un ancien inventaire peut encore porter `strategy` : il n'est pas exporté.
   assert.equal(Object.hasOwn(exported, 'strategy'), false);
-  assert.equal(exported.app, 'ProvidersBar');
+  assert.equal(exported.app, 'Lasmium TOKENS-HUB');
   assert.match(exported.exportedAt, /^\d{4}-\d{2}-\d{2}T/);
 
   const legacy = createSeed();

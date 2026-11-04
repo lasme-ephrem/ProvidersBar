@@ -36,7 +36,7 @@ async function write(root, relative, contents) {
 async function createWorkspace(root, { missingSource } = {}) {
   await fs.mkdir(path.join(root, 'dist'), { recursive: true });
   await fs.writeFile(path.join(root, 'package.json'), JSON.stringify({
-    name: 'providersbar-fixture', version: '9.8.7', dependencies: {},
+    name: 'lasmium-fixture', version: '9.8.7', dependencies: {},
   }));
 
   const sources = {
@@ -54,7 +54,7 @@ async function createWorkspace(root, { missingSource } = {}) {
     await write(root, relative, contents);
   }
 
-  const portable = path.join(root, 'dist', 'ProvidersBar-win32-x64');
+  const portable = path.join(root, 'dist', 'Lasmium TOKENS-HUB-win32-x64');
   const oldApp = path.join(portable, 'resources', 'app');
   await write(oldApp, 'main.cjs', 'module.exports = "old-main";\n');
   await write(oldApp, 'package.json', JSON.stringify({ version: '1.0.0' }));
@@ -88,7 +88,7 @@ test('resource replacement removes stale app files and preserves portable accoun
     assert.equal(await fs.readFile(path.join(app, 'README.md'), 'utf8'), '# New README\n');
     assert.equal(await fs.readFile(path.join(app, 'CHANGELOG.md'), 'utf8'), '# New release notes\n');
     assert.deepEqual(JSON.parse(await fs.readFile(path.join(app, 'package.json'), 'utf8')), {
-      name: 'providersbar', productName: 'ProvidersBar', version: '9.8.7', main: 'main.cjs',
+      name: 'lasmium-tokens-hub', productName: 'Lasmium TOKENS-HUB', version: '9.8.7', main: 'main.cjs',
     });
     await assert.rejects(fs.access(path.join(app, 'obsolete-module.cjs')), { code: 'ENOENT' });
     await assertDataUnchanged(portable, dataFiles);

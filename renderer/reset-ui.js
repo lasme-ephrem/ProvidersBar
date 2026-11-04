@@ -1,4 +1,4 @@
-/* ProvidersBar — dates de réinitialisation et formulaire associé (renderer).
+/* Lasmium TOKENS-HUB — dates de réinitialisation et formulaire associé (renderer).
  * Les dates fournisseur restent prioritaires ; les compléments manuels sont identifiés.
  */
 'use strict';

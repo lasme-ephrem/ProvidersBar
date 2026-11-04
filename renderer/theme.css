@@ -1,122 +1,163 @@
-/* ProvidersBar 0.3.0 — design tokens sémantiques (clair, sombre, système).
- * Le thème résolu est porté par <html data-theme="light|dark"> ; la préférence
- * choisie est exposée par data-theme-preference="light|dark|system".
- * Contraste visé : AA (≥ 4,5:1) pour tout texte, y compris 11–12 px.
+/* Lasmium TOKENS-HUB — design tokens (clair, sombre, système).
+ * Identité : obsidian + lime laser, surfaces nettes, typographie Sora pour les
+ * titres et les chiffres, Inter pour le texte. Contraste AA visé partout.
  */
+@font-face {
+  font-family: "Inter Variable";
+  src: url("../assets/fonts/InterVariable.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Sora Variable";
+  src: url("../assets/fonts/SoraVariable.woff2") format("woff2");
+  font-weight: 100 800;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
   color-scheme: light;
 
-  /* Typographie : jamais moins de 11 px, corps 13 px. */
-  --font-ui: "Inter Variable", "Inter", "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, Arial, sans-serif;
+  --font-display: "Sora Variable", "Sora", "Inter Variable", "Segoe UI", sans-serif;
+  --font-ui: "Inter Variable", "Inter", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
   --font-mono: "Cascadia Mono", "Consolas", "SFMono-Regular", monospace;
+
   --text-xs: 11px;
   --text-sm: 12px;
-  --text-md: 13px;
-  --text-lg: 15px;
-  --text-xl: 19px;
-  --text-2xl: 26px;
-  --line-tight: 1.3;
+  --text-md: 13.5px;
+  --text-lg: 16px;
+  --text-xl: 22px;
+  --text-2xl: 34px;
+  --line-tight: 1.25;
   --line-normal: 1.55;
 
-  /* Espacements et rayons. */
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
   --space-4: 16px;
-  --space-5: 20px;
-  --space-6: 28px;
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 14px;
+  --space-5: 22px;
+  --space-6: 32px;
+  --radius-xs: 7px;
+  --radius-sm: 9px;
+  --radius-md: 13px;
+  --radius-lg: 18px;
+  --radius-xl: 24px;
   --radius-pill: 999px;
-  --sidebar-width: 236px;
-  --content-max: 1480px;
+  --sidebar-width: 264px;
+  --content-max: 1500px;
 
-  /* Palette claire. */
-  --bg: #f4f6f2;
+  /* Porcelaine + encre. */
+  --bg: #f2f5f7;
+  --bg-glow: rgba(130, 220, 60, 0.10);
   --surface: #ffffff;
-  --surface-2: #eef2ec;
-  --surface-3: #e1e9df;
-  --border: #d2dccf;
-  --border-strong: #a9b9a6;
-  --text: #1b2a21;
-  --text-muted: #4d6055;
-  --text-on-accent: #ffffff;
-  --accent: #1d6b3c;
-  --accent-hover: #175a32;
-  --accent-text: #175a32;
-  --accent-soft: #e2efe4;
-  --focus: #0b57d0;
-  --danger: #a12f2f;
-  --danger-strong: #8a2626;
+  --surface-2: #eaf0f3;
+  --surface-3: #dfe7ec;
+  --surface-inset: #f6f9fa;
+  --border: #dbe4ea;
+  --border-strong: #b5c5d1;
+  --text: #0b141d;
+  --text-muted: #52677a;
+  --text-soft: #6d8296;
+  --text-on-accent: #0c1305;
+  --accent: #b6ed2e;
+  --accent-hover: #a6dd1f;
+  --accent-text: #3f6100;
+  --accent-soft: #eef9d2;
+  --accent-ink: #0c1305;
+  --accent-2: #0fb7a3;
+  --accent-2-soft: #d7f5f0;
+  --focus: #0b63f6;
+  --danger: #b62d3c;
+  --danger-strong: #98232f;
   --danger-contrast: #ffffff;
-  --danger-soft: #fbe9e7;
-  --warn: #7a4d05;
-  --warn-soft: #fdf1d6;
-  --success: #1d6b3c;
-  --success-soft: #e2efe4;
-  --sidebar-bg: #eaf0e9;
-  --sidebar-text: #2f4036;
-  --sidebar-muted: #4d6055;
-  --nav-hover-bg: #dfe9dd;
-  --nav-active-bg: #d6e7d7;
-  --nav-active-text: #175a32;
-  --resource-healthy: #1d6b3c;
-  --resource-low: #875b00;
-  --resource-critical: #9a4a0e;
-  --resource-empty: #a12f2f;
-  --resource-unknown: #4d6055;
-  --resource-healthy-bg: #e2efe4;
-  --resource-low-bg: #fdf1d6;
-  --resource-critical-bg: #fbeadf;
-  --resource-empty-bg: #fbe9e7;
-  --resource-unknown-bg: #eef2ec;
-  --chart-axis: #4d6055;
-  --chart-grid: #d7e1d4;
-  --shadow: 0 1px 2px rgba(20, 35, 25, 0.06), 0 6px 20px rgba(20, 35, 25, 0.06);
+  --danger-soft: #fbe9eb;
+  --warn: #7d5600;
+  --warn-soft: #fdf2d5;
+  --success: #25713d;
+  --success-soft: #e3f4e7;
+  --sidebar-bg: #070b10;
+  --sidebar-bg-2: #0c141d;
+  --sidebar-text: #eaf2f8;
+  --sidebar-muted: #8ba0b5;
+  --sidebar-border: rgba(148, 172, 194, 0.14);
+  --nav-hover-bg: rgba(200, 255, 77, 0.07);
+  --nav-active-bg: rgba(200, 255, 77, 0.12);
+  --nav-active-text: #d9ff8a;
+  --topbar-bg: rgba(242, 245, 247, 0.82);
+  --resource-healthy: #25713d;
+  --resource-low: #7d5600;
+  --resource-critical: #a34700;
+  --resource-empty: #b62d3c;
+  --resource-unknown: #52677a;
+  --resource-healthy-bg: #e3f4e7;
+  --resource-low-bg: #fdf2d5;
+  --resource-critical-bg: #fbe8d8;
+  --resource-empty-bg: #fbe9eb;
+  --resource-unknown-bg: #eaf0f3;
+  --chart-axis: #52677a;
+  --chart-grid: #dbe4ea;
+  --shadow-sm: 0 1px 2px rgba(10, 20, 30, 0.05);
+  --shadow: 0 1px 2px rgba(10, 20, 30, 0.05), 0 14px 34px rgba(10, 20, 30, 0.07);
+  --shadow-lift: 0 2px 4px rgba(10, 20, 30, 0.06), 0 22px 48px rgba(10, 20, 30, 0.12);
+  --glow-accent: 0 0 0 1px rgba(120, 180, 20, 0.35), 0 14px 38px rgba(160, 220, 40, 0.18);
+  --brand-gradient: linear-gradient(135deg, #c8ff4d 0%, #9bff7a 52%, #59e3c5 100%);
 }
 
 html[data-theme="dark"] {
   color-scheme: dark;
-  --bg: #0f1311;
-  --surface: #171d1a;
-  --surface-2: #1e2622;
-  --surface-3: #27312b;
-  --border: #2f3a34;
-  --border-strong: #48564d;
-  --text: #edf2ec;
-  --text-muted: #a9b6ad;
-  --text-on-accent: #0e1a12;
-  --accent: #a5e3b7;
-  --accent-hover: #bcecc9;
-  --accent-text: #a5e3b7;
-  --accent-soft: #1e3327;
+  --bg: #060a0f;
+  --bg-glow: rgba(180, 255, 60, 0.08);
+  --surface: #0c131b;
+  --surface-2: #121c26;
+  --surface-3: #192532;
+  --surface-inset: #080e14;
+  --border: #1d2a38;
+  --border-strong: #34485c;
+  --text: #e9f1f7;
+  --text-muted: #93a8bb;
+  --text-soft: #74899e;
+  --text-on-accent: #0a1004;
+  --accent: #c8ff4d;
+  --accent-hover: #d6ff6f;
+  --accent-text: #c8ff4d;
+  --accent-soft: #1a2714;
+  --accent-ink: #0a1004;
+  --accent-2: #59e3c5;
+  --accent-2-soft: #10312c;
   --focus: #ffd166;
-  --danger: #ff9d97;
-  --danger-strong: #ffb4af;
-  --danger-contrast: #2a1010;
-  --danger-soft: #35201e;
+  --danger: #ff8290;
+  --danger-strong: #ff9da8;
+  --danger-contrast: #21070b;
+  --danger-soft: #34181d;
   --warn: #f2c96b;
-  --warn-soft: #332a17;
-  --success: #a5e3b7;
-  --success-soft: #1e3327;
-  --sidebar-bg: #141617;
-  --sidebar-text: #dbe5de;
-  --sidebar-muted: #a0ada5;
-  --nav-hover-bg: #1e2622;
-  --nav-active-bg: #1e3327;
-  --nav-active-text: #c6f1d4;
-  --resource-healthy: #a5e3b7;
+  --warn-soft: #302714;
+  --success: #8fe3a6;
+  --success-soft: #16301f;
+  --sidebar-bg: #05080c;
+  --sidebar-bg-2: #0a1119;
+  --sidebar-text: #eaf2f8;
+  --sidebar-muted: #8ba0b5;
+  --sidebar-border: rgba(148, 172, 194, 0.12);
+  --nav-hover-bg: rgba(200, 255, 77, 0.07);
+  --nav-active-bg: rgba(200, 255, 77, 0.13);
+  --nav-active-text: #d9ff8a;
+  --topbar-bg: rgba(6, 10, 15, 0.78);
+  --resource-healthy: #8fe3a6;
   --resource-low: #f2cf72;
   --resource-critical: #f2a86b;
-  --resource-empty: #ff9d97;
-  --resource-unknown: #a9b6ad;
-  --resource-healthy-bg: #1e3327;
-  --resource-low-bg: #2b2617;
-  --resource-critical-bg: #2e2419;
-  --resource-empty-bg: #2e1c1d;
-  --resource-unknown-bg: #1e2622;
-  --chart-axis: #a9b6ad;
-  --chart-grid: #2b352f;
-  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 10px 28px rgba(0, 0, 0, 0.3);
+  --resource-empty: #ff8290;
+  --resource-unknown: #93a8bb;
+  --resource-healthy-bg: #14261a;
+  --resource-low-bg: #2a2414;
+  --resource-critical-bg: #2e2117;
+  --resource-empty-bg: #2f171c;
+  --resource-unknown-bg: #131d27;
+  --chart-axis: #93a8bb;
+  --chart-grid: #1d2a38;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 18px 44px rgba(0, 0, 0, 0.42);
+  --shadow-lift: 0 2px 6px rgba(0, 0, 0, 0.4), 0 28px 60px rgba(0, 0, 0, 0.55);
+  --glow-accent: 0 0 0 1px rgba(200, 255, 77, 0.28), 0 16px 44px rgba(160, 255, 60, 0.12);
 }

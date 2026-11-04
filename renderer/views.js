@@ -1,4 +1,4 @@
-/* ProvidersBar — vues du tableau de bord et du widget (renderer).
+/* Lasmium TOKENS-HUB — vues du tableau de bord et du widget (renderer).
  * Pur affichage : lit l'état global fourni par app.js, ne modifie rien, aucun accès réseau.
  * Les hooks DOM documentés dans renderer/CONTRAT-UI.md sont conservés.
  */
@@ -13,8 +13,9 @@ const NAV_LABELS = {
 };
 
 const brand = `<div class="brand">`
-  + `<span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>`
-  + `<span class="brand-name">ProvidersBar</span></div>`;
+  + `<span class="brand-logo"><img src="../assets/brand/lasmium-mark.svg" alt="" width="42" height="42" draggable="false"></span>`
+  + `<span class="brand-text"><span class="brand-name">Lasmium</span>`
+  + `<span class="brand-sub">TOKENS-HUB</span></span></div>`;
 
 /* ------------------------------------------------------------------ *
  * Composants de base
@@ -751,14 +752,14 @@ function settingsPage({ version = null, electronVersion = null, packaged = null,
     + `<div class="section-heading"><h2 id="about-title">À propos</h2>`
     + `<span class="badge" id="app-version">${versionText}</span></div>`
     + `<p class="hint">${aboutDetail ? escapeHtml(aboutDetail) : 'Informations système indisponibles.'}</p>`
-    + `<p class="hint privacy-note">${icon('shield', 15)} Aucune télémétrie : ProvidersBar n’envoie `
-    + `aucune donnée d’usage à un serveur ProvidersBar. Les seules connexions réseau sont celles `
+    + `<p class="hint privacy-note">${icon('shield', 15)} Aucune télémétrie : Lasmium TOKENS-HUB n’envoie `
+    + `aucune donnée d’usage à un serveur Lasmium TOKENS-HUB. Les seules connexions réseau sont celles `
     + `nécessaires à la lecture des soldes chez les fournisseurs que tu as configurés.</p></section>`
     + `<section class="settings-panel" aria-labelledby="data-title">`
     + `<div class="section-heading"><h2 id="data-title">Tes données t’appartiennent</h2></div>`
     + `<p class="hint">Les données et les clés chiffrées sont enregistrées localement. `
     + `L’export contient l’inventaire, les réglages et l’historique, sans les clés. `
-    + `Fermer la fenêtre laisse ProvidersBar accessible près de l’horloge ; un clic droit sur `
+    + `Fermer la fenêtre laisse Lasmium TOKENS-HUB accessible près de l’horloge ; un clic droit sur `
     + `l’icône permet de quitter.</p>`
     + `<div class="data-actions"><button type="button" class="secondary" data-action="export">`
     + `${icon('download', 16)} Exporter mes données</button>${eraseButton}</div>`
@@ -1047,7 +1048,7 @@ function accountConnectionBody(provider) {
     + `${provider.connector.codexAccount
       ? 'La session est gérée par Codex sur ce PC.'
       : 'La session reste dans un navigateur isolé de l’application.'}`
-    + ` Aucun mot de passe n’est lu par ProvidersBar.</p>`
+    + ` Aucun mot de passe n’est lu par Lasmium TOKENS-HUB.</p>`
     + `<div class="form-actions">`
     + `<button type="button" class="secondary" data-action="${prefix}-open">${prefixLabel}</button>`
     + `<button type="button" class="primary" data-action="${prefix}-verify">Vérifier maintenant</button></div>`
@@ -1090,10 +1091,10 @@ function claudeConnectionBody(provider) {
       ? `<p class="connection-note">Prochaine tentative : ${new Date(retry).toLocaleTimeString('fr-FR')}.</p>` : ''}`
     + `${windows}`
     + `${!direct
-      ? `<p class="connection-note">Activer la lecture directe autorise ProvidersBar à utiliser et `
+      ? `<p class="connection-note">Activer la lecture directe autorise Lasmium TOKENS-HUB à utiliser et `
         + `renouveler la connexion Claude Code existante auprès d’Anthropic pour lire les quotas. `
         + `Les jetons renouvelés sont enregistrés uniquement dans le fichier de connexion Claude Code, `
-        + `jamais dans les données ProvidersBar.</p>`
+        + `jamais dans les données Lasmium TOKENS-HUB.</p>`
         + `<div class="form-actions"><button type="button" class="primary" `
         + `data-action="claude-enable-live">Activer la lecture directe (1 min)</button></div>` : ''}`
     + `<div class="form-actions"><button type="button" class="secondary" data-action="account-verify">`

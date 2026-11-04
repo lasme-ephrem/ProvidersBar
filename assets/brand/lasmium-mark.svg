@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Lasmium">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0B1119"/>
+      <stop offset="1" stop-color="#111C28"/>
+    </linearGradient>
+    <linearGradient id="beam" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#C8FF4D"/>
+      <stop offset="0.62" stop-color="#9BFF7A"/>
+      <stop offset="1" stop-color="#59E3C5"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.35" cy="0.25" r="0.8">
+      <stop offset="0" stop-color="#C8FF4D" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#C8FF4D" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect x="8" y="8" width="496" height="496" rx="136" fill="url(#bg)"/>
+  <rect x="8" y="8" width="496" height="496" rx="136" fill="url(#glow)"/>
+  <rect x="10" y="10" width="492" height="492" rx="134" fill="none" stroke="#223041" stroke-width="4"/>
+  <path d="M158 122 V314 C158 349 186 378 221 378 H386" fill="none" stroke="url(#beam)" stroke-width="58" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="386" cy="378" r="29" fill="#59E3C5"/>
+  <circle cx="386" cy="378" r="12" fill="#0B1119"/>
+  <circle cx="330" cy="142" r="9" fill="#C8FF4D" opacity="0.9"/>
+  <circle cx="382" cy="142" r="9" fill="#C8FF4D" opacity="0.45"/>
+  <circle cx="330" cy="194" r="9" fill="#C8FF4D" opacity="0.25"/>
+</svg>

@@ -74,7 +74,7 @@ test('Claude Desktop stale readings are only returned when allowStale is explici
   assert.doesNotMatch(fresh.quotaLabel, /relevé ancien/);
 
   // Même comportement via le lecteur de fichiers et l'option transmise.
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'providersbar-claude-stale-'));
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'lasmium-claude-stale-'));
   t.after(() => fs.rm(root, { recursive: true, force: true }));
   const profile = path.join(root, 'local', 'Claude-Data', 'claude_pzs8sxrjxfjjc');
   await fs.mkdir(profile, { recursive: true });
@@ -94,11 +94,11 @@ test('Claude direct fallback announces the switch and keeps an actionable guidan
   assert.match(message, /Claude Code/);
   const source = fsSync.readFileSync(path.join(__dirname, '..', 'main.cjs'), 'utf8');
   assert.ok(
-    source.includes('Lecture directe indisponible (renouvellement du jeton Claude Code limité) ; ProvidersBar utilise le relevé Claude Desktop.'),
+    source.includes('Lecture directe indisponible (renouvellement du jeton Claude Code limité) ; Lasmium TOKENS-HUB utilise le relevé Claude Desktop.'),
     'le message de bascule explicite doit rester câblé dans verifyClaudeDesktop',
   );
   assert.ok(
-    source.includes('ProvidersBar utilise le dernier relevé Claude Desktop connu (relevé ancien).'),
+    source.includes('Lasmium TOKENS-HUB utilise le dernier relevé Claude Desktop connu (relevé ancien).'),
     'la variante « relevé ancien » doit rester annoncée dans verifyClaudeDesktop',
   );
   assert.ok(source.includes('{ allowStale: true }'), 'le repli doit lire le relevé Desktop avec allowStale');
@@ -137,7 +137,7 @@ test('Claude Desktop history rejects stale or changed data and does not invent e
 });
 
 test('A newer unreadable profile never hides the other valid Claude Desktop profile', async t => {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'providersbar-claude-fallback-'));
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'lasmium-claude-fallback-'));
   t.after(() => fs.rm(root, { recursive: true, force: true }));
   const options = { localAppData: path.join(root, 'local'), roamingAppData: path.join(root, 'roaming'), now: new Date('2026-09-26T00:55:00.000Z') };
   const files = usagePaths(options.localAppData, options.roamingAppData);
@@ -155,7 +155,7 @@ test('A newer unreadable profile never hides the other valid Claude Desktop prof
 });
 
 test('Claude Desktop discovers the Claude-Data instance profiles and reads the real layout', async t => {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'providersbar-claude-data-'));
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'lasmium-claude-data-'));
   t.after(() => fs.rm(root, { recursive: true, force: true }));
   const local = path.join(root, 'local');
   const roaming = path.join(root, 'roaming');
@@ -179,7 +179,7 @@ test('Claude Desktop discovers the Claude-Data instance profiles and reads the r
 });
 
 test('Claude Desktop watcher follows an atomic update written by Claude-Data', async t => {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'providersbar-claude-data-watch-'));
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'lasmium-claude-data-watch-'));
   t.after(() => fs.rm(root, { recursive: true, force: true }));
   const local = path.join(root, 'local');
   const profile = path.join(local, 'Claude-Data', 'claude_pzs8sxrjxfjjc');
@@ -201,7 +201,7 @@ test('Claude Desktop watcher follows an atomic update written by Claude-Data', a
 });
 
 test('An absent Claude-Data directory silently keeps the historical layouts', async t => {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'providersbar-claude-legacy-'));
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'lasmium-claude-legacy-'));
   t.after(() => fs.rm(root, { recursive: true, force: true }));
   const paths = usagePaths(path.join(root, 'local'), path.join(root, 'roaming'));
   assert.equal(paths.length, 2);
@@ -211,7 +211,7 @@ test('An absent Claude-Data directory silently keeps the historical layouts', as
 });
 
 test('Claude uses the newest installed profile and detects an atomic quota update', async t => {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'providersbar-claude-'));
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'lasmium-claude-'));
   const options = { localAppData: path.join(root, 'local'), roamingAppData: path.join(root, 'roaming'), interval: 20 };
   t.after(() => fs.rm(root, { recursive: true, force: true }));
   const files = usagePaths(options.localAppData, options.roamingAppData);

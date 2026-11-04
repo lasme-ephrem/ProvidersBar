@@ -58,7 +58,7 @@ Permissions : lecture seule du dépôt. Aucun secret de dépôt n'est nécessair
   package.json, README et CHANGELOG doivent annoncer la même version.
 - **`tests/packaging.test.cjs`** : packaging sur chemins simulés, sans Electron et
   sans copie du portable de 160 Mo — `scripts/package.cjs --release` (distribution
-  versionnée, renommage `ProvidersBar.exe`, dépendances de production imbriquées,
+  versionnée, renommage `Lasmium TOKENS-HUB.exe`, dépendances de production imbriquées,
   refus d'écraser une release existante), mise à jour du portable (données
   préservées octet par octet, fichiers obsolètes retirés), `scripts/app-resources.cjs`
   (refus hors `dist`), `scripts/update-portable.cjs` (état de diagnostic absent ou
@@ -155,12 +155,12 @@ réelles aux emplacements prévus : un nom arbitraire peut contourner les exclus
 
 `test-results/` et `.npm-cache/` sont régénérables ; les supprimer après l'arrêt
 des processus de test, notamment les dossiers `smoke-data-*` qui contiennent des
-profils Chromium complets. Ne pas supprimer `dist/ProvidersBar-win32-x64/data/` ou
+profils Chromium complets. Ne pas supprimer `dist/Lasmium TOKENS-HUB-win32-x64/data/` ou
 `.local/` pour nettoyer le projet : ces dossiers peuvent contenir les comptes de
 l'utilisateur.
 
 Les scripts ponctuels d'exploration de comptes ne font pas partie du projet
-maintenu. `scripts/generate-icon.py` recrée l'icône de ProvidersBar et nécessite
+maintenu. `scripts/generate-icon.py` recrée l'icône de Lasmium TOKENS-HUB et nécessite
 Python avec Pillow ; il n'est pas requis pour lancer, tester ou empaqueter
 l'application.
 

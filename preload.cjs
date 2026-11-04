@@ -1,5 +1,5 @@
 const { contextBridge, ipcRenderer } = require('electron');
-contextBridge.exposeInMainWorld('providersBar', {
+contextBridge.exposeInMainWorld('lasmium', {
   getState: () => ipcRenderer.invoke('state:get'),
   getHistory: () => ipcRenderer.invoke('history:get'),
   updateProvider: (id, patch) => ipcRenderer.invoke('provider:update', id, patch),

@@ -7,7 +7,7 @@ const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 
 const root = path.resolve(__dirname, '..');
-const portable = path.join(root, 'dist', 'ProvidersBar-win32-x64');
+const portable = path.join(root, 'dist', 'Lasmium TOKENS-HUB-win32-x64');
 const resultsDirectory = path.join(root, 'test-results');
 const reportPath = path.join(resultsDirectory, 'connections-live.json');
 const START_HINT = 'Lance le portable avec --remote-debugging-port=0 --remote-debugging-address=127.0.0.1, puis relance ce diagnostic.';
@@ -129,20 +129,20 @@ async function main() {
     const expectedUi = pathToFileURL(path.join(portable, 'resources', 'app', 'renderer', 'index.html')).href;
     const pages = browser.contexts().flatMap(context => context.pages());
     const dashboards = selectDashboardPages(pages, expectedUi);
-    if (dashboards.length !== 1) throw new Error('Le port local n’expose pas la fenêtre ProvidersBar attendue.');
+    if (dashboards.length !== 1) throw new Error('Le port local n’expose pas la fenêtre Lasmium TOKENS-HUB attendue.');
     const page = dashboards[0];
-    await page.evaluate(() => window.providersBar.syncAll());
+    await page.evaluate(() => window.lasmium.syncAll());
     const checkedInactive = [];
     if (process.argv.includes('--include-inactive')) {
-      const ids = await page.evaluate(async () => (await window.providersBar.getState()).providers
+      const ids = await page.evaluate(async () => (await window.lasmium.getState()).providers
         .filter(provider => provider.connected && provider.connector?.browserAccount && (!provider.active || ['expired', 'paused'].includes(provider.subscriptionStatus)))
         .map(provider => provider.id));
       for (const id of ids) {
-        await page.evaluate(id => window.providersBar.verifyAccount(id).catch(() => {}), id);
+        await page.evaluate(id => window.lasmium.verifyAccount(id).catch(() => {}), id);
         checkedInactive.push(id);
       }
     }
-    const state = await page.evaluate(() => window.providersBar.getState());
+    const state = await page.evaluate(() => window.lasmium.getState());
     const report = buildReport({ providers: state.providers, checkedInactive });
     await fs.mkdir(resultsDirectory, { recursive: true });
     await fs.writeFile(reportPath, JSON.stringify(report, null, 2));

@@ -1,5 +1,38 @@
 # Historique des versions
 
+## 0.4.0 — 4 novembre 2026
+
+Nouvelle identité **Lasmium TOKENS-HUB** et refonte UX/UI complète, sans perte de fonctionnalité.
+
+### Identité
+
+- **Nom** : l'application devient **Lasmium TOKENS-HUB** (fenêtre, widget, tray, notifications, packaging, documentation).
+- **Logo** : nouveau monogramme Lasmium (L lumineux, nœud aqua), décliné en icône d'application, de fenêtre et de tray (`assets/icon.png`, `assets/brand/lasmium-mark.svg`).
+- **Typographie** : **Sora Variable** (titres, chiffres, marque) + **Inter Variable** (texte), toutes deux embarquées avec leur licence OFL.
+- **Palette** : obsidian + lime laser, thème clair porcelaine et thème sombre, rail de navigation sombre dans les deux thèmes.
+
+### Interface
+
+- Refonte du design system : tokens, rayons, ombres, boutons, chips, formulaires et états.
+- Tableau de bord : hero, statistiques, filtres, cartes fournisseurs et quotas redessinés.
+- Fiche détaillée : panneau latéral au lieu du dialogue centré, onglets et formulaires restylés.
+- Connexions, abonnements, historique et réglages réalignés sur la nouvelle grille.
+- Widget : marque Lasmium, lignes verticales complètes conservées, nouvelle hiérarchie et barre fine.
+
+### Renommage et compatibilité
+
+- API renderer exposée sous `window.lasmium` (ancien nom supprimé).
+- `LASMIUM_DATA_DIR` remplace `PROVIDERSBAR_DATA_DIR`, qui reste accepté en repli.
+- Le dossier portable historique `dist/ProvidersBar-win32-x64/` est conservé pour préserver les données ; l'exécutable devient `LasmiumTokensHub.exe` et le lanceur `Lancer Lasmium TOKENS-HUB.cmd`.
+- Préférence de thème migrée depuis l'ancienne clé localStorage.
+
+### Nettoyage
+
+- Suppression de la projection morte `forStrategy` et de son test.
+- Ancien CSS du widget (`.quick-value`, segments, `+N`) supprimé ; feuille de style réécrite.
+- Documents d'audit déplacés dans `docs/archive/`.
+- Packaging, tests et documentation alignés sur la nouvelle identité.
+
 ## 0.3.6 — 4 novembre 2026
 
 Widget vertical complet : toutes les informations de chaque fournisseur sont visibles, sans agrégation ni « +N ».

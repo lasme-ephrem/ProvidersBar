@@ -1,7 +1,7 @@
-# Confidentialité — ProvidersBar 0.3.0
+# Confidentialité — Lasmium TOKENS-HUB 0.3.0
 
-ProvidersBar est une application **locale pour Windows x64**. Elle ne dispose
-d'aucun serveur, d'aucun compte ProvidersBar et d'aucune télémétrie : les données
+Lasmium TOKENS-HUB est une application **locale pour Windows x64**. Elle ne dispose
+d'aucun serveur, d'aucun compte Lasmium TOKENS-HUB et d'aucune télémétrie : les données
 décrites ici restent sur l'appareil de l'utilisateur, dans le dossier de données
 de l'application.
 
@@ -23,7 +23,7 @@ Il ne constitue pas une certification de conformité juridique (voir
 | Identifiants de compte pseudonymes | Pour OpenAI : empreinte SHA-256 de l'adresse e-mail du compte Codex (jamais l'adresse en clair). Pour OrcaRouter : identifiants **numériques** de compte et d'espace de travail. | Réponses des services officiels |
 | Cooldowns API | Empreintes SHA-256 de clés API et échéance de reprise après une réponse HTTP 429 (plafond 100 entrées) | Réponses des fournisseurs |
 | Relevé local Claude Desktop | Deux pourcentages lus dans `plan-usage-history.json` du profil Claude Desktop local | Fichier local de Claude Desktop |
-| Jetons Claude Code | Jetons OAuth lus **en mémoire** depuis le fichier officiel de Claude Code, jamais copiés dans ProvidersBar | Fichier local `~/.claude/.credentials.json` |
+| Jetons Claude Code | Jetons OAuth lus **en mémoire** depuis le fichier officiel de Claude Code, jamais copiés dans Lasmium TOKENS-HUB | Fichier local `~/.claude/.credentials.json` |
 
 Aucune conversation, aucun contenu de prompt, aucun mot de passe et aucun
 message ne sont lus ou conservés. Les lecteurs de comptes n'extraient que des
@@ -33,7 +33,7 @@ pourcentages, des soldes, des libellés de limite bornés et des dates.
 
 | Mode d'installation | Dossier de données |
 | --- | --- |
-| Portable personnel | `dist/ProvidersBar-win32-x64/data/` (à côté de l'exécutable) |
+| Portable personnel | `dist/Lasmium TOKENS-HUB-win32-x64/data/` (à côté de l'exécutable) |
 | Développement | `.local/` |
 | Choix explicite | dossier indiqué par la variable d'environnement `PROVIDERSBAR_DATA_DIR` |
 
@@ -81,13 +81,13 @@ explicitement. Elle utilise la connexion OAuth existante de Claude Code :
 
 - les jetons sont lus depuis `~/.claude/.credentials.json` et restent en mémoire
   du processus principal ; ils ne sont **jamais** copiés dans les données
-  ProvidersBar, jamais envoyés au renderer et jamais exportés ;
+  Lasmium TOKENS-HUB, jamais envoyés au renderer et jamais exportés ;
 - le renouvellement de la connexion réécrit ce même fichier officiel, avec les
   verrous et l'écriture atomique de Claude Code, et conserve les autres champs ;
 - l'activation du mode direct et les délais de reprise sont enregistrés dans
   `state.json` sous forme de code d'erreur et d'horodatage, sans jeton.
 
-L'effacement des données de ProvidersBar ne supprime **pas** ce fichier : il
+L'effacement des données de Lasmium TOKENS-HUB ne supprime **pas** ce fichier : il
 appartient à Claude Code. Une révocation ou une déconnexion dans Claude Code
 reste la manière de supprimer cette connexion.
 
@@ -97,8 +97,8 @@ Ces composants restent sous la responsabilité de leurs éditeurs.
 
 ## 5. Réseau et absence de télémétrie
 
-ProvidersBar n'envoie aucune donnée d'usage, de diagnostic ou de performance à
-un serveur ProvidersBar. Il n'y a ni analytics, ni crash reporting, ni publicité.
+Lasmium TOKENS-HUB n'envoie aucune donnée d'usage, de diagnostic ou de performance à
+un serveur Lasmium TOKENS-HUB. Il n'y a ni analytics, ni crash reporting, ni publicité.
 
 Les seules connexions sortantes servent à lire les informations demandées par
 l'utilisateur, vers les services officiels qu'il a lui-même configurés :
@@ -121,7 +121,7 @@ L'action **Exporter mes données** produit un fichier JSON choisi par
 l'utilisateur, au format :
 
 ```json
-{ "app": "ProvidersBar", "version": "0.3.0", "exportedAt": "…",
+{ "app": "Lasmium TOKENS-HUB", "version": "0.3.0", "exportedAt": "…",
   "inventory": [], "settings": {}, "strategy": null,
   "manualResets": {}, "history": [] }
 ```
@@ -179,7 +179,7 @@ forcément ce dossier de données : il doit être supprimé explicitement.
 ## 10. Limites et transparence
 
 - L'identité des comptes (e-mail, jetons Google, mots de passe) est gérée par les
-  **fournisseurs** et par leurs pages officielles. ProvidersBar ne lit ni ne
+  **fournisseurs** et par leurs pages officielles. Lasmium TOKENS-HUB ne lit ni ne
   stocke ces éléments ; il enregistre uniquement les pourcentages et soldes
   affichés sur les pages d'utilisation.
 - Les données affichées peuvent être incomplètes ou retardées par le fournisseur :

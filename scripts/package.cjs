@@ -6,13 +6,14 @@ async function main(){
   const executable=require('electron');
   if(process.platform!=='win32'||process.arch!=='x64') throw new Error('Build requires Windows x64.');
   const release=process.argv.includes('--release');
-  const out=path.join(root,'dist',release?`ProvidersBar-${require('../package.json').version}-win32-x64`:'ProvidersBar-win32-x64');
+  // Le dossier personnel garde son nom historique pour préserver data/ (comptes, historique).
+  const out=path.join(root,'dist',release?`LasmiumTokensHub-${require('../package.json').version}-win32-x64`:'ProvidersBar-win32-x64');
   if(release) { await fs.mkdir(path.dirname(out),{recursive:true}); await fs.mkdir(out,{recursive:false}); }
   else { await require('./update-portable.cjs').closeRunningApp(); await fs.mkdir(out,{recursive:true}); }
   await fs.cp(path.dirname(executable),out,{recursive:true});
   await updateAppResources(root,out);
-  await fs.copyFile(path.join(out,'electron.exe'),path.join(out,'ProvidersBar.exe'));
+  await fs.copyFile(path.join(out,'electron.exe'),path.join(out,'LasmiumTokensHub.exe'));
   await fs.unlink(path.join(out,'electron.exe'));
-  console.log(`Application portable : ${path.join(out,'ProvidersBar.exe')}`);
+  console.log(`Application : ${path.join(out,'LasmiumTokensHub.exe')}`);
 }
 main().catch(error=>{console.error(error);process.exitCode=1;});

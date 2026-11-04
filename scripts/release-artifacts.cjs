@@ -12,12 +12,12 @@ const FORBIDDEN = new Set(['data', '.local', 'test-results', 'account-browsers',
 async function main() {
   const force = process.argv.includes('--force');
   const pkg = require('../package.json');
-  const name = `ProvidersBar-${pkg.version}-win32-x64`;
+  const name = `LasmiumTokensHub-${pkg.version}-win32-x64`;
   const distDir = path.join(root, 'dist', name);
   const zipPath = path.join(root, 'dist', `${name}.zip`);
   const sumPath = path.join(root, 'dist', `SHA256SUMS-${pkg.version}.txt`);
 
-  for (const required of ['ProvidersBar.exe', 'resources/app/main.cjs', 'resources/app/preload.cjs']) {
+  for (const required of ['LasmiumTokensHub.exe', 'resources/app/main.cjs', 'resources/app/preload.cjs']) {
     try { await fs.access(path.join(distDir, required)); }
     catch { throw new Error(`Release incomplète : ${required} manque dans dist/${name}. Lance d'abord « npm run package:release ».`); }
   }

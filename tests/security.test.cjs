@@ -217,7 +217,7 @@ test('les fenêtres UI sont isolées et la passerelle IPC est filtrée', async (
 
   // Preload : surface explicite, aucun ipcRenderer brut ni canal dynamique.
   assert.equal((preload.match(/exposeInMainWorld\(/g) || []).length, 1);
-  assert.match(preload, /contextBridge\.exposeInMainWorld\('providersBar'/);
+  assert.match(preload, /contextBridge\.exposeInMainWorld\('lasmium'/);
   assert.equal(preload.includes("exposeInMainWorld('ipcRenderer'"), false);
   assert.equal(/ipcRenderer\.invoke\(\s*[a-zA-Z_$]/.test(preload), false, 'les canaux IPC doivent être littéraux');
   assert.match(preload, /getAppInfo: \(\) => ipcRenderer\.invoke\('app:info'\)/);
@@ -230,7 +230,7 @@ test('les fenêtres UI sont isolées et la passerelle IPC est filtrée', async (
 
 test('l’ACL du dossier de données ne bloque jamais le démarrage et complète le mode 0o600', async () => {
   const warnings = [];
-  const failed = await applyDataDirAcl('C:\\tmp\\providersbar-data', {
+  const failed = await applyDataDirAcl('C:\\tmp\\lasmium-data', {
     platform: 'win32', account: 'DESKTOP-TEST\\lasme',
     run: async () => { throw new Error('accès refusé'); },
     logger: { warn: message => warnings.push(message) },
@@ -241,12 +241,12 @@ test('l’ACL du dossier de données ne bloque jamais le démarrage et complète
   assert.equal(warnings.length, 1);
 
   const granted = [];
-  const ok = await applyDataDirAcl('C:\\tmp\\providersbar-data', {
+  const ok = await applyDataDirAcl('C:\\tmp\\lasmium-data', {
     platform: 'win32', account: 'DESKTOP-TEST\\lasme',
     run: async args => { granted.push(args); return { stdout: 'Success', stderr: '' }; },
   });
   assert.equal(ok.ok, true);
-  assert.deepEqual(granted[0].slice(0, 4), ['C:\\tmp\\providersbar-data', '/inheritance:r', '/grant:r', 'DESKTOP-TEST\\lasme:(OI)(CI)F']);
+  assert.deepEqual(granted[0].slice(0, 4), ['C:\\tmp\\lasmium-data', '/inheritance:r', '/grant:r', 'DESKTOP-TEST\\lasme:(OI)(CI)F']);
 
   const main = await read('main.cjs');
   assert.match(main, /applyDataDirAcl\(dataDir\)/);
@@ -291,7 +291,7 @@ test('l’export IPC ne sérialise jamais l’état brut et reste sans identité
 });
 
 test('la purge des restes est conditionnée au mode diagnostic et couvre les fichiers interrompus', async t => {
-  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'providersbar-security-purge-'));
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'lasmium-security-purge-'));
   t.after(() => fs.rm(directory, { recursive: true, force: true }));
   await fs.writeFile(path.join(directory, 'DevToolsActivePort'), '9222\n/devtools/browser/abc');
   await fs.writeFile(path.join(directory, 'state.json.tmp'), 'interrompu');

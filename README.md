@@ -1,8 +1,15 @@
-# ProvidersBar
+# Lasmium TOKENS-HUB
 
 Application desktop Windows pour suivre les abonnements, quotas et crédits de **dix fournisseurs d’IA**. Un tableau de bord et un widget dans la zone de notification regroupent les abonnements et les API avec leurs ressources restantes et leurs dates de réinitialisation.
 
-**Version 0.3.6 — 4 novembre 2026 :** widget **vertical complet** — chaque abonnement affiche toutes ses fenêtres (Claude : Hebdo/Horaire/Hebdo Fable ; Antigravity : Gemini, Claude/GPT, Hebdo Argon) et **Ollama** affiche sa limite Free et ses crédits achetés ; chaque API affiche tous ses soldes multi-devises. Fenêtre 360 × 660, dix fournisseurs visibles sans défilement. La refonte 0.3.0 et les correctifs 0.3.1 à 0.3.5 restent la base. Détails dans [CHANGELOG.md](CHANGELOG.md) et [docs/validation-0.3.6.md](docs/validation-0.3.6.md).
+**Version 0.4.0 — 4 novembre 2026 :** nouvelle identité **Lasmium TOKENS-HUB** et refonte UX/UI complète — logo Lasmium, palette obsidian/lime, typographie Sora + Inter, rail de navigation sombre, cartes et panneau de fiche redessinés, widget repositionné. Toutes les fonctionnalités des versions 0.3.x sont conservées (connexions, quotas segmentés, Ollama, soldes API, export, effacement). Détails dans [CHANGELOG.md](CHANGELOG.md) et [docs/validation-0.4.0.md](docs/validation-0.4.0.md).
+
+## Refonte 0.4.0
+
+- **Nouveau nom et logo** : l'application s'appelle **Lasmium TOKENS-HUB**. Le logo Lasmium (monogramme lumineux) remplace l'ancienne marque dans la fenêtre, le widget, la zone de notification et l'icône Windows.
+- **Nouveau design system** : navigation « obsidian rail » sombre dans les deux thèmes, contenu clair ou sombre, accent lime laser, cartes aérées, chiffres Sora, états et chips repensés, panneau de fiche latéral.
+- **Refonte du widget** : identité Lasmium, lignes verticales complètes, meilleure hiérarchie et barre fine conservée.
+- **Renommage et nettoyage** : API renderer `window.lasmium`, variable `LASMIUM_DATA_DIR` (repli `PROVIDERSBAR_DATA_DIR`), suppression du code mort (projection `forStrategy`, ancien CSS du widget), documentation réorganisée. Le dossier portable historique `dist/ProvidersBar-win32-x64/` est conservé pour préserver les données.
 
 ## Correctif 0.3.6
 
@@ -26,7 +33,7 @@ Application desktop Windows pour suivre les abonnements, quotas et crédits de *
 
 ## Correctif 0.3.3
 
-- **Claude** : si la lecture directe échoue (renouvellement du jeton Claude Code limité) et que le dernier relevé date de plus de 10 minutes, ProvidersBar **bascule explicitement** en lecture Claude Desktop et l’annonce, au lieu de rester bloqué sur un ancien relevé. Un relevé frais (< 10 minutes) n’est jamais remplacé. En repli, un relevé Desktop de plus de 45 minutes est affiché avec sa date réelle et la mention « relevé ancien » (jamais présenté comme frais) ; le mode Desktop reste actif pour que le prochain relevé écrit par Claude Desktop soit récupéré automatiquement.
+- **Claude** : si la lecture directe échoue (renouvellement du jeton Claude Code limité) et que le dernier relevé date de plus de 10 minutes, Lasmium TOKENS-HUB **bascule explicitement** en lecture Claude Desktop et l’annonce, au lieu de rester bloqué sur un ancien relevé. Un relevé frais (< 10 minutes) n’est jamais remplacé. En repli, un relevé Desktop de plus de 45 minutes est affiché avec sa date réelle et la mention « relevé ancien » (jamais présenté comme frais) ; le mode Desktop reste actif pour que le prochain relevé écrit par Claude Desktop soit récupéré automatiquement.
 - **Lecture directe Claude** : reste disponible si tu renouvelles le jeton dans Claude Code (ou via `claude auth login`), puis en réactivant « Activer la lecture directe » ; le repli Desktop ne l’empêche pas.
 
 ## Correctif 0.3.2
@@ -44,7 +51,7 @@ Application desktop Windows pour suivre les abonnements, quotas et crédits de *
 ## Ce qui change en 0.3.0
 
 - **Connexions plus fiables** : une session Ollama ou OrcaRouter est conservée dès qu’elle est validée, même si la lecture échoue temporairement ; le cycle d’actualisation réessaie seul au lieu de demander une reconnexion. Les cooldowns 429 des clés API survivent au redémarrage.
-- **Claude jamais bloqué** : si la lecture directe échoue (jeton Claude Code expiré, renouvellement limité ou refusé) alors que le dernier relevé direct est **absent ou périmé (plus de 10 minutes)**, ProvidersBar bascule explicitement vers le relevé Claude Desktop et l’annonce, même si un ancien relevé existe — il est périmé, rien de valable à préserver. Un relevé Desktop de plus de 45 minutes reste affiché avec sa date réelle et signalé comme ancien.
+- **Claude jamais bloqué** : si la lecture directe échoue (jeton Claude Code expiré, renouvellement limité ou refusé) alors que le dernier relevé direct est **absent ou périmé (plus de 10 minutes)**, Lasmium TOKENS-HUB bascule explicitement vers le relevé Claude Desktop et l’annonce, même si un ancien relevé existe — il est périmé, rien de valable à préserver. Un relevé Desktop de plus de 45 minutes reste affiché avec sa date réelle et signalé comme ancien.
 - **Session navigateur durcie** : les lecteurs de comptes pilotent Chrome/Edge par un **pipe local** (plus de port TCP de débogage) ; la première connexion se fait dans un navigateur ordinaire, sans port de débogage, et les fenêtres de connexion internes n’acceptent qu’une **liste fermée d’origines** (fournisseurs concernés et connexion Google).
 - **Diagnostic intégré** : `npm run doctor` vérifie en lecture seule les prérequis (dossier de données, DPAPI, navigateur, Codex, Claude, Antigravity, accès réseau aux API).
 - **Interface redessinée et accessible** : thèmes clair / sombre / **système**, contrastes AA, navigation jamais masquée, widget compact avec statut d’actualisation réel et indicateur de relevé ancien.
@@ -52,7 +59,7 @@ Application desktop Windows pour suivre les abonnements, quotas et crédits de *
 
 ## Utiliser l’application
 
-Lancer **`Lancer ProvidersBar.cmd`** (portable personnel) ou `dist/ProvidersBar-win32-x64/ProvidersBar.exe`. Conserver tout le dossier du portable : Node.js n’est pas nécessaire sur le PC qui l’utilise. Le dossier `dist/` est généré et exclu de Git ; pour produire une distribution propre, voir la section « Fabriquer et mettre à jour » ci-dessous.
+Lancer **`Lancer Lasmium TOKENS-HUB.cmd`** (portable personnel) ou `dist/ProvidersBar-win32-x64/LasmiumTokensHub.exe` (dossier historique conservé pour les données). Conserver tout le dossier du portable : Node.js n’est pas nécessaire sur le PC qui l’utilise. Le dossier `dist/` est généré et exclu de Git ; pour produire une distribution propre, voir la section « Fabriquer et mettre à jour » ci-dessous.
 
 1. **Connexions** : connecter les comptes et renseigner les clés API.
 2. **Vue d’ensemble** : cartes par fournisseur, ressources restantes, prochaine réinitialisation.
@@ -90,11 +97,11 @@ Les connecteurs lisent les ressources ; ils ne lancent aucun modèle et n’ach�
 
 ### Grok et Grok Bot
 
-Avec **The X Subscription**, Grok, Grok Bot et les usages Cursor éligibles consomment un même pool hebdomadaire, consultable dans [grok.com/dashboard → Usage](https://grok.com/dashboard). ProvidersBar suit ce pool sans fabriquer un deuxième quota Bot. L’authentification xAI commune ne fusionne pas les comptes et ne change aucun forfait.
+Avec **The X Subscription**, Grok, Grok Bot et les usages Cursor éligibles consomment un même pool hebdomadaire, consultable dans [grok.com/dashboard → Usage](https://grok.com/dashboard). Lasmium TOKENS-HUB suit ce pool sans fabriquer un deuxième quota Bot. L’authentification xAI commune ne fusionne pas les comptes et ne change aucun forfait.
 
-Les anciens forfaits SuperGrok restent distincts : le panneau Settings → Usage est conservé comme parcours compatible. Lorsqu’il affiche une **Weekly Grok Bot Limit**, ProvidersBar la lit séparément de la limite SuperGrok, avec sa propre date de reset ; l’épuisement de l’une ne bloque pas artificiellement l’autre. Certains comptes historiques utilisent encore le dashboard Cursor. Un compteur absent n’est jamais déduit de l’autre quota. [Parcours et limites officiels](https://docs.x.ai/x-subscription/grok-bot), [pool hebdomadaire](https://docs.x.ai/x-subscription/usage-limits).
+Les anciens forfaits SuperGrok restent distincts : le panneau Settings → Usage est conservé comme parcours compatible. Lorsqu’il affiche une **Weekly Grok Bot Limit**, Lasmium TOKENS-HUB la lit séparément de la limite SuperGrok, avec sa propre date de reset ; l’épuisement de l’une ne bloque pas artificiellement l’autre. Certains comptes historiques utilisent encore le dashboard Cursor. Un compteur absent n’est jamais déduit de l’autre quota. [Parcours et limites officiels](https://docs.x.ai/x-subscription/grok-bot), [pool hebdomadaire](https://docs.x.ai/x-subscription/usage-limits).
 
-Pour la première connexion web, se connecter dans la fenêtre Chrome ou Edge dédiée, puis **la fermer** : ProvidersBar vérifie alors la session. **Vérifier maintenant** ouvre une fenêtre visible ; laisser le lecteur terminer et effectuer soi-même un éventuel contrôle humain. Une session valide sans quota lisible conserve le dernier relevé avec un avertissement.
+Pour la première connexion web, se connecter dans la fenêtre Chrome ou Edge dédiée, puis **la fermer** : Lasmium TOKENS-HUB vérifie alors la session. **Vérifier maintenant** ouvre une fenêtre visible ; laisser le lecteur terminer et effectuer soi-même un éventuel contrôle humain. Une session valide sans quota lisible conserve le dernier relevé avec un avertissement.
 
 La lecture automatique Grok fonctionne sans fenêtre Chrome ou Edge, y compris au démarrage. Si le dashboard redirige un ancien compte vers une connexion Cursor, le lecteur essaie une seule fois le panneau d’utilisation officiel Grok, sans inspecter la page externe. Seules les actions explicites **Ouvrir mon compte** et **Vérifier maintenant** peuvent ouvrir une fenêtre visible.
 
@@ -106,13 +113,13 @@ Argon apparaît dans les cartes, le widget et les dates. Aucun score de qualité
 
 ### Claude
 
-Par défaut, ProvidersBar lit le fichier local `plan-usage-history.json` de Claude Desktop. Les modifications sont détectées toutes les deux secondes, mais Claude Desktop peut espacer ses propres mesures. Le fichier ne fournit pas les dates de reset ; un relevé ancien est signalé.
+Par défaut, Lasmium TOKENS-HUB lit le fichier local `plan-usage-history.json` de Claude Desktop. Les modifications sont détectées toutes les deux secondes, mais Claude Desktop peut espacer ses propres mesures. Le fichier ne fournit pas les dates de reset ; un relevé ancien est signalé.
 
-**Connexions → Anthropic Claude → Activer la lecture directe (1 min)** autorise l’utilisation de la connexion Claude Code existante pour lire les quotas Anthropic. Les jetons restent dans le processus principal et dans le fichier officiel Claude Code ; le renouvellement OAuth est effectué par ProvidersBar avec le même transport réseau, sans jamais copier de jeton vers le renderer ou les données de l’application. Une révocation impose une reconnexion dans Claude Code.
+**Connexions → Anthropic Claude → Activer la lecture directe (1 min)** autorise l’utilisation de la connexion Claude Code existante pour lire les quotas Anthropic. Les jetons restent dans le processus principal et dans le fichier officiel Claude Code ; le renouvellement OAuth est effectué par Lasmium TOKENS-HUB avec le même transport réseau, sans jamais copier de jeton vers le renderer ou les données de l’application. Une révocation impose une reconnexion dans Claude Code.
 
 La lecture directe exige l’actualisation automatique. Elle respecte une minute entre lectures, les erreurs temporaires et `Retry-After`. Une erreur conserve le dernier relevé et son heure réelle : aucun retour silencieux vers un fichier Desktop plus ancien tant qu’un relevé direct existe.
 
-Si la lecture directe est bloquée (429 de quota **ou de renouvellement OAuth**, jeton expiré, erreur d’authentification) **et que le dernier relevé direct est absent ou périmé (plus de 10 minutes)**, ProvidersBar bascule explicitement vers le relevé Claude Desktop, même si un ancien relevé existe : il est périmé, donc rien de valable n’est préservé. La fiche l’annonce (« Lecture directe indisponible (renouvellement du jeton Claude Code limité) ; ProvidersBar utilise le relevé Claude Desktop ») et enregistre ce relevé. Pendant ce repli, un échantillon Claude Desktop de plus de 45 minutes n’est pas rejeté : il est affiché avec sa **date réelle** et un libellé « relevé ancien » (en lecture Desktop normale, un tel échantillon reste une erreur). Si Claude Desktop n’a pas non plus de relevé lisible au moment du repli, ProvidersBar ne change pas de mode sans donnée à afficher : il conserve la lecture courante, le dernier relevé et le délai d’attente, et affiche : « Ouvre Claude Desktop (page Utilisation) pour actualiser le relevé ; la lecture directe reprendra après renouvellement du jeton dans Claude Code. » Le cycle de 5 minutes réessaie (et basculera dès qu’un relevé Desktop sera lisible). Un relevé direct de moins de 10 minutes est conservé : aucune bascule dans ce cas. Aucune rotation de jeton n’est forcée ; après renouvellement du jeton dans Claude Code, réactiver la lecture directe si souhaité. [Détails du protocole et de la protection des jetons](docs/architecture.md).
+Si la lecture directe est bloquée (429 de quota **ou de renouvellement OAuth**, jeton expiré, erreur d’authentification) **et que le dernier relevé direct est absent ou périmé (plus de 10 minutes)**, Lasmium TOKENS-HUB bascule explicitement vers le relevé Claude Desktop, même si un ancien relevé existe : il est périmé, donc rien de valable n’est préservé. La fiche l’annonce (« Lecture directe indisponible (renouvellement du jeton Claude Code limité) ; Lasmium TOKENS-HUB utilise le relevé Claude Desktop ») et enregistre ce relevé. Pendant ce repli, un échantillon Claude Desktop de plus de 45 minutes n’est pas rejeté : il est affiché avec sa **date réelle** et un libellé « relevé ancien » (en lecture Desktop normale, un tel échantillon reste une erreur). Si Claude Desktop n’a pas non plus de relevé lisible au moment du repli, Lasmium TOKENS-HUB ne change pas de mode sans donnée à afficher : il conserve la lecture courante, le dernier relevé et le délai d’attente, et affiche : « Ouvre Claude Desktop (page Utilisation) pour actualiser le relevé ; la lecture directe reprendra après renouvellement du jeton dans Claude Code. » Le cycle de 5 minutes réessaie (et basculera dès qu’un relevé Desktop sera lisible). Un relevé direct de moins de 10 minutes est conservé : aucune bascule dans ce cas. Aucune rotation de jeton n’est forcée ; après renouvellement du jeton dans Claude Code, réactiver la lecture directe si souhaité. [Détails du protocole et de la protection des jetons](docs/architecture.md).
 
 ## Abonnements, dates et API
 
@@ -137,11 +144,11 @@ Les abonnements et les API sont simplement listés, avec leurs quotas, soldes et
 
 | Mode | Dossier |
 | --- | --- |
-| Portable personnel | `dist/ProvidersBar-win32-x64/data/` |
+| Portable personnel | `dist/ProvidersBar-win32-x64/data/` (dossier historique) |
 | Développement | `.local/` |
 | Tests isolés et captures | `test-results/` |
 
-`PROVIDERSBAR_DATA_DIR` permet de choisir un autre dossier. Les données incluent l’inventaire, l’historique, les réglages, les profils de connexion et `credentials.json`.
+`LASMIUM_DATA_DIR` permet de choisir un autre dossier ; l'ancienne variable `PROVIDERSBAR_DATA_DIR` reste acceptée pour les installations existantes. Les données incluent l'inventaire, l'historique, les réglages, les profils de connexion et `credentials.json`.
 
 - **Clés API** : chiffrées avec Electron `safeStorage` et Windows DPAPI, liées à l’utilisateur Windows. Aucune clé n’est renvoyée au renderer ni incluse dans l’export.
 - **Dossier de données** : à chaque démarrage, son héritage ACL est retiré et seuls l’utilisateur courant et `SYSTEM` y ont accès (`icacls`). Un échec produit un avertissement, jamais un blocage.
@@ -150,7 +157,7 @@ Les abonnements et les API sont simplement listés, avec leurs quotas, soldes et
 - **Historique** : plafonné à **20 000 relevés** (≈ 7 jours à dix fournisseurs avec l’actualisation de 5 minutes) ; les plus anciens sont purgés.
 - **Export** : document JSON autonome `{ app, version, exportedAt, inventory, settings, strategy, manualResets, history }`, **sans** session, sans identité et sans empreinte de clé. La restauration depuis l’export n’est pas proposée.
 - **Effacer mes données** (Réglages, double confirmation) : supprime `state.json`, `credentials.json`, les profils de navigateur, les sauvegardes et les caches, puis réinitialise l’inventaire. Refusé pendant une synchronisation.
-- **Télémétrie** : aucune. ProvidersBar n’envoie aucune donnée d’usage à un serveur ProvidersBar.
+- **Télémétrie** : aucune. Lasmium TOKENS-HUB n’envoie aucune donnée d’usage à un serveur Lasmium TOKENS-HUB.
 
 Détails complets et limites : [politique de confidentialité](PRIVACY.md) et [politique de sécurité](SECURITY.md) (modèle de menace, signalement privé, hors périmètre).
 
@@ -203,7 +210,7 @@ npm run package:release
 npm run release:artifacts
 ```
 
-La distribution propre est créée dans `dist/ProvidersBar-0.3.6-win32-x64/` ; la commande refuse un dossier de release déjà existant. `npm run release:artifacts` produit l'archive ZIP et `dist/SHA256SUMS-0.3.6.txt`, et refuse d'archiver une release contenant un dossier de données personnelles. Le portable personnel reste dans `dist/ProvidersBar-win32-x64/`, à côté de ses données.
+La distribution propre est créée dans `dist/LasmiumTokensHub-0.4.0-win32-x64/` ; la commande refuse un dossier de release déjà existant. `npm run release:artifacts` produit l'archive ZIP et `dist/SHA256SUMS-0.4.0.txt`, et refuse d'archiver une release contenant un dossier de données personnelles. Le portable personnel reste dans `dist/ProvidersBar-win32-x64/`, à côté de ses données.
 
 Les ressources applicatives sont préparées dans un dossier temporaire puis remplacées ensemble : les fichiers retirés des sources ne subsistent pas dans l’installation. `npm run update:portable` conserve `data/` et les sessions, ferme l’ancien processus s’il est joignable en diagnostic, puis nécessite de relancer l’application ; sinon, la quitter manuellement avant la mise à jour. Le packaging inclut les dépendances de production (`proper-lockfile` et ses dépendances) et leurs notices.
 
@@ -227,7 +234,7 @@ L’exécutable **n’est pas signé** et conserve les métadonnées binaires El
 - `scripts/` et `tests/` : fabrication, diagnostic, maintenance et validation.
 - [Architecture, IPC et modèles de données](docs/architecture.md)
 - [Maintenance et procédures de validation](docs/maintenance.md)
-- [Validation de la version 0.3.6](docs/validation-0.3.6.md) · [validation 0.3.5](docs/validation-0.3.5.md) (archive) · [validation 0.3.4](docs/validation-0.3.4.md) (archive) · [validation 0.3.3](docs/validation-0.3.3.md) (archive) · [validation 0.3.2](docs/validation-0.3.2.md) (archive) · [validation 0.3.1](docs/validation-0.3.1.md) (archive) · [validation 0.3.0](docs/validation-0.3.0.md) (archive) · [validation 0.2.0](docs/validation-0.2.0.md) (archive)
+- [Validation de la version 0.4.0](docs/validation-0.4.0.md) · [validation 0.3.6](docs/validation-0.3.6.md) (archive) · [validation 0.3.5](docs/validation-0.3.5.md) (archive) · [validation 0.3.4](docs/validation-0.3.4.md) (archive) · [validation 0.3.3](docs/validation-0.3.3.md) (archive) · [validation 0.3.2](docs/validation-0.3.2.md) (archive) · [validation 0.3.1](docs/validation-0.3.1.md) (archive) · [validation 0.3.0](docs/validation-0.3.0.md) (archive) · [validation 0.2.0](docs/validation-0.2.0.md) (archive)
 - [Historique des versions](CHANGELOG.md)
 - [Provenance des logos](assets/providers/sources.json)
 

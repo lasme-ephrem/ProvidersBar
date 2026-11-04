@@ -1,6 +1,6 @@
-# Sécurité — ProvidersBar
+# Sécurité — Lasmium TOKENS-HUB
 
-ProvidersBar est une application de bureau **Windows x64** (Electron 44) qui
+Lasmium TOKENS-HUB est une application de bureau **Windows x64** (Electron 44) qui
 affiche des quotas et des soldes de services d'IA. Ce document décrit le
 périmètre de sécurité, les surfaces exposées, les pratiques du projet et la
 manière de signaler une vulnérabilité.
@@ -52,7 +52,7 @@ un utilisateur légitime qui contrôle sa session et son dossier de données.
   et n'ouvrent **aucun port TCP de débogage** ;
 - l'export de données est nettoyé : aucune session, identité pseudonyme,
   empreinte de clé ou jeton ;
-- aucune télémétrie et aucun serveur ProvidersBar : seules les lectures vers les
+- aucune télémétrie et aucun serveur Lasmium TOKENS-HUB : seules les lectures vers les
   services configurés par l'utilisateur sortent du poste.
 
 **Non protégé**
@@ -78,7 +78,7 @@ un utilisateur légitime qui contrôle sa session et son dossier de données.
 | Renderer de l'interface | XSS par donnée de fournisseur | CSP sans `unsafe-eval` ni script inline, échappement HTML centralisé, échappement des libellés distants, `connect-src 'self'` |
 | IPC (`preload.cjs` → `main.cjs`) | appel d'actions privilégiées | surface explicite de 25 méthodes, canaux littéraux, filtre frame principale + URL exacte, validation des charges utiles dans `lib/domain.cjs` et `lib/usage-strategy.js` |
 | Sessions navigateur | vol de cookies | profils/partitions isolés par fournisseur, pipe local, pas de port TCP, `clearStorageData` à la déconnexion et à l'effacement |
-| Jetons Claude Code | copie ou journalisation | lus en mémoire seulement, jamais persistés par ProvidersBar, erreurs expurgées, verrous et écriture atomique du fichier officiel |
+| Jetons Claude Code | copie ou journalisation | lus en mémoire seulement, jamais persistés par Lasmium TOKENS-HUB, erreurs expurgées, verrous et écriture atomique du fichier officiel |
 | Réseau sortant | exfiltration, mauvaise destination | liste fermée d'endpoints officiels, `redirect: 'error'`, validation stricte des réponses, aucune télémétrie |
 | Export / effacement | fuite ou suppression incomplète | export nettoyé et documenté, double confirmation, refus pendant synchronisation, purge des caches et profils |
 | Dossier portable | altération locale du code | ACL du dossier de données, procédure de mise à jour qui remplace les ressources ensemble ; l'exécutable n'est pas encore signé (voir §5) |
@@ -123,7 +123,7 @@ un utilisateur légitime qui contrôle sa session et son dossier de données.
 - Les dénis de service locaux, l'ingénierie sociale et les contenus affichés par
   les fournisseurs.
 - La signature Authenticode et l'intégrité du binaire portable : **le
-  `ProvidersBar.exe` n'est pas signé** à ce jour ; vérifier la source de
+  `Lasmium TOKENS-HUB.exe` n'est pas signé** à ce jour ; vérifier la source de
   téléchargement (dépôt officiel, dossier de release) avant exécution.
 
 ## 7. Signalement d'une vulnérabilité
@@ -131,13 +131,13 @@ un utilisateur légitime qui contrôle sa session et son dossier de données.
 Merci de signaler toute vulnérabilité **en privé** :
 
 1. utiliser l'onglet **Security → Report a vulnerability** (Security Advisories)
-   du dépôt GitHub officiel : `https://github.com/lasme-ephrem/ProvidersBar` ;
+   du dépôt GitHub officiel : `https://github.com/lasme-ephrem/Lasmium TOKENS-HUB` ;
 2. à défaut d'accès à cet outil, contacter le mainteneur du dépôt par un canal
    privé déjà établi ;
 3. ne **pas** ouvrir d'issue publique contenant des détails exploitables, des
    données personnelles ou des secrets.
 
-Merci d'inclure : version de ProvidersBar (`app:info`), version de Windows,
+Merci d'inclure : version de Lasmium TOKENS-HUB (`app:info`), version de Windows,
 description du problème, étapes de reproduction avec données fictives, impact
 estimé et, si possible, preuve de concept minimale. N'incluez **jamais** de
 clés API, jetons, cookies ou copies du dossier `data/`.

@@ -1,4 +1,4 @@
-# Contrat UI du renderer — ProvidersBar 0.3.0
+# Contrat UI du renderer — Lasmium TOKENS-HUB 0.4.0
 
 Document de référence pour l'intégration de la refonte `refonte/pro`.
 Propriétaire : `ux-docs` (`task-6`). Tout écart constaté par un autre agent doit être
@@ -80,7 +80,7 @@ Fonctions supprimées ou renommées : `settings()` → `settingsPage(options)`,
   <a class="skip-link" href="#main-content">Aller au contenu</a>
   <div class="app-shell">
     <aside class="sidebar">
-      <div class="brand">…</div>
+      <div class="brand"><span class="brand-logo"><img src="../assets/brand/lasmium-mark.svg" alt=""></span><span class="brand-text"><span class="brand-name">Lasmium</span><span class="brand-sub">TOKENS-HUB</span></span></div>
       <div class="workspace"><div class="workspace-text"><strong>Espace local</strong>…</div></div>
       <p class="nav-label">Navigation</p>
       <nav class="nav" aria-labelledby="nav-label-main">
@@ -268,7 +268,7 @@ Vérifiés par audit statique sur toutes les vues :
 | `.reset-date` toujours présent (même sans date) | **absent** si aucune date ; sinon `.reset-date` + `.reset-date-value`, `.is-past`, `.is-compact` | supprime le bruit « Date non fournie » ×5 | `smoke.cjs:450` reste vert (date manuelle zai) ; aucune assertion « Date non fournie » trouvée |
 | `#settings` panneau unique + « Version 0.1.0 » | `#app-version` dynamique + panneau « À propos » + « Aucune télémétrie » + bouton `[data-action="erase-data"]` / `[data-action="erase-cancel"]` | version source unique et effacement RGPD | aucun test ne vérifie la version ; nouveaux hooks à couvrir par `quality.test.cjs` si souhaité |
 | Thème `light|dark` | `light|dark|system` ; `data-theme-preference` sur `<html>` | suit Windows | `smoke.cjs:23` : le seed par défaut est `theme:'system'` ; remplacer par la valeur calculée ou forcer `light`. |
-| `.sidebar` couleurs | **inchangées** : `rgb(234, 240, 233)` clair, `rgb(20, 22, 23)` sombre via `--sidebar-bg` | limiter la casse smoke | `smoke.cjs:25` et `:422` restent verts |
+| `.sidebar` couleurs | **refonte 0.4.0** : rail obsidian sombre dans les deux thèmes (`--sidebar-bg`), logo Lasmium, wordmark Sora | limiter la casse smoke | `smoke.cjs:25` et `:422` restent verts |
 | `styles.css` minifié | CSS lisible (aucune règle minifiée) | maintenabilité | — |
 
 > Les hooks `.quota-period*`, `.resource-status`, `.level-pill`, `.connection-success`,
@@ -282,7 +282,7 @@ Vérifiés par audit statique sur toutes les vues :
 
 ## 6. Comportement du thème
 
-1. **Avant le premier rendu** : `theme-init.js` lit `localStorage['providersbar-theme']`
+1. **Avant le premier rendu** : `theme-init.js` lit `localStorage['lasmium-theme']` (repli `providersbar-theme` dans `theme-init.js`)
    (`light`, `dark` ou `system`), résout `system` avec
    `matchMedia('(prefers-color-scheme: dark)')`, puis pose
    `<html data-theme="light|dark" data-theme-preference="light|dark|system">`.
@@ -333,7 +333,7 @@ axe de graphique et boutons `primary`/`danger`. L'indicateur de focus est ≥ 3:
   `quota-period-status` sont textuels, le widget affiche toujours `.quick-level`
   (même vocabulaire), la légende complète est affichée sur Vue d'ensemble **et** dans
   Réglages ; un relevé ancien est signalé par une icône avec `aria-label`.
-- **Typographie** : **Inter Variable** (autohébergée, poids 100–900,
+- **Typographie** : **Inter Variable** (texte, poids 100–900) et **Sora Variable** (titres, chiffres et marque, poids 100–800, licence OFL ;
   `font-display:swap`, repli Segoe UI/system-ui), `tabular-nums` pour les chiffres ;
   plancher 11 px (`--text-xs`), 12 px pour les libellés, 13 px de corps, 15–26 px
   pour les titres ; aucune règle à 8, 9 ou 10 px.
@@ -389,7 +389,7 @@ axe de graphique et boutons `primary`/`danger`. L'indicateur de focus est ≥ 3:
 ### 8.1 Police Inter Variable et chips de statut (T19)
 
 - **Police** : `@font-face` en tête de `renderer/styles.css` :
-  `font-family:"Inter Variable"`, `src:url("../assets/fonts/InterVariable.woff2")`,
+  `font-family:"Inter Variable"`, `src:url("../assets/fonts/InterVariable.woff2")` et `SoraVariable.woff2`,
   `font-weight:100 900`, `font-style:normal`, `font-display:swap`. `--font-ui`
   commence par `"Inter Variable", "Inter"` puis repli Segoe UI/system-ui. Appliquée
   au `body` (donc tableau de bord **et** widget), avec
@@ -413,7 +413,7 @@ axe de graphique et boutons `primary`/`danger`. L'indicateur de focus est ≥ 3:
 
 ## 9. Réglages : version, marque neutre, effacement
 
-- **Version dynamique** : `window.providersBar.getAppInfo()` → `#app-version`
+- **Version dynamique** : `window.lasmium.getAppInfo()` → `#app-version`
   (« Version 0.3.0 »), avec repli sur `state.app.version`, puis « Version non exposée »
   si les deux sont absents. Aucune version en dur dans le renderer.
 - **Marque neutre** : plus de « L'atelier de Lasme », plus d'avatar « L » ;
@@ -423,8 +423,8 @@ axe de graphique et boutons `primary`/`danger`. L'indicateur de focus est ≥ 3:
   second clic : `eraseData()` ; message de succès, rechargement de l'état, annonce
   live. Si l'API est absente (aperçu / version antérieure), toast explicite.
   Un délai de 10 s annule la confirmation.
-- **Télémétrie** : mention explicite « Aucune télémétrie : ProvidersBar n'envoie
-  aucune donnée d'usage à un serveur ProvidersBar. »
+- **Télémétrie** : mention explicite « Aucune télémétrie : Lasmium TOKENS-HUB n'envoie
+  aucune donnée d'usage à un serveur Lasmium TOKENS-HUB. »
 - **Export** : bouton `[data-action="export"]` conservé (historique + réglages).
 - **Thème** : select à trois valeurs (`light`, `dark`, `system`).
 - **Ordre de consommation retiré** : le formulaire `#strategy-form` (modèles,
@@ -438,7 +438,7 @@ le renouvellement du jeton Claude Code est refusé : l'état retourné par
 `claude:enable-live` contient alors `provider.accountSession.kind =
 'claude-desktop-local'` et `provider.accountConnection.message =
 « Lecture directe indisponible (renouvellement du jeton Claude Code limité) ;
-ProvidersBar utilise le relevé Claude Desktop. »`.
+Lasmium TOKENS-HUB utilise le relevé Claude Desktop. »`.
 
 Le renderer (`renderer/app.js`, branche `claude-enable-live` de `runAction`) lit
 cet état après l'appel et applique deux retours distincts :

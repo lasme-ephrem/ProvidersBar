@@ -8,7 +8,7 @@ const { usagePaths, readClaudeDesktopUsage } = require('../lib/claude-desktop-us
 const { formatReport, exitCode, criticalFailures } = require('../scripts/doctor.cjs');
 
 async function fixture(t) {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'providersbar-doctor-'));
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'lasmium-doctor-'));
   t.after(() => fs.rm(root, { recursive: true, force: true }));
   return root;
 }
@@ -65,7 +65,7 @@ test('Diagnostics collects every prerequisite without secrets and without authen
   // La version affichée suit package.json : aucun test ne doit coder une
   // version en dur (les correctifs changent la version).
   const packageVersion = require('../package.json').version.replace(/\./g, '\\.');
-  assert.match(formatReport(items), new RegExp(`ProvidersBar ${packageVersion}`));
+  assert.match(formatReport(items), new RegExp(`Lasmium TOKENS-HUB ${packageVersion}`));
   assert.match(formatReport(items), /avertissements/);
 });
 

@@ -34,8 +34,8 @@ Le bouton **Vérifier maintenant** pouvait rester bloqué par un cooldown d'auth
 
 ## 5. Fabrication et déploiement
 
-- `npm run package:release` : `dist/ProvidersBar-0.3.6-win32-x64/`, **sans `data/`**, README/CHANGELOG/PRIVACY/SECURITY et police Inter + licence embarqués.
-- `npm run release:artifacts` : `dist/ProvidersBar-0.3.6-win32-x64.zip` (**151,5 Mo**), SHA-256 `cda0fd4c6343d400c15bab4650968ddaa3722bf7a6031b97cb3dfd2229a007f4` (`dist/SHA256SUMS-0.3.6.txt`).
+- `npm run package:release` : `dist/Lasmium TOKENS-HUB-0.3.6-win32-x64/`, **sans `data/`**, README/CHANGELOG/PRIVACY/SECURITY et police Inter + licence embarqués.
+- `npm run release:artifacts` : `dist/Lasmium TOKENS-HUB-0.3.6-win32-x64.zip` (**151,5 Mo**), SHA-256 `cda0fd4c6343d400c15bab4650968ddaa3722bf7a6031b97cb3dfd2229a007f4` (`dist/SHA256SUMS-0.3.6.txt`).
 - `npm run update:portable` : portable personnel en **0.3.6**, données conservées (`data/state.json` intact). Quitter l'application ouverte puis la relancer pour charger la nouvelle version.
 
 ## 6. Limites

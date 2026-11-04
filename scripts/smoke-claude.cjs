@@ -5,7 +5,7 @@
 // Couvre : échec initial, persistance du mode direct après redémarrage, panne
 // puis reprise après backoff, repli explicite en lecture Claude Desktop quand le
 // renouvellement du jeton est limité et qu'aucun relevé n'existe, affichage
-// utilisé/restant, absence de jeton dans les données ProvidersBar.
+// utilisé/restant, absence de jeton dans les données Lasmium TOKENS-HUB.
 const { _electron: electron } = require(process.env.PROVIDERSBAR_PLAYWRIGHT || 'playwright');
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
@@ -83,8 +83,8 @@ async function patchFetch(mode) {
 // sans attente réelle ; le renderer et les captures restent inchangés.
 async function setMainClockOffset(offsetMs) {
   await desktop.evaluate((_electron, offset) => {
-    const RealDate = globalThis.__providersBarRealDate || Date;
-    globalThis.__providersBarRealDate = RealDate;
+    const RealDate = globalThis.__lasmiumRealDate || Date;
+    globalThis.__lasmiumRealDate = RealDate;
     globalThis.Date = class extends RealDate {
       constructor(...args) { if (args.length === 0) super(RealDate.now() + offset); else super(...args); }
       static now() { return RealDate.now() + offset; }
@@ -94,9 +94,9 @@ async function setMainClockOffset(offsetMs) {
 
 async function resetMainClock() {
   await desktop.evaluate(() => {
-    if (globalThis.__providersBarRealDate) {
-      globalThis.Date = globalThis.__providersBarRealDate;
-      delete globalThis.__providersBarRealDate;
+    if (globalThis.__lasmiumRealDate) {
+      globalThis.Date = globalThis.__lasmiumRealDate;
+      delete globalThis.__lasmiumRealDate;
     }
   });
 }
@@ -123,8 +123,8 @@ async function main() {
   let page = await desktop.firstWindow();
   await page.waitForSelector('.cards .card');
   await patchFetch('deny-token');
-  await assert.rejects(page.evaluate(() => window.providersBar.enableClaudeLive()), /renouveler/);
-  const failed = (await page.evaluate(() => window.providersBar.getState())).providers.find(p => p.id === 'claude');
+  await assert.rejects(page.evaluate(() => window.lasmium.enableClaudeLive()), /renouveler/);
+  const failed = (await page.evaluate(() => window.lasmium.getState())).providers.find(p => p.id === 'claude');
   assert.equal(failed.accountSession.kind, 'claude-live-local');
   assert.equal(failed.snapshot, null);
   assert.equal(failed.claudeSync.errorCode, 'auth-required');
@@ -145,7 +145,7 @@ async function main() {
   desktop = await launch(dataDir, home, isolatedEnv);
   page = await desktop.firstWindow();
   await page.waitForSelector('.cards .card');
-  assert.equal((await page.evaluate(() => window.providersBar.getState())).providers.find(p => p.id === 'claude').accountSession.kind, 'claude-live-local');
+  assert.equal((await page.evaluate(() => window.lasmium.getState())).providers.find(p => p.id === 'claude').accountSession.kind, 'claude-live-local');
 
   // Changement de connexion Claude Code (fichier local) : le cooldown d'auth est
   // levé immédiatement, comme le fait le veilleur de credentials de main.cjs.
@@ -156,7 +156,7 @@ async function main() {
   await page.waitForTimeout(3000);
   let claudeState, lastVerifyError;
   for (let attempt = 0; attempt < 20; attempt++) {
-    try { claudeState = await page.evaluate(() => window.providersBar.verifyAccount('claude')); break; }
+    try { claudeState = await page.evaluate(() => window.lasmium.verifyAccount('claude')); break; }
     catch (error) { lastVerifyError = error; await page.waitForTimeout(500); }
   }
   if (!claudeState) {
@@ -190,21 +190,21 @@ async function main() {
   // Panne : dernier relevé conservé, puis reprise après le backoff de 60 s.
   await patchFetch('offline');
   await setMainClockOffset(61000);
-  await page.evaluate(() => window.providersBar.verifyAccount('claude')).catch(() => {});
-  const failedAgain = (await page.evaluate(() => window.providersBar.getState())).providers.find(p => p.id === 'claude');
+  await page.evaluate(() => window.lasmium.verifyAccount('claude')).catch(() => {});
+  const failedAgain = (await page.evaluate(() => window.lasmium.getState())).providers.find(p => p.id === 'claude');
   assert.equal(failedAgain.snapshot.updatedAt, first.snapshot.updatedAt);
   assert.deepEqual(failedAgain.snapshot.quotaWindows.map(w => w.remaining), [91, 58, 69]);
   assert.ok(failedAgain.error, 'une panne doit être signalée sans effacer le relevé');
   assert.equal(await page.locator('.connection-success').count(), 0);
   await setMainClockOffset(122000);
   await patchFetch('success');
-  const recovered = await page.evaluate(() => window.providersBar.verifyAccount('claude'));
+  const recovered = await page.evaluate(() => window.lasmium.verifyAccount('claude'));
   const recoveredClaude = recovered.providers.find(p => p.id === 'claude');
   assert.equal(recoveredClaude.error, null);
   assert.notEqual(recoveredClaude.snapshot.updatedAt, first.snapshot.updatedAt);
   await resetMainClock();
 
-  // Aucun jeton ni contenu privé dans les données ProvidersBar.
+  // Aucun jeton ni contenu privé dans les données Lasmium TOKENS-HUB.
   const persisted = await fs.readFile(path.join(dataDir, 'state.json'), 'utf8');
   for (const forbidden of ['fixture-live-access', 'fixture-rotated-refresh', 'fixture-old-access', 'fixture-old-refresh']) {
     assert.ok(!persisted.includes(forbidden), `state.json ne doit pas contenir ${forbidden}`);
@@ -251,7 +251,7 @@ async function main() {
   assert.equal(await page.locator('[data-action="claude-enable-live"]').count(), 1);
   await page.locator('[data-action="claude-enable-live"]').click();
   await page.waitForFunction(() => state.providers.find(p => p.id === 'claude').accountSession?.kind === 'claude-desktop-local');
-  const fallback = (await page.evaluate(() => window.providersBar.getState())).providers.find(p => p.id === 'claude');
+  const fallback = (await page.evaluate(() => window.lasmium.getState())).providers.find(p => p.id === 'claude');
   assert.equal(fallback.error, null);
   assert.equal(fallback.snapshot.source, 'api');
   assert.deepEqual(fallback.snapshot.quotaWindows.map(window => [window.label, window.remaining]), [['5 heures', 100], ['Semaine', 38]]);
@@ -272,7 +272,7 @@ async function main() {
   assert.equal(fallbackSaved.claudeSync.errorCode, 'auth-rate-limit');
   assert.ok(!JSON.stringify(fallbackSaved).includes('fixture-expired'));
   await desktop.close(); desktop = null;
-  console.log('PASS: échec initial auth-required (Desktop isolé absent), mode direct persisté, redémarrage, reprise après renouvellement local, panne + backoff + reprise, rendu utilisé/restant, repli explicite auth-rate-limit → Claude Desktop (snapshot 100/38, message fiche, toast neutre, claudeSync auth-rate-limit persistant), aucun jeton persisté dans ProvidersBar.');
+  console.log('PASS: échec initial auth-required (Desktop isolé absent), mode direct persisté, redémarrage, reprise après renouvellement local, panne + backoff + reprise, rendu utilisé/restant, repli explicite auth-rate-limit → Claude Desktop (snapshot 100/38, message fiche, toast neutre, claudeSync auth-rate-limit persistant), aucun jeton persisté dans Lasmium TOKENS-HUB.');
 }
 
 main().catch(async error => { console.error(error); if (desktop) await desktop.close().catch(() => {}); process.exitCode = 1; });

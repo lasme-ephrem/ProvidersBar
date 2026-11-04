@@ -3,7 +3,7 @@
 (function () {
   var preference = 'light';
   try {
-    var stored = localStorage.getItem('providersbar-theme');
+    var stored = localStorage.getItem('lasmium-theme') || localStorage.getItem('providersbar-theme');
     if (stored === 'dark' || stored === 'light' || stored === 'system') preference = stored;
   } catch (error) {
     preference = 'light';

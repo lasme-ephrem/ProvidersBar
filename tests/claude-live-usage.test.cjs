@@ -92,7 +92,7 @@ test('429 throttling honors Retry-After and errors never masquerade as fresh mea
 });
 
 test('A token-refresh 429 surfaces as auth-rate-limit through the reader, distinct from a usage 429', async t => {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'providersbar-claude-auth-rate-'));
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'lasmium-claude-auth-rate-'));
   t.after(() => fs.rm(root, { recursive: true, force: true }));
   const credentialPath = path.join(root, '.credentials.json');
   await fs.writeFile(credentialPath, JSON.stringify({ claudeAiOauth: {
@@ -137,7 +137,7 @@ test('Network and authentication failures keep secrets and response bodies out o
 });
 
 test('Local connection is read without rewriting credentials and rejects expired or absent tokens', async t => {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'providersbar-claude-live-'));
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'lasmium-claude-live-'));
   t.after(() => fs.rm(root, { recursive: true, force: true }));
   const file = path.join(root, '.credentials.json');
   await assert.rejects(readLocalConnection(new Date(stamp), file), /indisponible/);
