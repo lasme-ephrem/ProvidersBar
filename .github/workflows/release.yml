@@ -1,0 +1,193 @@
+# Release Lasmium TOKENS-HUB — Windows x64 uniquement.
+#
+# Déclenchée par un tag `vX.Y.Z` (fabrication puis brouillon de release GitHub)
+# ou à la main (essai à blanc : fabrication et vérifications, sans toucher aux
+# releases ; les fichiers produits sont conservés 7 jours en artefact).
+#
+#   1. « build »   : `npm ci` complet (le script postinstall d'Electron télécharge
+#                    le runtime copié dans le portable), verify, lint, tests,
+#                    concordance package.json/tag, package:release,
+#                    release:artifacts, release:verify (extraction de l'archive avec
+#                    le même code que l'application, contenu, SHA-256), notes de
+#                    version tirées du CHANGELOG, signature de latest.json si le
+#                    secret LASMIUM_UPDATER_PRIVATE_KEY existe, smoke best-effort
+#                    sur le binaire construit, puis artefact de workflow.
+#   2. « publish » : sur un tag uniquement. Crée la release GitHub en brouillon si
+#                    elle n'existe pas, puis y joint le ZIP, SHA256SUMS et, si
+#                    signé, latest.json (remplacés s'ils existent déjà). La
+#                    publication finale reste un geste humain.
+#
+# Secret facultatif LASMIUM_UPDATER_PRIVATE_KEY : contenu PEM de la clé privée
+# Ed25519 de mise à jour (voir docs/updates.md). Sans lui, dist/latest.json est
+# signé localement (`npm run updater:sign`) puis joint à la main à la release.
+# Toute personne capable de pousser un tag `v*` peut déclencher une signature :
+# ne définir ce secret que sur un dépôt dont les tags sont protégés.
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+# Moindre privilège par défaut : seul le job de publication écrit sur GitHub.
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: '24'
+  CI: 'true'
+
+jobs:
+  build:
+    name: Construire et vérifier (Windows)
+    runs-on: windows-latest
+    timeout-minutes: 60
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Récupérer le dépôt
+        uses: actions/checkout@v7
+
+      - name: Installer Node.js 24
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      # Installation complète, sans --ignore-scripts : le runtime Electron doit
+      # être téléchargé pour `npm run package:release`.
+      - name: Installer les dépendances verrouillées (avec Electron)
+        run: npm ci
+
+      - name: Vérifier la syntaxe
+        run: npm run verify
+
+      - name: Linter
+        run: npm run lint
+
+      - name: Tests unitaires
+        run: npm test
+
+      - name: Lire la version de package.json
+        id: version
+        run: |
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          "version=$version" >> $env:GITHUB_OUTPUT
+
+      # Un tag v0.6.5 exige package.json en 0.6.5 : sinon l'archive, le manifeste
+      # et la release porteraient des versions différentes.
+      - name: Vérifier que le tag correspond à la version
+        if: github.ref_type == 'tag'
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          if ($env:RELEASE_TAG -ne "v$env:RELEASE_VERSION") { throw "Le tag $env:RELEASE_TAG ne correspond pas à la version $env:RELEASE_VERSION de package.json (tag attendu : v$env:RELEASE_VERSION)." }
+
+      - name: Construire la distribution versionnée
+        run: npm run package:release
+
+      - name: Créer l'archive ZIP et son empreinte SHA-256
+        run: npm run release:artifacts
+
+      - name: Contrôler l'archive (extraction, contenu, SHA-256)
+        run: npm run release:verify
+
+      - name: Extraire les notes de version du CHANGELOG
+        run: node scripts/release-notes.cjs --out dist/release-notes.md
+
+      # Le secret n'est exposé qu'aux deux étapes qui en ont besoin.
+      - name: Détecter le secret de signature
+        id: signing-key
+        env:
+          LASMIUM_UPDATER_PRIVATE_KEY: ${{ secrets.LASMIUM_UPDATER_PRIVATE_KEY }}
+        run: |
+          $available = if ($env:LASMIUM_UPDATER_PRIVATE_KEY) { 'true' } else { 'false' }
+          "available=$available" >> $env:GITHUB_OUTPUT
+
+      # La clé est écrite dans RUNNER_TEMP (hors du dépôt et de dist/), utilisée
+      # par scripts/sign-update-manifest.cjs, puis supprimée quoi qu'il arrive.
+      - name: Signer latest.json avec la clé du secret
+        if: steps.signing-key.outputs.available == 'true'
+        env:
+          LASMIUM_UPDATER_PRIVATE_KEY: ${{ secrets.LASMIUM_UPDATER_PRIVATE_KEY }}
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          $key = Join-Path $env:RUNNER_TEMP 'updater-private-key.pem'
+          Set-Content -LiteralPath $key -Value $env:LASMIUM_UPDATER_PRIVATE_KEY -NoNewline
+          try { npm run updater:sign -- --version $env:RELEASE_VERSION --key $key --notes-file dist/release-notes.md } finally { Remove-Item -LiteralPath $key -Force }
+
+      - name: Signature absente
+        if: steps.signing-key.outputs.available != 'true'
+        run: |
+          Write-Host "::notice::Secret LASMIUM_UPDATER_PRIVATE_KEY absent : dist/latest.json devra être signé localement (npm run updater:sign) puis joint à la main à la release sous le nom latest.json."
+
+      # Même parcours que les validations manuelles (PROVIDERSBAR_EXECUTABLE vers
+      # le binaire construit). Session graphique Windows requise : best-effort,
+      # un échec est visible et conservé en artefact mais ne bloque pas la release.
+      - name: Smoke sur le binaire construit (best-effort, session graphique requise)
+        continue-on-error: true
+        env:
+          PROVIDERSBAR_EXECUTABLE: ${{ github.workspace }}\dist\LasmiumTokensHub-${{ steps.version.outputs.version }}-win32-x64\LasmiumTokensHub.exe
+        run: npm run test:desktop
+
+      - name: Conserver captures et résultats du smoke
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-smoke-results
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 7
+
+      # Livrable de l'essai à blanc, et source du job de publication sur un tag.
+      - name: Téléverser les fichiers de release
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-${{ steps.version.outputs.version }}
+          path: |
+            dist/LasmiumTokensHub-${{ steps.version.outputs.version }}-win32-x64.zip
+            dist/SHA256SUMS-${{ steps.version.outputs.version }}.txt
+            dist/release-notes.md
+            dist/latest.json
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Brouillon de release GitHub
+    needs: build
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RELEASE_TAG: ${{ github.ref_name }}
+      RELEASE_VERSION: ${{ needs.build.outputs.version }}
+    steps:
+      - name: Récupérer les fichiers construits
+        uses: actions/download-artifact@v7
+        with:
+          name: release-${{ needs.build.outputs.version }}
+          path: dist
+
+      # `gh release view` trouve aussi un brouillon existant : la release n'est
+      # créée (en brouillon) que si le tag n'en a aucune.
+      - name: Créer la release en brouillon si elle n'existe pas
+        run: |
+          if ! gh release view "$RELEASE_TAG" --json isDraft > /dev/null; then
+            gh release create "$RELEASE_TAG" --draft --verify-tag --title "Lasmium TOKENS-HUB $RELEASE_VERSION" --notes-file dist/release-notes.md
+          fi
+
+      - name: Joindre le ZIP, SHA256SUMS et latest.json (si signé)
+        run: |
+          assets=("dist/LasmiumTokensHub-$RELEASE_VERSION-win32-x64.zip" "dist/SHA256SUMS-$RELEASE_VERSION.txt")
+          if [ -f dist/latest.json ]; then assets+=("dist/latest.json"); fi
+          gh release upload "$RELEASE_TAG" "${assets[@]}" --clobber

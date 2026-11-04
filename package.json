@@ -19,6 +19,7 @@
     "test:claude:desktop": "node scripts/smoke-claude.cjs",
     "package:release": "node scripts/package.cjs --release",
     "release:artifacts": "node scripts/release-artifacts.cjs",
+    "release:verify": "node scripts/verify-release-archive.cjs",
     "verify:connections": "node scripts/verify-connections.cjs",
     "connectors:key": "node scripts/generate-connector-pack-key.cjs",
     "connectors:sign": "node scripts/sign-connector-pack.cjs",

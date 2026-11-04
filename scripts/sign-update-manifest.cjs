@@ -11,7 +11,7 @@ const { signManifest, verifyManifest, MAX_ASSET_BYTES } = require('../lib/update
 
 const ROOT = path.resolve(__dirname, '..');
 const packageJson = require('../package.json');
-const REPOSITORY = 'https://github.com/lasme-ephrem/ProvidersBar';
+const REPOSITORY = 'https://github.com/lasme-ephrem/lasmium-tokens-bar';
 
 function arg(name, fallback) {
   const index = process.argv.indexOf(name);
@@ -26,7 +26,11 @@ async function main() {
   const publicPath = path.join(ROOT, 'lib', 'updater-public.pem');
   const name = path.basename(zip);
   const url = arg('--url', `${REPOSITORY}/releases/download/v${version}/${encodeURIComponent(name)}`);
-  const notes = arg('--notes', '');
+  // `--notes-file` (release.yml, notes multilignes extraites du CHANGELOG) prime
+  // sur `--notes` : un argument de ligne de commande ne transporte pas de
+  // retour à la ligne de façon fiable sous Windows.
+  const notesFile = arg('--notes-file', '');
+  const notes = notesFile ? (await fsp.readFile(path.resolve(notesFile), 'utf8')).trim() : arg('--notes', '');
   const minApp = arg('--min-app', '0.5.0');
   const publishedAt = arg('--published-at', new Date().toISOString());
   if (version !== packageJson.version) throw new Error(`La version ${version} ne correspond pas à package.json (${packageJson.version}).`);

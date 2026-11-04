@@ -9,7 +9,9 @@ const root = path.resolve(__dirname, '..');
 const TIMEOUT_MS = 30000;
 
 // Les fichiers attendus sont explicites : un fichier racine supprimé par erreur
-// doit être signalé, pas silencieusement ignoré.
+// doit être signalé, pas silencieusement ignoré. Chaque dossier est parcouru
+// récursivement (par exemple tests/helpers/) : un fichier ajouté dans un
+// sous-dossier est vérifié sans modification de cette liste.
 const requiredRootFiles = ['main.cjs', 'preload.cjs'];
 const groups = [
   { directory: 'lib', extensions: ['.cjs', '.js'] },
@@ -17,6 +19,15 @@ const groups = [
   { directory: 'renderer', extensions: ['.js'] },
   { directory: 'tests', extensions: ['.cjs'] },
 ];
+
+function collectFiles(directory, extensions, files) {
+  for (const name of fs.readdirSync(directory).sort()) {
+    const absolute = path.join(directory, name);
+    const stat = fs.statSync(absolute);
+    if (stat.isDirectory()) collectFiles(absolute, extensions, files);
+    else if (stat.isFile() && extensions.includes(path.extname(name))) files.push(absolute);
+  }
+}
 
 function listFiles() {
   const files = [];
@@ -32,9 +43,7 @@ function listFiles() {
       missing.push(`${directory}/`);
       continue;
     }
-    for (const name of fs.readdirSync(absolute).sort()) {
-      if (extensions.includes(path.extname(name)) && fs.statSync(path.join(absolute, name)).isFile()) files.push(path.join(absolute, name));
-    }
+    collectFiles(absolute, extensions, files);
   }
   return { files, missing };
 }

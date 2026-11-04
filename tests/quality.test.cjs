@@ -259,13 +259,36 @@ test('le workflow CI Windows couvre les garde-fous attendus', async () => {
   assert.match(workflow, /^jobs:/m);
   assert.match(workflow, /^ {2}tests:/m);
   assert.match(workflow, /^ {2}smoke-electron:/m);
-  for (const expected of ['windows-latest', 'npm ci', 'npm test', 'npm run verify', 'npm audit --omit=dev', 'continue-on-error: true', 'timeout-minutes', 'cache: npm']) {
+  for (const expected of ['windows-latest', 'npm ci', 'npm test', 'npm run verify', 'npm run lint', 'npm run connectors:canary', 'npm audit --omit=dev', 'continue-on-error: true', 'timeout-minutes', 'cache: npm']) {
     assert.ok(workflow.includes(expected), `Le workflow CI doit contenir « ${expected} ».`);
   }
   assert.match(workflow, /node-version:/);
   assert.match(workflow, /NODE_VERSION:\s*'24'/);
   assert.match(workflow, /session graphique/i, 'Le caractère best-effort du job smoke doit être expliqué (session graphique).');
   assert.doesNotMatch(workflow, /\t/, 'Un fichier YAML ne doit pas contenir de tabulation.');
+  // quality.yml répétait npm ci / verify / test sur un second runner Windows :
+  // il a été fusionné dans ci.yml et ne doit pas être recréé par erreur.
+  assert.equal(exists('.github/workflows/quality.yml'), false, 'quality.yml a été fusionné dans ci.yml : ne pas le recréer.');
+});
+
+test('le workflow de release construit, vérifie et publie en brouillon', async () => {
+  const workflow = await read('.github/workflows/release.yml');
+  assert.match(workflow, /^name:\s*Release/m);
+  assert.match(workflow, /tags:\s*\n\s*- 'v\*'/, 'Le workflow de release se déclenche sur les tags v*.');
+  assert.match(workflow, /^\s*workflow_dispatch:/m, 'Un essai à blanc manuel doit être possible.');
+  assert.match(workflow, /^permissions:\s*\n\s*contents: read/m, 'Lecture seule par défaut.');
+  assert.match(workflow, /^ {2}build:/m);
+  assert.match(workflow, /^ {2}publish:/m);
+  const expected = [
+    'windows-latest', 'cache: npm', 'timeout-minutes', 'npm ci', 'npm run verify', 'npm run lint', 'npm test',
+    'npm run package:release', 'npm run release:artifacts', 'npm run release:verify', 'npm run updater:sign',
+    'LASMIUM_UPDATER_PRIVATE_KEY', '::notice::', 'actions/upload-artifact@v7', 'retention-days: 7',
+    'gh release create', '--draft', 'gh release upload', '--clobber', 'contents: write', "if: github.ref_type == 'tag'",
+  ];
+  for (const entry of expected) assert.ok(workflow.includes(entry), `Le workflow de release doit contenir « ${entry} ».`);
+  assert.match(workflow, /NODE_VERSION:\s*'24'/);
+  assert.doesNotMatch(workflow, /npm ci[^\n]*--ignore-scripts/, 'Electron doit être téléchargé pour npm run package:release.');
+  assert.match(workflow, /session graphique/i, 'Le smoke sur le binaire construit reste best-effort.');
 });
 
 // PowerShell 7, shell par défaut sur windows-latest, traite les guillemets
