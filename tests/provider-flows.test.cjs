@@ -1277,16 +1277,14 @@ async function phantomDetectionProbe(t, trigger) {
   return h;
 }
 
-const phantomTodo = 'timer de détection Ollama abandonné : clearInterval précède l’attente de ollamaBrowserOpening, qui réarme le timer après son await';
-
-test('cancelOllama pendant le lancement du navigateur n’abandonne aucun timer de détection', { todo: phantomTodo }, async t => {
+test('cancelOllama pendant le lancement du navigateur n’abandonne aucun timer de détection', async t => {
   await phantomDetectionProbe(t, h => h.flows.cancelOllama());
 });
 
-test('openOllamaEmailAccount pendant le lancement du navigateur n’abandonne aucun timer de détection', { todo: phantomTodo }, async t => {
+test('openOllamaEmailAccount pendant le lancement du navigateur n’abandonne aucun timer de détection', async t => {
   await phantomDetectionProbe(t, h => h.flows.openOllamaEmailAccount());
 });
 
-test('closeAll pendant le lancement du navigateur n’abandonne aucun timer de détection', { todo: phantomTodo }, async t => {
+test('closeAll pendant le lancement du navigateur n’abandonne aucun timer de détection', async t => {
   await phantomDetectionProbe(t, h => h.flows.closeAll());
 });
