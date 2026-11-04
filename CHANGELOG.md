@@ -1,5 +1,49 @@
 # Historique des versions
 
+## Non publié
+
+Chantier qualité issu de l'analyse du dépôt. Aucun changement fonctionnel pour
+l'utilisateur, hors les corrections ci-dessous.
+
+### Corrections
+
+- CI : l'étape « Linter » de `ci.yml` échouait à chaque push sur `main` (apostrophe
+  typographique dans une chaîne PowerShell) et masquait les tests et l'audit. Les
+  étapes sont désormais de simples commandes npm, et un test interdit les guillemets
+  typographiques dans les workflows et dans le script d'installation généré.
+- Ollama : un timer de détection du navigateur système pouvait survivre à une
+  annulation ou au passage à la connexion par e-mail, puis interroger tout navigateur
+  ouvert ensuite. Le nettoyage attend maintenant la fin du lancement en cours.
+- Mise à jour automatique : l'URL du manifeste vise le dépôt renommé
+  `lasme-ephrem/lasmium-tokens-bar` ; l'ancien nom ne fonctionnait que par
+  redirection GitHub.
+
+### Intégration continue et release
+
+- `quality.yml` fusionné dans `ci.yml` (verify, lint, tests, canary hors ligne,
+  audit) ; déclencheurs limités à `main`, aux pull requests et au lancement manuel ;
+  actions GitHub en v7.
+- Nouveau workflow `release.yml` : sur un tag `v*`, fabrication sur Windows, contrôle
+  de l'archive par réextraction (`npm run release:verify`), notes tirées du CHANGELOG
+  (`scripts/release-notes.cjs`), signature de `latest.json` si le secret
+  `LASMIUM_UPDATER_PRIVATE_KEY` est défini, puis brouillon de release GitHub. Un
+  lancement manuel est un essai à blanc sans publication.
+
+### Qualité
+
+- ESLint 9 (configuration minimale, sans règle de style) derrière `npm run lint` et
+  `npm run lint:fix` ; signalements corrigés sans changement de comportement (clé
+  dupliquée, paramètres et helpers morts).
+- Tests : 352 (269 avant). `provider-flows.cjs`, `connector-sync.cjs`, `updater.cjs`,
+  `zip-extract.cjs` et `update-manifest.cjs` sont couverts à 100 % de lignes. Les
+  tests de l'updater tournent sur toute plate-forme grâce à un écrivain ZIP de test
+  en JavaScript pur ; 2 tests restent réservés à Windows au lieu de 5.
+- `renderer/views.js` découpé en `views-shell.js`, `views-cards.js`, `views-pages.js`
+  et `views-quick.js` (rendu vérifié identique sur 125 captures) ; `publicState()`
+  de `main.cjs` réécrit lisiblement, avec un test d'équivalence.
+- Documentation (README, SECURITY, PRIVACY, architecture, maintenance, updates)
+  alignée sur la 0.6.5 et sur les nouveaux workflows.
+
 ## 0.6.5 — 4 novembre 2026
 
 - Lancement du script d'installation via le shell Windows, en processus détaché. Un lancement direct de `powershell.exe` depuis Electron peut être bloqué par l'environnement.
