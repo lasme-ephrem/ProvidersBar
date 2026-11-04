@@ -18,6 +18,7 @@
 | Smoke sur le binaire packagé 0.6.0 | **PASS** |
 | `npm run connectors:canary` (hors ligne) | **3 packs signés**, 0 erreur |
 | Canary live sans clé | Code `2` explicite, aucun faux succès |
+| Canary live réel (`connectors:canary:live`) | **PASS** — 3/3 vérifiés, 0 ignoré, `keySource: .local/canary.env` |
 | Signature du manifeste `latest.json` | **Valide** (Ed25519, SHA-256 et taille vérifiés) |
 | Installation réelle du script PowerShell (dossier temporaire) | **PASS** — application remplacée, `data/state.json` intact, rollback conservé |
 | `npm run package:release` | **OK** |
@@ -61,9 +62,11 @@
 
 ## Limites assumées
 
-- **Canary live non exécuté** : aucune clé de test réelle n'a été fournie. Le
-  chargement local, le refus sans clé et le workflow CI sont testés ; les appels
-  réels restent à lancer après avoir renseigné `.local/canary.env`.
+- **Canary live exécuté le 4 novembre 2026** : DeepSeek, OpenRouter et RunInfra
+  ont répondu sans erreur. Soldes relevés : DeepSeek **2,78 USD**, OpenRouter
+  **−0,0828 USD**, RunInfra **6,50 USD**. Le solde OpenRouter négatif est une
+  valeur réelle acceptée par le contrat, pas un échec de lecture ; il doit être
+  confirmé sur le tableau de bord OpenRouter s'il est inattendu.
 - **Mise à jour non publiée** : le client, le manifeste signé et le
   remplacement local sont validés, mais aucun serveur GitHub n'a encore reçu
   l'archive pendant cette session (pas de push sans accord).
