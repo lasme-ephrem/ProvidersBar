@@ -123,7 +123,7 @@ async function main() {
   assert.equal(appInfo.version, packageJson.version);
   assert.match(String(appInfo.electron), /^44\./);
   assert.equal(appInfo.platform, 'win32');
-  assert.equal(appInfo.packaged, false);
+  assert.equal(appInfo.packaged, Boolean(process.env.PROVIDERSBAR_EXECUTABLE));
   assert.equal(appInfo.dataDir, dataDir);
   const publicApp = await page.evaluate(async () => (await window.lasmium.getState()).app);
   assert.equal(publicApp.version, packageJson.version);
@@ -1190,7 +1190,7 @@ const fontBytes = await fs.readFile(fontFile);
   assert.equal(Array.isArray(erasedState.providers) && erasedState.providers.length, 10);
   assert.deepEqual(erasedState.history, []);
   await desktop.close(); desktop = null;
-  console.log('PASS: marque Lasmium TOKENS-HUB, logo, thèmes clair/sombre/système, version dynamique, app:info, erase-data, recommandations retirées, inventaire 10 fournisseurs, recherche/filtres, édition, historique, clés chiffrées, course connect/disconnect, reprise transitoire, cooldown persistant, Orca/Ollama (session conservée puis auth invalide), Claude Desktop/direct, lecteurs DOM réels, santé des connexions (10 lignes, états typés, dérive SCHEMA_DRIFT sans écraser le dernier relevé), polices Inter + Sora (fichiers+OFL+chargement dashboard/widget, tabular-nums), libellés Hebdo/Horaire/Hebdo Fable/Hebdo Argon et chips, widget vertical Lasmium 360×660 (10 lignes, une information par fenêtre, Ollama Free + crédits, soldes multi-devises, sans défilement ; scroll fin à 320), niveaux textuels, tray, redémarrage, Ollama Free, Antigravity, export nettoyé.');
+  console.log('PASS: marque Lasmium TOKENS-HUB, logo, thèmes clair/sombre/système, version dynamique, app:info, erase-data, recommandations retirées, inventaire 10 fournisseurs, recherche/filtres, édition, historique, clés chiffrées, course connect/disconnect, reprise transitoire, cooldown persistant, Orca/Ollama (session conservée puis auth invalide), Claude Desktop/direct, lecteurs DOM réels, santé des connexions (10 lignes, états typés, dérive SCHEMA_DRIFT sans écraser le dernier relevé), packs signés (3) et sauvegarde d’état, polices Inter + Sora (fichiers+OFL+chargement dashboard/widget, tabular-nums), libellés Hebdo/Horaire/Hebdo Fable/Hebdo Argon et chips, widget vertical Lasmium 360×660 (10 lignes, une information par fenêtre, Ollama Free + crédits, soldes multi-devises, sans défilement ; scroll fin à 320), niveaux textuels, tray, redémarrage, Ollama Free, Antigravity, export nettoyé.');
 }
 
 main().catch(error => { console.error(error); process.exitCode = 1; }).finally(async () => { if (desktop) await desktop.close(); });
