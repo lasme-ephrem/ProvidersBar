@@ -263,7 +263,46 @@ function publicState() {
   // L'ordre de consommation a été retiré : aucun `strategy` n'est exposé.
   delete visibleState.strategy;
   const flows = providerFlows.info();
-  return { ...visibleState, app: publicAppInfo(), update: updater.info(), connectorPacks: packSummary(connectorPacks), connectorPackErrors: connectorPackErrors.map(({ file, provider, reason }) => ({ file, provider: provider || null, reason })), historyCount: history.length, historyRevision: history[0]?.id || null, providers: state.providers.map(p => ({ ...p, ...(p.id === 'ollama' && p.snapshot ? { snapshot: { ...p.snapshot, usageCredits: lastKnownUsageCredits(p.snapshot, history) } } : {}), connector: connectionInfo(p.id), connected: isConnected(p), syncing: busy.has(p.id), health: publicHealth(state.connectorHealth?.[p.id], p.snapshot), ...(p.id === 'antigravity' ? { accountConnection: flows.antigravity } : p.id === 'claude' ? { accountConnection: flows.claude } : p.id === 'openai' ? { accountConnection: openAiAccount.info() } : p.id === 'orcarouter' ? { accountConnection: flows.orcarouter } : p.id === 'ollama' ? { accountConnection: flows.ollama } : connectors[p.id]?.browserAccount ? { accountConnection: subscriptionAccounts.info(p.id) } : {}) })), summary: summary(state.providers), desktop: true };
+  // Ollama : les crédits d'usage exposés sont les derniers connus, relus dans
+  // l'historique ; les autres relevés sont transmis tels quels.
+  function presentSnapshot(p) {
+    if (p.id !== 'ollama' || !p.snapshot) return {};
+    return { snapshot: { ...p.snapshot, usageCredits: lastKnownUsageCredits(p.snapshot, history) } };
+  }
+  // Lien de compte exposé selon le fournisseur : parcours dédié (Antigravity,
+  // Claude, OpenAI, OrcaRouter, Ollama), lecteur de compte web, sinon rien.
+  function presentAccountConnection(p) {
+    if (p.id === 'antigravity') return { accountConnection: flows.antigravity };
+    if (p.id === 'claude') return { accountConnection: flows.claude };
+    if (p.id === 'openai') return { accountConnection: openAiAccount.info() };
+    if (p.id === 'orcarouter') return { accountConnection: flows.orcarouter };
+    if (p.id === 'ollama') return { accountConnection: flows.ollama };
+    if (connectors[p.id]?.browserAccount) return { accountConnection: subscriptionAccounts.info(p.id) };
+    return {};
+  }
+  function presentProvider(p) {
+    return {
+      ...p,
+      ...presentSnapshot(p),
+      connector: connectionInfo(p.id),
+      connected: isConnected(p),
+      syncing: busy.has(p.id),
+      health: publicHealth(state.connectorHealth?.[p.id], p.snapshot),
+      ...presentAccountConnection(p),
+    };
+  }
+  return {
+    ...visibleState,
+    app: publicAppInfo(),
+    update: updater.info(),
+    connectorPacks: packSummary(connectorPacks),
+    connectorPackErrors: connectorPackErrors.map(({ file, provider, reason }) => ({ file, provider: provider || null, reason })),
+    historyCount: history.length,
+    historyRevision: history[0]?.id || null,
+    providers: state.providers.map(presentProvider),
+    summary: summary(state.providers),
+    desktop: true,
+  };
 }
 async function loadConnectorPacks() {
   try {
@@ -442,7 +481,16 @@ function registerIpc() {
   handle('ollama:open-account', openOllamaSystemAccount);
   handle('ollama:open-email', providerFlows.openOllamaEmailAccount);
   handle('ollama:verify-account', () => verifyOllamaAccount());
-  handle('account:open', async id => { provider(id); if (disconnecting.has(id) || quitting) throw new Error('Déconnexion en cours.'); return id === 'antigravity' ? verifyAntigravity() : id === 'claude' ? verifyClaudeDesktop({ manual: true }) : id === 'openai' ? openAiAccount.open() : id === 'orcarouter' ? openOrcaAccount() : id === 'ollama' ? openOllamaAccount() : subscriptionAccounts.open(id); });
+  handle('account:open', async id => {
+    provider(id);
+    if (disconnecting.has(id) || quitting) throw new Error('Déconnexion en cours.');
+    if (id === 'antigravity') return verifyAntigravity();
+    if (id === 'claude') return verifyClaudeDesktop({ manual: true });
+    if (id === 'openai') return openAiAccount.open();
+    if (id === 'orcarouter') return openOrcaAccount();
+    if (id === 'ollama') return openOllamaAccount();
+    return subscriptionAccounts.open(id);
+  });
   handle('account:verify', async id => {
     provider(id);
     if (disconnecting.has(id) || quitting) throw new Error('Déconnexion en cours.');
@@ -636,7 +684,7 @@ else {
       registerIpc();
       const webPreferences = { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true, spellcheck: false, devTools: false };
       const windowBackground = windowBackgroundFor(state.settings.theme);
-      mainWindow = new BrowserWindow({ width: 1360, height: 940, minWidth: 900, minHeight: 680, show: false, title: 'Lasmium TOKENS-HUB', icon: path.join(__dirname, 'assets/icon.png'), backgroundColor: windowBackground, icon: path.join(__dirname, 'assets/icon.png'), autoHideMenuBar: true, webPreferences });
+      mainWindow = new BrowserWindow({ width: 1360, height: 940, minWidth: 900, minHeight: 680, show: false, title: 'Lasmium TOKENS-HUB', icon: path.join(__dirname, 'assets/icon.png'), backgroundColor: windowBackground, autoHideMenuBar: true, webPreferences });
       secureWindow(mainWindow);
       mainWindow.on('close', event => { if (!quitting) { event.preventDefault(); mainWindow.hide(); } });
       mainWindow.once('ready-to-show', () => mainWindow.show());

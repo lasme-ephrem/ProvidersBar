@@ -564,7 +564,6 @@ test('la police Inter Variable est empaquetée avec sa licence OFL', async () =>
   assert.ok(fontBytes.length > 100000, `police Inter anormalement petite : ${fontBytes.length} octets`);
   assert.match(await read(licensePath), /SIL OPEN FONT LICENSE|SIL Open Font License/i, 'licence OFL absente ou incorrecte');
   // Déclaration locale, sans réseau : CSP 'self' et aucun CDN de police.
-  const styles = await read('renderer/styles.css');
   const theme = await read('renderer/theme.css');
   assert.match(theme, /@font-face\s*\{[\s\S]*?font-family:\s*"Inter Variable"/);
   assert.match(theme, /url\("\.\.\/assets\/fonts\/InterVariable\.woff2"\)\s*format\("woff2"\)/);

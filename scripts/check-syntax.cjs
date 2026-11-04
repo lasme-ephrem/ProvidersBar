@@ -10,7 +10,7 @@ const TIMEOUT_MS = 30000;
 
 // Les fichiers attendus sont explicites : un fichier racine supprimé par erreur
 // doit être signalé, pas silencieusement ignoré.
-const requiredRootFiles = ['main.cjs', 'preload.cjs'];
+const requiredRootFiles = ['main.cjs', 'preload.cjs', 'eslint.config.cjs'];
 const groups = [
   { directory: 'lib', extensions: ['.cjs', '.js'] },
   { directory: 'scripts', extensions: ['.cjs'] },

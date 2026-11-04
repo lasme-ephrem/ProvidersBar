@@ -82,7 +82,7 @@ function freshness(value) {
 }
 
 // Badge textuel de fraîcheur : jamais uniquement une atténuation de couleur.
-function freshnessMarkup(value, { compact = false } = {}) {
+function freshnessMarkup(value) {
   if (!value) return '';
   const { stale, text, full } = freshness(value);
   const title = `Dernier relevé : ${full}`;

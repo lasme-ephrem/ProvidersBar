@@ -7,29 +7,6 @@ const fsSync = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
-// --- Décision de repli Claude (T9/T15) --------------------------------------
-// La décision vit dans main.cjs mais ne dépend pas d'Electron : elle est extraite
-// de la source et exécutée ici pour couvrir chaque branche sans lancer l'app.
-function loadMainHelper(name) {
-  const source = fsSync.readFileSync(path.join(__dirname, '..', 'main.cjs'), 'utf8');
-  const marker = `function ${name}(`;
-  const start = source.indexOf(marker);
-  assert.ok(start >= 0, `fonction ${name} introuvable dans main.cjs`);
-  assert.equal(source.lastIndexOf(marker), start, `fonction ${name} définie plusieurs fois dans main.cjs`);
-  const open = source.indexOf('{', start);
-  let depth = 0;
-  let end = -1;
-  for (let index = open; index < source.length; index++) {
-    if (source[index] === '{') depth++;
-    else if (source[index] === '}') {
-      depth--;
-      if (depth === 0) { end = index + 1; break; }
-    }
-  }
-  assert.ok(end > open, `fonction ${name} incomplète dans main.cjs`);
-  return new Function(`return (${source.slice(start, end)})`)();
-}
-
 const FALLBACK_NOW = Date.parse('2026-11-04T00:40:00.000Z');
 const freshSnapshot = { updatedAt: new Date(FALLBACK_NOW - 5 * 60000).toISOString() };
 const staleSnapshot = { updatedAt: new Date(FALLBACK_NOW - 11 * 60000).toISOString() };
