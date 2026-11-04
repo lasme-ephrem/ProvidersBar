@@ -3,7 +3,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
 const {
-  compareVersions, canonicalPayload, validateManifest, verifyManifest, signManifest,
+  compareVersions, canonicalPayload, validateManifest, verifyManifest, signManifest, isNewer, versionParts,
 } = require('../lib/update-manifest.cjs');
 
 function fixture(version = '0.6.0') {
@@ -59,4 +59,34 @@ test('les versions se comparent numériquement et les manifestes dangereux sont 
   tooOld.signature = signManifest(tooOld, privateKey);
   assert.equal(verifyManifest(tooOld, publicPem, { appVersion: '0.5.0' }).valid, false);
   assert.equal(verifyManifest({ ...fixture(), signature: signManifest(fixture(), privateKey) }, publicPem, { currentVersion: '0.6.0' }).valid, false);
+});
+
+test('un manifeste non objet, des notes invalides ou une clé publique illisible sont refusés', () => {
+  for (const value of [null, undefined, 'manifeste', 42, ['liste']]) {
+    assert.deepEqual(validateManifest(value, { appVersion: '0.5.0' }), { valid: false, issues: ['manifeste absent ou non objet'] });
+  }
+  const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
+  const publicPem = publicKey.export({ type: 'spki', format: 'pem' });
+  assert.deepEqual(verifyManifest(null, publicPem), { valid: false, issues: ['manifeste absent ou non objet'] });
+  for (const notes of [42, ['liste'], 'n'.repeat(5001)]) {
+    const manifest = { ...fixture(), notes };
+    manifest.signature = signManifest(manifest, privateKey);
+    assert.ok(validateManifest(manifest, { appVersion: '0.5.0' }).issues.includes('notes invalides'), `notes : ${String(notes).slice(0, 12)}`);
+  }
+  const withoutNotes = fixture();
+  delete withoutNotes.notes;
+  withoutNotes.signature = signManifest(withoutNotes, privateKey);
+  assert.equal(verifyManifest(withoutNotes, publicPem, { appVersion: '0.5.0' }).valid, true);
+  const longestNotes = { ...fixture(), notes: 'n'.repeat(5000) };
+  longestNotes.signature = signManifest(longestNotes, privateKey);
+  assert.equal(verifyManifest(longestNotes, publicPem, { appVersion: '0.5.0' }).valid, true);
+  // Une clé publique illisible fait lever crypto.verify : l'exception est
+  // absorbée et la signature déclarée invalide, sans fuite de détail.
+  const signed = fixture();
+  signed.signature = signManifest(signed, privateKey);
+  assert.deepEqual(verifyManifest(signed, 'ceci n’est pas une clé PEM', { appVersion: '0.5.0' }), { valid: false, issues: ['signature Ed25519 invalide'] });
+  assert.equal(isNewer('abc', '1.0.0'), false);
+  assert.equal(isNewer('1.0.1', '1.0.0'), true);
+  assert.equal(versionParts('01.2.3'), null);
+  assert.deepEqual(versionParts('1.2.3'), [1, 2, 3]);
 });

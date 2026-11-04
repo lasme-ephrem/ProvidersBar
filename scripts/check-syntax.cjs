@@ -18,6 +18,19 @@ const groups = [
   { directory: 'tests', extensions: ['.cjs'] },
 ];
 
+// Parcours récursif trié : les sous-dossiers (ex. tests/helpers/) contiennent
+// aussi du code à vérifier. `node_modules` n'est jamais traversé.
+function collect(directory, extensions, files) {
+  for (const entry of fs.readdirSync(directory, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+    const absolute = path.join(directory, entry.name);
+    if (entry.isDirectory()) {
+      if (entry.name !== 'node_modules') collect(absolute, extensions, files);
+    } else if (entry.isFile() && extensions.includes(path.extname(entry.name))) {
+      files.push(absolute);
+    }
+  }
+}
+
 function listFiles() {
   const files = [];
   const missing = [];
@@ -32,9 +45,7 @@ function listFiles() {
       missing.push(`${directory}/`);
       continue;
     }
-    for (const name of fs.readdirSync(absolute).sort()) {
-      if (extensions.includes(path.extname(name)) && fs.statSync(path.join(absolute, name)).isFile()) files.push(path.join(absolute, name));
-    }
+    collect(absolute, extensions, files);
   }
   return { files, missing };
 }
