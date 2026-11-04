@@ -1,8 +1,11 @@
-# Intégration continue ProvidersBar — Windows x64 uniquement.
+# Intégration continue Lasmium TOKENS-HUB — Windows x64 uniquement.
 #
-# Deux jobs volontairement séparés :
-#   1. « tests »      : garde-fous déterministes (syntaxe, tests unitaires, audit
-#                       des dépendances de production). Ce job doit rester vert.
+# Workflow unique (l'ancien quality.yml, qui répétait les mêmes commandes sur un
+# second runner, a été fusionné ici). Deux jobs :
+#   1. « tests »      : garde-fous déterministes et bloquants — syntaxe (verify,
+#                       lint), tests unitaires, canary hors ligne des connecteurs
+#                       (packs signés embarqués, sans clé ni réseau) et audit des
+#                       dépendances de production. Ce job doit rester vert.
 #   2. « smoke-electron » : tests d'intégration Electron/Playwright. Ils lancent de
 #                       vraies fenêtres Chromium et dépendent d'une session graphique
 #                       Windows interactive (et de DPAPI pour le chiffrement des clés).
@@ -10,13 +13,16 @@
 #                       un échec est visible, conservé en artefact, mais ne bloque pas
 #                       la fusion. La validation release les exécute manuellement sur
 #                       une machine Windows interactive avant `npm run package:release`.
+#
+# La fabrication, la vérification et la publication d'une version sont dans
+# release.yml ; le canary avec clés réelles, déclenché à la main, dans
+# canary-live.yml.
 name: CI
 
 on:
   push:
     branches:
       - main
-      - 'refonte/**'
   pull_request:
   workflow_dispatch:
 
@@ -52,12 +58,11 @@ jobs:
       - name: Installer les dépendances verrouillées
         run: npm ci
 
-      # Les scripts `verify` et `lint` sont déclarés dans package.json : plus de
-      # repli conditionnel. Chaque étape reste une simple commande npm, sans
-      # script PowerShell inline : PowerShell 7 traite les guillemets
-      # typographiques (apostrophes et guillemets courbes) comme des
-      # délimiteurs de chaîne, et une apostrophe courbe dans un Write-Host a
-      # déjà rendu ce job rouge. tests/quality.test.cjs les interdit désormais.
+      # Chaque étape reste une simple commande npm, sans script PowerShell
+      # inline : PowerShell 7 traite les guillemets typographiques (apostrophes
+      # et guillemets courbes) comme des délimiteurs de chaîne, et une apostrophe
+      # courbe dans un Write-Host a déjà rendu ce job rouge.
+      # tests/quality.test.cjs les interdit désormais.
       - name: Vérifier la syntaxe
         run: npm run verify
 
@@ -66,6 +71,11 @@ jobs:
 
       - name: Tests unitaires
         run: npm test
+
+      # Sans clé ni réseau : vérifie les packs de connecteurs signés embarqués et
+      # leurs invariants. Le canary avec clés réelles vit dans canary-live.yml.
+      - name: Canary hors ligne des connecteurs
+        run: npm run connectors:canary
 
       # Les tests transverses écrivent uniquement dans des dossiers temporaires,
       # mais un échec des migrations/packaging peut laisser des traces utiles.
