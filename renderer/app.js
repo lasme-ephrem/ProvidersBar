@@ -1,5 +1,5 @@
 /* Lasmium TOKENS-HUB — état, événements et boucle de rendu (renderer).
- * Chargé après ui-core.js, reset-ui.js et views.js.
+ * Chargé après ui-core.js, reset-ui.js et les quatre fichiers views-*.js (shell, cards, pages, quick).
  * Globals conservés pour le smoke et le diagnostic : state, page, filter, query,
  * render, receiveState, renderQuick, statusBadge.
  */

@@ -1,6 +1,6 @@
 /* Lasmium TOKENS-HUB — noyau d'interface partagé (renderer).
  * Aucun accès réseau, aucun secret : uniquement formatage, thème, focus et composants de base.
- * Chargé avant views.js et app.js ; expose des bindings globaux utilisés par les autres scripts.
+ * Chargé avant les fichiers views-*.js et app.js ; expose des bindings globaux utilisés par les autres scripts.
  */
 'use strict';
 
