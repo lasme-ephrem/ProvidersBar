@@ -111,12 +111,16 @@ un utilisateur légitime qui contrôle sa session et son dossier de données.
 - **Audit** : `npm audit --omit=dev` en CI sur les dépendances de production ;
   `npm audit` complet est attendu avant chaque release, car le runtime Electron
   livré ne fait pas partie de l'audit de production.
-- **CI Windows** : trois workflows — `ci.yml` (syntaxe, tests unitaires, audit,
-  puis smoke Electron best-effort nécessitant une session graphique
-  interactive), `quality.yml` (syntaxe, tests, canary hors ligne, fixtures de
-  diagnostic) et `canary-live.yml` (déclenchement manuel uniquement, clés de
-  test lues dans les secrets du dépôt, jamais exposées à une pull request issue
-  d'un fork). Voir [`docs/maintenance.md`](docs/maintenance.md).
+- **CI Windows** : `ci.yml` enchaîne des jobs déterministes (syntaxe, tests
+  unitaires, canary hors ligne, audit) et un job Electron best-effort nécessitant
+  une session graphique interactive. `release.yml` fabrique l'archive sur un tag
+  `v*`, la réextrait avec le code de l'application pour la contrôler (contenu,
+  version, absence de `data/`, SHA-256) et ne crée qu'un **brouillon** de release :
+  la publication reste un geste humain. Le secret facultatif
+  `LASMIUM_UPDATER_PRIVATE_KEY` permet de signer `latest.json` en CI ; toute
+  personne pouvant pousser un tag déclenche alors une signature, il est donc
+  réservé à un dépôt dont les tags sont protégés. Sans lui, la signature reste
+  locale (`npm run updater:sign`).
 - **Signature des livrables** : le manifeste de mise à jour et les packs de
   connecteurs sont signés hors ligne (`npm run updater:sign`,
   `npm run connectors:sign`) ; les clés privées restent dans `.local/updater/`
