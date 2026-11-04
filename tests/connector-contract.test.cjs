@@ -4,6 +4,7 @@ const assert = require('node:assert/strict');
 const {
   ERROR_CODES, normalizeCode, stateForCode, validateSnapshot, assertSnapshot,
   strategyFor, healthSuccess, healthFailure, isStale, publicHealth,
+  breakerOpen, strategyChainFor, fallbackStrategyFor,
 } = require('../lib/connector-contract.cjs');
 
 const NOW = Date.parse('2026-11-04T02:00:00.000Z');
@@ -109,4 +110,35 @@ test('la stratégie reflète la session réellement utilisée', () => {
   assert.equal(strategyFor({ id: 'ollama' }, {}), 'ollama-browser');
   assert.equal(strategyFor({ id: 'openrouter' }, { openrouter: { mode: 'api' } }), 'api-key');
   assert.equal(strategyFor({ id: 'zai' }, { zai: { mode: 'account', browserAccount: true } }), 'browser-session');
+});
+
+test('le disjoncteur espace les erreurs transitoires mais jamais l’authentification', () => {
+  const network = Object.assign(new Error('fetch failed'), { code: 'network' });
+  const first = healthFailure(null, { providerId: 'x', error: network, now: NOW });
+  assert.equal(first.failures, 1);
+  assert.equal(breakerOpen(first, NOW + 1000), true);
+  assert.equal(breakerOpen(first, NOW + 31 * 1000), false);
+  const second = healthFailure(first, { providerId: 'x', error: network, now: NOW + 31000 });
+  assert.equal(second.failures, 2);
+  assert.ok(Date.parse(second.error.retryAt) > Date.parse(first.error.retryAt));
+  const reset = healthSuccess(second, { providerId: 'x', snapshot: snapshot(), now: NOW + 60000 });
+  assert.equal(reset.failures, 0);
+  assert.equal(breakerOpen(reset, NOW + 61000), false);
+
+  const drift = healthFailure(null, { providerId: 'x', error: Object.assign(new Error('Format inattendu.'), { code: 'SCHEMA_DRIFT' }), now: NOW });
+  assert.equal(breakerOpen(drift, NOW + 60 * 1000), true);
+  assert.equal(breakerOpen(drift, NOW + 16 * 60 * 1000), false);
+
+  const auth = healthFailure(null, { providerId: 'x', error: Object.assign(new Error('Session expirée.'), { code: 'auth-invalid' }), now: NOW });
+  assert.equal(auth.error.retryAt, null);
+  assert.equal(breakerOpen(auth, NOW + 1000), false);
+});
+
+test('les chaînes de stratégies déclarent le repli sans l’inventer', () => {
+  assert.deepEqual(strategyChainFor({ id: 'claude' }, {}), ['claude-direct', 'claude-desktop']);
+  assert.deepEqual(strategyChainFor({ id: 'openai' }, {}), ['openai-codex']);
+  assert.equal(fallbackStrategyFor({ id: 'claude' }, 'claude-direct', {}), 'claude-desktop');
+  assert.equal(fallbackStrategyFor({ id: 'claude' }, 'claude-desktop', {}), null);
+  assert.deepEqual(strategyChainFor({ id: 'zai' }, { zai: { browserAccount: true } }), ['browser-session']);
+  assert.deepEqual(strategyChainFor({ id: 'openrouter' }, { openrouter: { mode: 'api' } }), ['api-key']);
 });

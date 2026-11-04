@@ -27,7 +27,7 @@ const accountBrowser = require('./lib/account-browser.cjs');
 const { createOpenAiAccount } = require('./lib/openai-account.cjs');
 const openAiTransport = require('./lib/openai-account.cjs');
 const { createSubscriptionController } = require('./lib/subscription-controller.cjs');
-const { assertSnapshot, healthSuccess, healthFailure, publicHealth, strategyFor } = require('./lib/connector-contract.cjs');
+const { assertSnapshot, healthSuccess, healthFailure, publicHealth, strategyFor, breakerOpen } = require('./lib/connector-contract.cjs');
 const claudeDesktop = require('./lib/claude-desktop-usage.cjs');
 const claudeLive = require('./lib/claude-live-usage.cjs');
 const { CREDENTIAL_PATH } = require('./lib/claude-connection.cjs');
@@ -105,7 +105,7 @@ function syncClaudeWhenDue() {
   const p = state?.providers.find(p => p.id === 'claude');
   if (quitting || !state?.settings.autoRefresh || !p || !isTracked(p) || p.accountSession?.kind !== 'claude-live-local') return;
   if (Date.parse(claudeReader.info().nextAttemptAt) > Date.now()) return;
-  syncOne('claude').catch(() => {});
+  syncOne('claude', { force: false }).catch(() => {});
 }
 // Repli explicite Claude Desktop : décision pure, sans dépendance Electron
 // (testée par tests/claude-desktop-usage.test.cjs). La lecture directe peut être
@@ -338,12 +338,17 @@ function notify() {
     }
   }
 }
-async function syncOne(id) {
+async function syncOne(id, { force = true } = {}) {
   if (disconnecting.has(id)) throw new Error('Déconnexion en cours.');
   if (busy.has(id)) { await busy.get(id); return publicState(); }
   const p = provider(id);
   if (!isTracked(p)) throw new Error(p.subscriptionStatus === 'expired' ? 'Cet abonnement est expiré. Réactive-le dans sa fiche pour reprendre la synchronisation.' : 'Ce service est en pause.');
   if (!isConnected(p)) throw new Error('Connecte ce service dans Connexions.');
+  // Disjoncteur : après une panne transitoire, ne pas marteler le fournisseur.
+  // Une action manuelle (« Tester ») force une tentative immédiate.
+  if (!force && breakerOpen(state.connectorHealth?.[id])) {
+    return publicState();
+  }
   const work = (async () => {
     p.lastAttempt = new Date().toISOString();
     try {
@@ -376,8 +381,8 @@ async function syncOne(id) {
   try { await work; } finally { busy.delete(id); broadcast(); }
   return publicState();
 }
-async function syncAll() {
-  await Promise.allSettled(state.providers.filter(p => isTracked(p) && isConnected(p)).map(p => syncOne(p.id)));
+async function syncAll({ force = false } = {}) {
+  await Promise.allSettled(state.providers.filter(p => isTracked(p) && isConnected(p)).map(p => syncOne(p.id, { force })));
   return publicState();
 }
 function showMain() {
@@ -846,8 +851,8 @@ function registerIpc() {
       provider(id).error = null; await persist(); broadcast(); return publicState();
     } finally { disconnecting.delete(id); }
   });
-  handle('sync:all', syncAll);
-  handle('sync:one', syncOne);
+  handle('sync:all', () => syncAll({ force: true }));
+  handle('sync:one', (id, options = {}) => syncOne(id, { force: options?.force !== false }));
   handle('settings:update', async patch => {
     if (typeof patch.autoRefresh !== 'boolean' || typeof patch.notifications !== 'boolean' || !Number.isFinite(patch.lowBalance) || patch.lowBalance < 0 || patch.lowBalance > 10000 || !['light', 'dark', 'system'].includes(patch.theme)) throw new Error('Réglages invalides.');
     const resumeClaude = patch.autoRefresh && !state.settings.autoRefresh;
@@ -916,7 +921,7 @@ else {
       quickWindow.on('blur', () => quickWindow.hide());
       await quickWindow.loadFile(uiPath, { query: { mode: 'quick' } });
       tray = new Tray(nativeImage.createFromPath(path.join(__dirname, 'assets/icon.png')));
-      tray.setContextMenu(Menu.buildFromTemplate([{ label: 'Ouvrir Lasmium TOKENS-HUB', click: showMain }, { label: 'Synchroniser', click: () => syncAll().catch(error => console.error('Synchronisation manuelle :', error)) }, { type: 'separator' }, { label: 'Quitter', click: () => app.quit() }]));
+      tray.setContextMenu(Menu.buildFromTemplate([{ label: 'Ouvrir Lasmium TOKENS-HUB', click: showMain }, { label: 'Synchroniser', click: () => syncAll({ force: true }).catch(error => console.error('Synchronisation manuelle :', error)) }, { type: 'separator' }, { label: 'Quitter', click: () => app.quit() }]));
       tray.on('click', toggleQuick); tray.on('double-click', showMain);
       broadcast();
       stopClaudeWatcher = claudeDesktop.watchClaudeDesktopUsage(() => {

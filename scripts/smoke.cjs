@@ -979,6 +979,7 @@ const fontBytes = await fs.readFile(fontFile);
       assert.equal(grok.snapshot.updatedAt, before.updatedAt, 'une dérive ne doit pas remplacer le dernier relevé');
       assert.equal(grok.health?.state, 'drift');
       assert.equal(grok.health?.error?.code, 'SCHEMA_DRIFT');
+      assert.ok(grok.health?.error?.retryAt, 'une dérive doit programmer une nouvelle tentative espacée');
       assert.match(grok.health?.error?.message || '', /invalide|conservé/i);
       await desktop.evaluate(() => {
         const transport = process.mainModule.require('./lib/account-browser.cjs');

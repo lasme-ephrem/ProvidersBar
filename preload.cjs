@@ -16,7 +16,7 @@ contextBridge.exposeInMainWorld('lasmium', {
   enableClaudeLive: () => ipcRenderer.invoke('claude:enable-live'),
   disconnect: id => ipcRenderer.invoke('provider:disconnect', id),
   syncAll: () => ipcRenderer.invoke('sync:all'),
-  syncOne: id => ipcRenderer.invoke('sync:one', id),
+  syncOne: (id, options = {}) => ipcRenderer.invoke('sync:one', id, options),
   updateSettings: patch => ipcRenderer.invoke('settings:update', patch),
   exportData: () => ipcRenderer.invoke('export'),
   getAppInfo: () => ipcRenderer.invoke('app:info'),

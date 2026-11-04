@@ -344,7 +344,7 @@ document.addEventListener('click', async event => {
       const provider = state.providers.find(item => item.id === id);
       button.disabled = true;
       try {
-        state = await api.syncOne(id);
+        state = await api.syncOne(id, { force: true });
         const updated = state.providers.find(item => item.id === id);
         toast(updated?.error
           ? `${updated.name} : ${updated.error}`
