@@ -1,5 +1,19 @@
 # Historique des versions
 
+## 0.6.2 — 4 novembre 2026
+
+Second correctif d'extraction, découvert lors du test réel depuis la release
+GitHub.
+
+- L'entrée racine `./` des archives `tar` est ignorée.
+- Les fichiers `.asar` sont écrits dans un fichier temporaire puis renommés.
+  Electron patche `fs` et refuse d'écrire directement un chemin `.asar`
+  (« Invalid package »), ce qui interrompait l'extraction de
+  `resources/default_app.asar`.
+- Validation par extraction de l'archive de release publique dans Electron,
+  puis par le flux complet 0.6.0 → 0.6.2 avec préservation de `data/`.
+- 269 tests.
+
 ## 0.6.1 — 4 novembre 2026
 
 Correctif indispensable à la mise à jour automatique.

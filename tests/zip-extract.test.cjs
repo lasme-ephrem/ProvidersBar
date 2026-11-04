@@ -42,3 +42,15 @@ test('une entrée racine ./ produite par tar est ignorée sans bloquer l’extra
     assert.equal(fs.readFileSync(path.join(dest, 'app', 'main.cjs'), 'utf8'), 'ok');
   });
 });
+
+test('un fichier .asar est extrait sous son nom définitif', { skip: process.platform !== 'win32' }, () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'lasmium-zip-asar-'));
+  const zip = path.join(root, 'update.zip');
+  execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command',
+    `Add-Type -AssemblyName System.IO.Compression.FileSystem; $z=[System.IO.Compression.ZipFile]::Open('${zip}','Create'); $e=$z.CreateEntry('resources/default_app.asar'); $w=New-Object System.IO.StreamWriter($e.Open()); $w.Write('asar-content'); $w.Dispose(); $z.Dispose()`]);
+  const dest = path.join(root, 'dest');
+  return extractZip(zip, dest).then(result => {
+    assert.equal(result.files, 1);
+    assert.equal(fs.readFileSync(path.join(dest, 'resources', 'default_app.asar'), 'utf8'), 'asar-content');
+  });
+});
