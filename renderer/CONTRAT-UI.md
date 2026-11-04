@@ -21,20 +21,39 @@ signalé au Lead avant modification.
 | `../lib/resource-levels.js` | seuils et libellés de niveau (étendu) | ligne 13 |
 | `renderer/ui-core.js` | échappement, formatage, icônes, thème, focus, toasts, niveaux | ligne 14 |
 | `renderer/reset-ui.js` | `resetMarkup` / `resetForm` (restructuré) | ligne 15 |
-| `renderer/views.js` | toutes les vues, fiches et widget compact | ligne 16 |
-| `renderer/app.js` | état, événements, boucle de rendu, actions | ligne 17 |
+| `renderer/views-shell.js` | coquille : `NAV_LABELS`, `brand`, `heading`, `syncButton`, `nav`, `shell`, `resourceLegend`, `stats`, `toolbar` | ligne 16 |
+| `renderer/views-cards.js` | cartes fournisseur : `statusBadge`, santé des connexions (`healthPanel`), groupes de quotas et niveaux (`providerResourceLevel`), notices, réserve Ollama, favoris, `card` / `expiredCard`, `filteredCards` | ligne 17 |
+| `renderer/views-pages.js` | pages `overview`, `subscriptions`, `connections`, `historyPage` (graphe), `settingsPage` (section mises à jour), champs de formulaire (`inputField`, `selectField`) et fiche (`dialogMarkup`, onglets, corps de connexion) | ligne 18 |
+| `renderer/views-quick.js` | widget compact : faits (`quickSubscriptionFacts`, `quickApiFacts`), `quickAccountRow`, `quickHeader` | ligne 19 |
+| `renderer/app.js` | état, événements, boucle de rendu, actions | ligne 20 |
+
+`renderer/views.js` **a été découpé** en quatre fichiers `views-*.js` regroupés par
+responsabilité (déplacement pur : aucune fonction renommée, aucune signature changée,
+rendu identique vérifié avant/après dans Chromium). Chaque fichier commence par un
+commentaire d'en-tête qui liste son rôle et les scripts dont il dépend.
 
 `renderer/strategy-ui.js` et `renderer/strategy.css` **ont été supprimés** en 0.3.4
 avec toute la fonctionnalité d'ordre de consommation ; `../lib/usage-strategy.js`
 n'est plus chargé par le renderer (le moteur reste côté `lib/` pour les tests et
 l'export, mais l'UI ne l'appelle plus).
 
-Ordre à respecter : `ui-core.js` avant `reset-ui.js` et `views.js` ;
-`views.js` avant `app.js`. Aucun script inline, aucun `eval`, aucune dépendance.
+Ordre à respecter : `ui-core.js` avant `reset-ui.js` et les `views-*.js` ;
+`views-shell.js` (constantes `NAV_LABELS` et `brand`) avant `views-cards.js`,
+`views-pages.js` et `views-quick.js` ; les quatre `views-*.js` avant `app.js`.
+Tous les scripts du renderer partagent la portée globale (aucun module, aucun
+bundler) : les fonctions des `views-*.js` ne sont appelées qu'au rendu, jamais au
+chargement, de sorte qu'aucune référence croisée entre ces fichiers (`filteredCards`
+→ `card`, `overview` → `stats`/`toolbar`/`filteredCards`, `quickHeader` → `brand`,
+`resetForm` → `inputField`) n'est résolue avant `start()` dans `app.js`. Aucun script
+inline, aucun `eval`, aucune dépendance.
 
-**Routes d'aperçu :** `scripts/preview.cjs` sert déjà `/ui-core.js`, `/views.js`,
-`styles.css`, `theme.css`, `theme-init.js`, `reset-ui.js`, les deux scripts `lib/` et
-les assets ; les routes `strategy*` et `usage-strategy` ont été retirées côté Lead.
+**Routes d'aperçu :** `scripts/preview.cjs` sert `/ui-core.js`, `/views-shell.js`,
+`/views-cards.js`, `/views-pages.js`, `/views-quick.js`, `styles.css`, `theme.css`,
+`theme-init.js`, `reset-ui.js`, les deux scripts `lib/` et les assets ; la liste est
+fermée : tout nouveau `<script src>` de `index.html` doit y être ajouté
+(`tests/quality.test.cjs` vérifie que chaque script existe, est couvert par
+`scripts/check-syntax.cjs` et possède sa route). Les routes `strategy*` et
+`usage-strategy` ont été retirées côté Lead.
 `scripts/app-resources.cjs` copie tout `renderer/` : rien à ajouter pour le portable.
 
 ---
@@ -546,7 +565,8 @@ Aucun changement attendu : `.dialog-body`, `.connection-success`,
 
 ### `scripts/preview.cjs`
 
-Le Lead a déjà ajouté `/ui-core.js`, `/views.js` et la route du fichier de police.
+Le Lead a déjà ajouté `/ui-core.js`, les routes `/views-*.js` (quatre fichiers depuis
+le découpage de `views.js`) et la route du fichier de police.
 **Un correctif MIME reste nécessaire** : `'woff2': 'font/woff2'` dans le mapping des
 `Content-Type`, sinon la route de la police répond 500 (vérifié) et le navigateur
 utilise le repli Segoe UI. Aucune modification du renderer n'est requise.
@@ -563,8 +583,10 @@ utilise le repli Segoe UI. Aucune modification du renderer n'est requise.
 ### `scripts/quality.test.cjs` (qualite-tests)
 
 Si ce test vérifie la taille/les lignes du renderer, cibles actuelles :
-`renderer/app.js` 561 lignes (max 112 car./ligne), `renderer/views.js` 1 194 lignes
-(max ~142), `renderer/ui-core.js` 310 lignes, `renderer/styles.css` 1 315 lignes,
+`renderer/app.js` 561 lignes (max 112 car./ligne), les vues découpées en
+`renderer/views-shell.js` (≈ 146 lignes), `views-cards.js` (≈ 476), `views-pages.js`
+(≈ 590) et `views-quick.js` (≈ 125) (max ~142 car./ligne),
+`renderer/ui-core.js` 310 lignes, `renderer/styles.css` 1 315 lignes,
 `renderer/theme.css` 122. `renderer/strategy-ui.js` et `renderer/strategy.css`
 n'existent plus ; `lib/usage-strategy.js` a également été retiré du dépôt par la
 vague produit. La CSP de `index.html` n'a pas changé.
@@ -575,7 +597,7 @@ vague produit. La CSP de `index.html` n'a pas changé.
 
 | Vérification | Commande / méthode | Résultat |
 |---|---|---|
-| Syntaxe JS | `node --check` sur `app.js`, `views.js`, `ui-core.js`, `reset-ui.js`, `theme-init.js` | OK |
+| Syntaxe JS | `node --check` sur `app.js`, `views-shell.js`, `views-cards.js`, `views-pages.js`, `views-quick.js`, `ui-core.js`, `reset-ui.js`, `theme-init.js` | OK |
 | Tests ciblés | `node --test tests/resource-levels.test.cjs` | 6/6 verts |
 | Rendu statique | harnais Node + `vm` avec DOM factice : `overview`, `subscriptions`, `connections`, `historyPage`, `settingsPage`, 10 `quickAccountRow`, 40 `dialogMarkup`, `shell` | aucune exception ; aucun `undefined`/`NaN` ; aucun appel `UsageStrategy` |
 | Application | harnais `vm` chargeant `app.js` avec API simulée | rendu initial, `openDetail`, changement de page, `receiveState`, effacement, repli Claude sans erreur |

@@ -12,7 +12,8 @@ routes['/lib/resource-levels.js']='lib/resource-levels.js';
 // plus de routes strategy-ui/usage-strategy dans l'aperçu.
 Object.assign(routes, {'/lib/quota-resets.js':'lib/quota-resets.js','/reset-ui.js':'renderer/reset-ui.js'});
 // Renderer refonte 0.3.0 : les vues et helpers sont chargés avant app.js.
-Object.assign(routes, {'/ui-core.js':'renderer/ui-core.js','/views.js':'renderer/views.js'});
+// Les vues sont découpées en quatre fichiers (coquille, cartes, pages, widget).
+Object.assign(routes, {'/ui-core.js':'renderer/ui-core.js','/views-shell.js':'renderer/views-shell.js','/views-cards.js':'renderer/views-cards.js','/views-pages.js':'renderer/views-pages.js','/views-quick.js':'renderer/views-quick.js'});
 // Police empaquetée (aucun téléchargement au lancement).
 routes['/assets/fonts/InterVariable.woff2'] = 'assets/fonts/InterVariable.woff2';
 routes['/assets/fonts/SoraVariable.woff2'] = 'assets/fonts/SoraVariable.woff2';
