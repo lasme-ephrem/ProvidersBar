@@ -1,0 +1,27 @@
+name: Qualité
+
+on:
+  push:
+    branches: [main, 'chantier/**']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run verify
+      - run: npm test
+      - run: npm run connectors:canary
+      - name: Fixtures de diagnostic sans secret
+        run: node --test tests/diagnostic-bundle.test.cjs tests/state-backups.test.cjs tests/connector-packs.test.cjs

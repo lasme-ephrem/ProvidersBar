@@ -19,6 +19,7 @@ contextBridge.exposeInMainWorld('lasmium', {
   syncOne: (id, options = {}) => ipcRenderer.invoke('sync:one', id, options),
   updateSettings: patch => ipcRenderer.invoke('settings:update', patch),
   exportData: () => ipcRenderer.invoke('export'),
+  exportDiagnostic: () => ipcRenderer.invoke('diagnostic'),
   getAppInfo: () => ipcRenderer.invoke('app:info'),
   eraseData: () => ipcRenderer.invoke('data:erase'),
   showMain: () => ipcRenderer.invoke('window:main'),

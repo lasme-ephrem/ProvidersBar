@@ -142,3 +142,15 @@ test('OpenRouter keeps a real overdraft and rejects impossible balances', () => 
   assert.throws(() => parseResponse('runinfra', { object: 'credits', currency: 'usd', balance_cents: 100, available_cents: 100, held_cents: 0, as_of: '27/08/2026 10:41' }), /fuseau/);
   assert.equal(parseResponse('runinfra', { object: 'credits', currency: 'usd', balance_cents: 0, available_cents: 0, held_cents: 0, as_of: '2026-08-27T10:41:12+02:00' }).updatedAt, '2026-08-27T08:41:12.000Z');
 });
+
+
+test('un endpoint de pack signé remplace la route par défaut, sans accepter HTTP', async () => {
+  const seen = [];
+  const result = await fetchUsage('deepseek', 'test-pack-endpoint', async url => {
+    seen.push(url);
+    return success();
+  }, { ...options(), endpoint: 'https://api.deepseek.com/v2/balance' });
+  assert.deepEqual(seen, ['https://api.deepseek.com/v2/balance']);
+  assert.equal(result.balances[0].remaining, 12.5);
+  await assert.rejects(fetchUsage('deepseek', 'test-pack-http', async () => success(), options({ endpoint: 'http://api.deepseek.com/balance' })), /HTTPS sans identifiants/);
+});

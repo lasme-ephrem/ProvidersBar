@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "provider": "openrouter",
+  "version": "2026.11.1",
+  "minApp": "0.4.0",
+  "parserVersion": "openrouter-api-v1",
+  "strategies": [
+    "api-key"
+  ],
+  "endpoint": "https://openrouter.ai/api/v1/credits",
+  "signature": "kM7HaDipJQuutBszRbGD9xj4wc8Tpwtm1qC3gW44YxBg9JOPRaNv3ujZy5SKP+Z52aecvqwsVR1rPJAtz6oqBA=="
+}

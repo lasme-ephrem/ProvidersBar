@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "provider": "deepseek",
+  "version": "2026.11.1",
+  "minApp": "0.4.0",
+  "parserVersion": "deepseek-api-v1",
+  "strategies": [
+    "api-key"
+  ],
+  "endpoint": "https://api.deepseek.com/user/balance",
+  "signature": "72i2ha1IMHBFRHvQDuPgkBV+R3os1J0xanQvpv3bnytVaJBaS5Shfgm1J1lyL1690mBbkCrC6quuL2qBWnN/CQ=="
+}

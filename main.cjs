@@ -13,8 +13,11 @@ const { pathToFileURL } = require('node:url');
 const { createSeed } = require('./lib/seed.cjs');
 const { MAX_API_COOLDOWNS } = require('./lib/migrations.cjs');
 const { createDataStore, HISTORY_LIMIT } = require('./lib/data-store.cjs');
+const { createBackupManager } = require('./lib/state-backups.cjs');
+const { createLogger } = require('./lib/logger.cjs');
 const { secureWindow, secureAccountWindow, applyDataDirAcl, purgeLeftovers } = require('./lib/window-security.cjs');
 const { sanitizeStateForExport } = require('./lib/privacy-export.cjs');
+const { buildDiagnosticBundle } = require('./lib/diagnostic-bundle.cjs');
 const antigravityTransport = require('./lib/antigravity-account.cjs');
 const { validatePatch, manualSnapshot, summary, daysUntil, isTracked, expireSubscriptions, asOllamaFreeSnapshot } = require('./lib/domain.cjs');
 const { fetchUsage } = require('./lib/connectors.cjs');
@@ -28,6 +31,7 @@ const { createOpenAiAccount } = require('./lib/openai-account.cjs');
 const openAiTransport = require('./lib/openai-account.cjs');
 const { createSubscriptionController } = require('./lib/subscription-controller.cjs');
 const { assertSnapshot, healthSuccess, healthFailure, publicHealth, strategyFor, breakerOpen } = require('./lib/connector-contract.cjs');
+const { loadPacks, packFor, packSummary } = require('./lib/connector-packs.cjs');
 const claudeDesktop = require('./lib/claude-desktop-usage.cjs');
 const claudeLive = require('./lib/claude-live-usage.cjs');
 const { CREDENTIAL_PATH } = require('./lib/claude-connection.cjs');
@@ -40,6 +44,8 @@ if (process.platform === 'win32') app.setAppUserModelId('com.lasmium.tokenshub')
 const dataDir = (process.env.LASMIUM_DATA_DIR || process.env.PROVIDERSBAR_DATA_DIR) || (app.isPackaged ? path.join(path.dirname(process.execPath), 'data') : path.join(__dirname, '.local'));
 app.setPath('userData', dataDir);
 const store = createDataStore({ dataDir });
+const logger = createLogger({ dataDir });
+const backups = createBackupManager({ dataDir, logger });
 // Origines autorisées dans les fenêtres de connexion Electron. Seules les deux
 // fenêtres internes (OrcaRouter, Ollama) utilisent cette liste ; Claude, Grok,
 // Z.ai et OpenAI s'authentifient dans un Chrome/Edge externe ou via Codex.
@@ -87,6 +93,8 @@ const cooldowns = {
 // OAuth est créé par la même factory, donc sans globalThis.fetch.
 const claudeReader = claudeLive.createClaudeLiveReader({ fetchImpl: apiFetch });
 let quickDesiredHeight = 660;
+let connectorPacks = new Map();
+let connectorPackErrors = [];
 let orcaLoginWindow;
 let orcaDetectionTimer, orcaVerification;
 let orcaConnection = { status: 'idle', message: '' };
@@ -247,7 +255,10 @@ const openAiAccount = createOpenAiAccount({
 });
 
 function persist() {
-  return store.persist(state);
+  // La copie de sécurité est faite avant l'écriture, au plus toutes les 6 h ;
+  // une erreur de sauvegarde ne doit jamais empêcher la persistance.
+  return backups.maybeBackup().catch(error => { logger.warn(`Sauvegarde d’état : ${error.message}`); })
+    .then(() => store.persist(state));
 }
 function appInfo() {
   return {
@@ -272,7 +283,25 @@ function publicState() {
   const { history, ...visibleState } = state;
   // L'ordre de consommation a été retiré : aucun `strategy` n'est exposé.
   delete visibleState.strategy;
-  return { ...visibleState, app: publicAppInfo(), historyCount: history.length, historyRevision: history[0]?.id || null, providers: state.providers.map(p => ({ ...p, ...(p.id === 'ollama' && p.snapshot ? { snapshot: { ...p.snapshot, usageCredits: lastKnownUsageCredits(p.snapshot, history) } } : {}), connector: connectionInfo(p.id), connected: isConnected(p), syncing: busy.has(p.id), health: publicHealth(state.connectorHealth?.[p.id], p.snapshot), ...(p.id === 'antigravity' ? { accountConnection: antigravityConnection } : p.id === 'claude' ? { accountConnection: claudeConnection } : p.id === 'openai' ? { accountConnection: openAiAccount.info() } : p.id === 'orcarouter' ? { accountConnection: orcaConnection } : p.id === 'ollama' ? { accountConnection: ollamaConnection } : connectors[p.id]?.browserAccount ? { accountConnection: subscriptionAccounts.info(p.id) } : {}) })), summary: summary(state.providers), desktop: true };
+  return { ...visibleState, app: publicAppInfo(), connectorPacks: packSummary(connectorPacks), connectorPackErrors: connectorPackErrors.map(({ file, provider, reason }) => ({ file, provider: provider || null, reason })), historyCount: history.length, historyRevision: history[0]?.id || null, providers: state.providers.map(p => ({ ...p, ...(p.id === 'ollama' && p.snapshot ? { snapshot: { ...p.snapshot, usageCredits: lastKnownUsageCredits(p.snapshot, history) } } : {}), connector: connectionInfo(p.id), connected: isConnected(p), syncing: busy.has(p.id), health: publicHealth(state.connectorHealth?.[p.id], p.snapshot), ...(p.id === 'antigravity' ? { accountConnection: antigravityConnection } : p.id === 'claude' ? { accountConnection: claudeConnection } : p.id === 'openai' ? { accountConnection: openAiAccount.info() } : p.id === 'orcarouter' ? { accountConnection: orcaConnection } : p.id === 'ollama' ? { accountConnection: ollamaConnection } : connectors[p.id]?.browserAccount ? { accountConnection: subscriptionAccounts.info(p.id) } : {}) })), summary: summary(state.providers), desktop: true };
+}
+async function loadConnectorPacks() {
+  try {
+    const publicKey = await fs.readFile(path.join(__dirname, 'lib', 'connector-packs-public.pem'), 'utf8');
+    const result = await loadPacks({
+      dirs: [path.join(__dirname, 'assets', 'connector-packs'), path.join(dataDir, 'connector-packs')],
+      publicKey,
+      appVersion: app.getVersion(),
+      providers: Object.keys(connectors),
+      // Un pack local non signé n'est accepté qu'en développement explicite.
+      allowUnsigned: !app.isPackaged && process.env.LASMIUM_ALLOW_UNSIGNED_PACKS === '1',
+    });
+    connectorPacks = result.packs;
+    connectorPackErrors = result.errors;
+  } catch (error) {
+    connectorPacks = new Map();
+    connectorPackErrors = [{ file: 'connector-packs', provider: null, reason: error.message }];
+  }
 }
 function broadcast() {
   for (const window of [mainWindow, quickWindow]) if (window && !window.isDestroyed()) window.webContents.send('state:changed', publicState());
@@ -314,6 +343,8 @@ function markHealthFailure(p, error) {
     strategy: strategyFor(p, connectors),
     error,
   });
+  const failure = state.connectorHealth[p.id].error;
+  if (failure) logger.warn(`Connecteur ${p.id} (${failure.code}) : ${failure.message}`);
 }
 function assumeOllamaFree(p) {
   // "Active" is the local tracking switch, not proof of a paid Ollama plan.
@@ -363,7 +394,7 @@ async function syncOne(id, { force = true } = {}) {
         let key;
         try { key = safeStorage.decryptString(Buffer.from(credentials.get(id), 'base64')); }
         catch { throw new Error('La clé enregistrée ne peut plus être déchiffrée sur ce compte Windows. Renseigne de nouveau la clé dans Connexions.'); }
-        record(p, await fetchUsage(id, key, apiFetch, { cooldowns }));
+        record(p, await fetchUsage(id, key, apiFetch, { cooldowns, endpoint: packFor(connectorPacks, id)?.endpoint }));
       }
     } catch (error) {
       p.error = error.message;
@@ -795,7 +826,7 @@ function registerIpc() {
     if (!safeStorage.isEncryptionAvailable()) throw new Error('Le chiffrement Windows est indisponible. La clé ne sera pas enregistrée.');
     // Validate access before replacing an existing, working credential.
     const work = (async () => {
-      const snapshot = await fetchUsage(id, key, apiFetch, { cooldowns });
+      const snapshot = await fetchUsage(id, key, apiFetch, { cooldowns, endpoint: packFor(connectorPacks, id)?.endpoint });
       const encrypted = safeStorage.encryptString(key.trim()).toString('base64');
       await credentials.set(id, encrypted);
       record(provider(id), snapshot); provider(id).lastAttempt = snapshot.updatedAt;
@@ -870,6 +901,25 @@ function registerIpc() {
     const document = sanitizeStateForExport(state, { version: app.getVersion() });
     await fs.writeFile(result.filePath, JSON.stringify(document, null, 2)); return true;
   });
+  handle('diagnostic', async () => {
+    const result = await dialog.showSaveDialog(mainWindow, {
+      title: 'Exporter un diagnostic',
+      defaultPath: `Lasmium-diagnostic-${new Date().toISOString().slice(0, 10)}.json`,
+      filters: [{ name: 'Diagnostic JSON', extensions: ['json'] }],
+    });
+    if (result.canceled) return false;
+    const bundle = buildDiagnosticBundle({
+      app: { name: app.getName(), version: app.getVersion(), electron: process.versions.electron, packaged: app.isPackaged },
+      state: { ...state, providers: publicState().providers },
+      packs: packSummary(connectorPacks),
+      packErrors: connectorPackErrors,
+      backups: await backups.list(),
+      versions: { node: process.version },
+      platform: process.platform,
+    });
+    await fs.writeFile(result.filePath, `${JSON.stringify(bundle, null, 2)}\n`, { mode: 0o600 });
+    return true;
+  });
   handle('app:info', async () => appInfo());
   handle('data:erase', eraseAllData);
   handle('window:main', showMain);
@@ -897,6 +947,11 @@ else {
       if (acl.warning) console.warn(acl.warning);
       const loaded = await store.load();
       state = loaded.state;
+      await loadConnectorPacks();
+      await backups.maybeBackup({ force: true, reason: 'startup' }).catch(error => {
+        logger.warn(`Sauvegarde de démarrage : ${error.message}`);
+      });
+      logger.info(`Démarrage ${app.getVersion()} · ${connectorPacks.size} pack(s) · ${state.providers.length} fournisseurs`);
       // Cooldowns 429 expirés : purgés dès le chargement, avant toute lecture.
       cooldowns.prune(Date.now());
       // Restes d'une exécution interrompue : `.tmp`, port de diagnostic obsolète,

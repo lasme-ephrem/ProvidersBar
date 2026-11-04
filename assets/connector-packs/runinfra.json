@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "provider": "runinfra",
+  "version": "2026.11.1",
+  "minApp": "0.4.0",
+  "parserVersion": "runinfra-api-v1",
+  "strategies": [
+    "api-key"
+  ],
+  "endpoint": "https://api.runinfra.ai/v1/credits",
+  "signature": "paD9Eje8PpzlFeECoVBgAIeJNnBz0dYv2V8EMv7E0TUBM0eYiEKlDtVTB/GyaF3/44gZk/UxgY1FxsdqSgNJCg=="
+}

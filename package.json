@@ -19,7 +19,12 @@
     "test:claude:desktop": "node scripts/smoke-claude.cjs",
     "package:release": "node scripts/package.cjs --release",
     "release:artifacts": "node scripts/release-artifacts.cjs",
-    "verify:connections": "node scripts/verify-connections.cjs"
+    "verify:connections": "node scripts/verify-connections.cjs",
+    "connectors:key": "node scripts/generate-connector-pack-key.cjs",
+    "connectors:sign": "node scripts/sign-connector-pack.cjs",
+    "connectors:canary": "node scripts/connector-canary.cjs",
+    "state:backup": "node scripts/state-backup.cjs",
+    "diagnostic": "node scripts/diagnostic-bundle.cjs"
   },
   "devDependencies": {
     "electron": "44.10.2",

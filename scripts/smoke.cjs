@@ -173,6 +173,11 @@ async function main() {
   assert.equal(await page.locator('.health-panel').count(), 1);
   assert.equal(await page.locator('.health-row').count(), 10);
   assert.match(await page.locator('.health-panel').innerText(), /Santé des connexions/);
+  assert.match(await page.locator('.health-packs').innerText(), /Packs signés actifs/);
+  const packState = await page.evaluate(() => window.lasmium.getState());
+  assert.equal(packState.connectorPacks.length, 3);
+  assert.ok(packState.connectorPacks.every(pack => pack.version && pack.parserVersion));
+  assert.equal(packState.connectorPackErrors.length, 0);
   await page.screenshot({ path: path.join(results, 'connections.png'), fullPage: true });
   await page.locator('[data-nav="overview"]').click();
   await page.locator('#search').fill('deepseek');

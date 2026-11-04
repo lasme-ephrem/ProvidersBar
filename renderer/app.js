@@ -320,6 +320,9 @@ async function runAction(action, button) {
   if (action === 'export') {
     if (await api.exportData()) toast('Données exportées, sans les clés.');
   }
+  if (action === 'diagnostic') {
+    if (await api.exportDiagnostic()) toast('Diagnostic exporté, sans clés ni soldes.');
+  }
 }
 
 /* ------------------------------------------------------------------ *

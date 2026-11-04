@@ -287,7 +287,19 @@ function healthPanel() {
     + `<h2 id="health-title">Santé des connexions</h2>`
     + `<p class="hint">Chaque lecture est typée : une réponse illisible ne remplace jamais le dernier relevé sain.</p></div>`
     + `<span class="health-summary"><strong>${healthy}/${connected.length}</strong> à jour</span></div>`
-    + `<div class="health-list">${rows.join('')}</div></section>`;
+    + `<div class="health-list">${rows.join('')}</div>`
+    + packStatusMarkup()
+    + `</section>`;
+}
+
+function packStatusMarkup() {
+  const packs = Array.isArray(state.connectorPacks) ? state.connectorPacks : [];
+  const errors = Array.isArray(state.connectorPackErrors) ? state.connectorPackErrors : [];
+  const active = packs.map(pack => `${pack.provider} ${pack.version}`).join(' · ');
+  return `<p class="health-packs">${packs.length
+    ? `Packs signés actifs : ${escapeHtml(active)}.`
+    : 'Aucun pack signé actif ; les connecteurs intégrés restent utilisés.'}`
+    + `${errors.length ? ` ${errors.length} pack(s) refusé(s) : ${escapeHtml(errors[0].reason)}.` : ''}</p>`;
 }
 
 /* ------------------------------------------------------------------ *
@@ -849,7 +861,9 @@ function settingsPage({ version = null, electronVersion = null, packaged = null,
     + `Fermer la fenêtre laisse Lasmium TOKENS-HUB accessible près de l’horloge ; un clic droit sur `
     + `l’icône permet de quitter.</p>`
     + `<div class="data-actions"><button type="button" class="secondary" data-action="export">`
-    + `${icon('download', 16)} Exporter mes données</button>${eraseButton}</div>`
+    + `${icon('download', 16)} Exporter mes données</button>`
+    + `<button type="button" class="secondary" data-action="diagnostic">`
+    + `${icon('info', 16)} Diagnostic</button>${eraseButton}</div>`
     + `<p class="form-error" role="alert" id="erase-error"></p></section>`;
 }
 

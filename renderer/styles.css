@@ -808,6 +808,14 @@ html[data-theme="light"] .card { background: var(--surface); }
 }
 .health-age { color: var(--text-soft); font-size: 9.5px; text-align: right; white-space: nowrap; }
 .health-test { min-height: 26px; padding: 4px 9px; font-size: 10px; }
+.health-packs {
+  padding: 8px 17px;
+  border-top: 1px solid var(--border);
+  background: var(--surface-inset);
+  color: var(--text-soft);
+  font-size: 9.5px;
+  line-height: 1.5;
+}
 .health-row[data-state="ok"] .health-dot { background: var(--success); box-shadow: 0 0 0 3px var(--success-soft); }
 .health-row[data-state="ok"] .health-state { border-color: rgba(37, 113, 61, 0.24); background: var(--success-soft); color: var(--success); }
 .health-row[data-state="stale"] .health-dot,
