@@ -259,7 +259,7 @@ Vérifiés par audit statique sur toutes les vues :
   réellement ancien), `.quick-footer`. Plus de `.quick-value`, `.quick-segment`
   ni `.quick-extra` : toutes les fenêtres sont rendues.
 - Textes conservés mot pour mot quand le smoke les vérifie (hors stratégie) :
-  « Expiré · désactivé », « En pause », « Synchronisation… », « Relevé ancien »,
+  « Abonnement terminé », « En pause », « Synchronisation… », « Relevé ancien »,
   « Connexion à vérifier », « Quota indisponible », « Free · 0 $ »,
   « Déconnecté · dernier relevé », « Synchronisé », « Saisie manuelle »,
   « Compte connecté », « À connecter », « Limite … atteinte »,

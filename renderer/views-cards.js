@@ -17,7 +17,7 @@
  * ------------------------------------------------------------------ */
 function statusBadge(provider) {
   if (provider.subscriptionStatus === 'expired' && !ollamaFree(provider)) {
-    return '<span class="badge badge-error">Expiré · désactivé</span>';
+    return '<span class="badge">Abonnement terminé</span>';
   }
   if (!isTracked(provider)) return '<span class="badge badge-warn">En pause</span>';
   if (provider.syncing) return '<span class="badge">Synchronisation…</span>';
@@ -365,11 +365,11 @@ function expiredCard(provider) {
     + ` aria-label="Configurer ${escapeHtml(provider.name)}"></button>`
     + `<div class="card-top">${logo(provider)}`
     + `<div class="provider-title"><h3>${escapeHtml(provider.name)}</h3>`
-    + `<p>${escapeHtml(provider.plan && provider.plan !== provider.name ? provider.plan : 'Abonnement')} · expiré</p></div>`
+    + `<p>${escapeHtml(provider.plan && provider.plan !== provider.name ? provider.plan : 'Abonnement')} · terminé</p></div>`
     + `${favoriteButton(provider)}</div>`
     + `<div class="card-content"><p class="expired-title">Abonnement terminé</p>`
     + `<p class="expired-message">${message}</p>`
-    + `<div class="card-bottom"><span class="card-meta">Suivi et recommandations arrêtés</span>${status}</div>`
+    + `<div class="card-bottom"><span class="card-meta">Exclu des coûts · suivi arrêté</span>${status}</div>`
     + `</div></article>`;
 }
 

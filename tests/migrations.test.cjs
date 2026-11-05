@@ -209,3 +209,19 @@ test('0.6.9 : la fiche ne garde que forfait, prix, fréquence et échéance, san
   assert.equal(state.providers.find(p => p.id === 'openai').notes, 'note', 'l’état d’origine n’est pas modifié');
   assert.deepEqual(simplifySubscriptionFields(result.state), { changed: false, state: result.state }, 'migration idempotente');
 });
+
+test('0.6.8 : une ancienne session Claude Desktop devient la connexion à l’abonnement dès le chargement', () => {
+  const { convertClaudeSession } = require('../lib/migrations.cjs');
+  const state = createSeed();
+  const claude = state.providers.find(p => p.id === 'claude');
+  claude.accountSession = { kind: 'claude-desktop-local', resumeLiveAfter: '2026-11-05T12:00:00.000Z' };
+  claude.snapshot = { source: 'api', updatedAt: 't', quotaWindows: [] };
+  const result = convertClaudeSession(state);
+  assert.equal(result.changed, true);
+  const migrated = result.state.providers.find(p => p.id === 'claude');
+  assert.deepEqual(migrated.accountSession, { kind: 'claude-live-local' });
+  assert.equal(migrated.snapshot, claude.snapshot, 'le dernier relevé reste affiché');
+  assert.deepEqual(convertClaudeSession(result.state), { changed: false, state: result.state });
+  const untouched = createSeed();
+  assert.equal(convertClaudeSession(untouched).changed, false, 'Claude non connecté : rien à convertir');
+});

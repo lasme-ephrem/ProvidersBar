@@ -517,7 +517,8 @@ document.addEventListener('submit', async event => {
         renewalDate: get('renewalDate') || null,
       };
       // Abonnement terminé : « Réactiver » confirme le renouvellement (échéance future exigée).
-      const reactivate = provider.subscriptionStatus === 'expired';
+      // Ollama en Free n'est pas « réactivé » à la main : son site fait foi.
+      const reactivate = provider.subscriptionStatus === 'expired' && provider.id !== 'ollama';
       if (reactivate) Object.assign(patch, { subscriptionStatus: 'active', confirmRenewal: true });
       state = await api.updateProvider(dialogId, patch);
       document.getElementById('detail-dialog').close();

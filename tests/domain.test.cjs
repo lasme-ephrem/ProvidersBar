@@ -1,7 +1,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { createSeed } = require('../lib/seed.cjs');
-const { summary, renewalOverdue, validatePatch, daysUntil, dateOnly, isTracked, expireSubscriptions } = require('../lib/domain.cjs');
+const { summary, renewalOverdue, validatePatch, daysUntil, dateOnly, isTracked, expireSubscriptions, applyOllamaPlan } = require('../lib/domain.cjs');
 const { fetchUsage, parseResponse } = require('../lib/connectors.cjs');
 
 test('Selected inventory has 10 unique services, keeping six subscription services and four APIs', () => {
@@ -69,23 +69,50 @@ test('Expired subscription is excluded without losing its historic price or rene
   assert.equal(isTracked({...p,active:true,subscriptionStatus:'active'}),true);
 });
 
-test('Only one-time payments (and Ollama, back to Free) expire at their date; Ollama keeps its purchased credits',()=>{
+test('Only one-time payments expire at their date; a monthly Ollama becomes « à vérifier » like the others',()=>{
   const paid={id:'openai',type:'subscription',active:true,subscriptionStatus:'active',amount:20,currency:'USD',billingCycle:'monthly',renewalDate:'2026-09-28'};
   const once={id:'grok',type:'subscription',active:true,subscriptionStatus:'active',amount:35,currency:'USD',billingCycle:'one-time',renewalDate:'2026-09-28'};
-  const ollama={id:'ollama',type:'subscription',active:true,subscriptionStatus:'active',amount:18,currency:'USD',billingCycle:'monthly',renewalDate:'2026-09-28',snapshot:{source:'api',connectorVersion:'ollama-monthly-credits-v1',balances:[{currency:'USD',remaining:47.5}],usageCredits:{currency:'USD',remaining:2.98},quotaRemaining:79,resetAt:'2026-10-07T12:00:00Z',details:[{label:'Crédits inclus',amount:60,currency:'USD'}]}};
+  const ollama={id:'ollama',type:'subscription',active:true,subscriptionStatus:'active',amount:18,currency:'USD',billingCycle:'monthly',renewalDate:'2026-09-28',snapshot:{source:'api',connectorVersion:'ollama-monthly-credits-v1',planTier:'pro',balances:[{currency:'USD',remaining:47.5}],usageCredits:{currency:'USD',remaining:2.98},quotaRemaining:79}};
   const rows=[paid,once,ollama];
-  assert.equal(expireSubscriptions(rows,new Date(2026,8,28,23,59)),false);
+  assert.equal(expireSubscriptions(rows,new Date(2026,8,28,23,59)),true,'le forfait Ollama lu (Pro) renseigne le nom du forfait');
+  assert.equal(ollama.plan,'Pro');
   assert.equal(expireSubscriptions(rows,new Date(2026,8,29,0,1)),true);
   assert.equal(paid.subscriptionStatus,'active','un mensuel passe « à vérifier » sans expirer');assert.equal(paid.active,true);
   assert.equal(once.subscriptionStatus,'expired');assert.equal(once.active,false);
-  assert.equal(ollama.subscriptionStatus,'expired');assert.equal(ollama.active,true);
-  assert.equal(isTracked(ollama),true);
-  assert.deepEqual(summary(rows,new Date(2026,8,29,12)),{monthly:{USD:20},oneTime:{},oneTimeCount:0,nextOneTimeEnd:null,overdue:1,unpriced:0});
-  assert.deepEqual(ollama.snapshot.balances,[]);
-  assert.equal(ollama.snapshot.quotaRemaining,null);
-  assert.equal(ollama.snapshot.usageCredits.remaining,2.98);
+  assert.equal(ollama.subscriptionStatus,'active','Ollama payant renouvelé : toujours compté, jamais basculé en Free par la date');
+  assert.deepEqual(summary(rows,new Date(2026,8,29,12)),{monthly:{USD:38},oneTime:{},oneTimeCount:0,nextOneTimeEnd:null,overdue:2,unpriced:0});
+  assert.equal(ollama.snapshot.balances[0].remaining,47.5);
   assert.equal(expireSubscriptions(rows,new Date(2026,8,30)),false);
   assert.deepEqual(validatePatch({subscriptionStatus:'active',confirmRenewal:true,renewalDate:'2026-10-29'}),{subscriptionStatus:'active',confirmRenewal:true,renewalDate:'2026-10-29'});
+});
+test('Ollama follows the plan read on its site: Free counts 0 $, a paid plan counts its price',()=>{
+  const now=new Date(2026,10,5,12);
+  const ollama={id:'ollama',type:'subscription',active:true,subscriptionStatus:'active',plan:'Free',amount:null,currency:'USD',billingCycle:'unknown',renewalDate:'2026-11-17'};
+  const free={source:'api',planTier:'free',balances:[],usageCredits:{currency:'USD',remaining:1.05},quotaRemaining:100};
+  assert.equal(applyOllamaPlan(ollama,free,now),true);
+  assert.deepEqual([ollama.subscriptionStatus,ollama.active],['expired',true],'Free : suivi actif, hors coûts');
+  assert.equal(isTracked(ollama),true);
+  assert.deepEqual(summary([ollama],now),{monthly:{},oneTime:{},oneTimeCount:0,nextOneTimeEnd:null,overdue:0,unpriced:0},'Free n’est plus « à préciser »');
+  assert.equal(applyOllamaPlan(ollama,free,now),false,'idempotent');
+  // Reprise d'un forfait payant : détectée sur le site, comptée avec le prix saisi.
+  Object.assign(ollama,{amount:20,billingCycle:'monthly',renewalDate:'2026-12-05'});
+  assert.equal(applyOllamaPlan(ollama,{source:'api',planTier:'max'},now),true);
+  assert.deepEqual([ollama.subscriptionStatus,ollama.plan,'expiredAt' in ollama],['active','Max',false]);
+  assert.deepEqual(summary([ollama],now).monthly,{USD:20});
+  // « Je n'ai plus cet abonnement » : le site affiche encore le forfait payant
+  // jusqu'à la fin de la période réglée, sans le réactiver.
+  Object.assign(ollama,{subscriptionStatus:'expired',endedByUser:true});
+  assert.equal(applyOllamaPlan(ollama,{source:'api',planTier:'pro'},now),false);
+  assert.equal(ollama.subscriptionStatus,'expired');
+  // Fin réelle de la période : Free lu, l'arrêt choisi est levé.
+  assert.equal(applyOllamaPlan(ollama,free,now),true);
+  assert.equal('endedByUser' in ollama,false);
+  assert.equal(applyOllamaPlan(ollama,{source:'api',planTier:'paid'},now),true,'« paid » sans nom de forfait réactive sans renommer');
+  assert.deepEqual([ollama.subscriptionStatus,ollama.plan],['active','Max']);
+  // Hors Ollama, sans forfait lisible, relevé manuel ou forfait inconnu : rien.
+  for (const [p,snapshot] of [[{id:'claude'},free],[ollama,{source:'api'}],[ollama,{source:'manual',planTier:'free'}],[ollama,{source:'api',planTier:'enterprise'}],[ollama,null]]) {
+    assert.equal(applyOllamaPlan(p,snapshot,now),false);
+  }
 });
 test('OpenRouter balance is credits minus usage, including a real overdraft',()=>{
   assert.deepEqual(parseResponse('openrouter',{data:{total_credits:100.5,total_usage:25.75}}).balances,[{currency:'USD',remaining:74.75,total:100.5,used:25.75}]);

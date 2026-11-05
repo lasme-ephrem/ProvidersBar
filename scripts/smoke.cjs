@@ -957,20 +957,25 @@ const fontBytes = await fs.readFile(fontFile);
   // ------------------------------------------------------------------ *
   // Ollama Free : conservation des crédits achetés et de la réserve
   // ------------------------------------------------------------------ *
+  // 0.6.10 : le forfait lu sur Ollama décide. Un forfait payant dont
+  // l'échéance est passée reste compté (« à vérifier ») ; le passage en Free
+  // vient de la page Ollama, jamais de la date.
   let freeState = await page.evaluate(renewalDate => window.lasmium.updateProvider('ollama', { amount: 18, billingCycle: 'monthly', renewalDate }), pastDate);
   let free = freeState.providers.find(p => p.id === 'ollama');
-  assert.equal(free.subscriptionStatus, 'expired');
-  assert.equal(free.active, true);
-  assert.equal(freeState.summary.monthly.USD, 103);
-  assert.deepEqual(free.snapshot.balances, []);
-  assert.equal(free.snapshot.usageCredits.remaining, 2.98);
-  assert.match(await page.locator('.card:has([data-open="ollama"])').innerText(), /Free · 0 \$\/mo/);
-  await page.screenshot({ path: path.join(results, 'ollama-free.png'), fullPage: true });
+  assert.equal(free.subscriptionStatus, 'active');
+  assert.equal(freeState.summary.monthly.USD, 121);
   await desktop.evaluate(({ session }) => { session.fromPartition('persist:ollama-account').fetch = async url => ({ ok: true, status: 200, url, text: async () => '<h2>Included usage Free</h2><h3>Monthly usage</h3><p>25% used</p><h3>Usage credits</h3><span>$2.98</span><small>Current balance</small>' }); });
   freeState = await page.evaluate(() => window.lasmium.syncOne('ollama'));
   free = freeState.providers.find(p => p.id === 'ollama');
+  assert.equal(free.subscriptionStatus, 'expired');
+  assert.equal(free.active, true);
+  assert.equal(freeState.summary.monthly.USD, 103, 'Ollama Free est compté 0 $');
+  assert.equal(freeState.summary.unpriced, 4);
+  assert.deepEqual(free.snapshot.balances, []);
   assert.equal(free.snapshot.quotaRemaining, 75);
   assert.equal(free.snapshot.usageCredits.remaining, 2.98);
+  await page.waitForFunction(() => document.querySelector('.card:has([data-open="ollama"])')?.innerText.includes('Free · 0 $/mo'));
+  await page.screenshot({ path: path.join(results, 'ollama-free.png'), fullPage: true });
   // Page officielle actuelle : ni section mensuelle ni légende « Current balance ».
   await desktop.evaluate(({ session }) => { session.fromPartition('persist:ollama-account').fetch = async url => ({ ok: true, status: 200, url, text: async () => '<main><h1>Usage credits <span>Free</span></h1><p>$1.05</p><p>Add usage credits to pay as you go on any cloud model.</p><button>Add funds</button><h2>Usage credits used this month</h2><p>model A $1.03</p><p>model B $0.90</p><h2>Usage breakdown</h2><p>62.8%</p></main>' }); });
   freeState = await page.evaluate(() => window.lasmium.syncOne('ollama'));
@@ -1238,4 +1243,11 @@ const fontBytes = await fs.readFile(fontFile);
   console.log('PASS: marque Lasmium TOKENS-HUB, logo, thèmes clair/sombre/système, version dynamique, app:info, erase-data, recommandations retirées, inventaire 10 fournisseurs, recherche/filtres, fiche abonnement à quatre champs (mensuel/annuel/paiement unique, échéance à vérifier, fin et réactivation), suivi des dépenses API (recharge détectée, crédit offert), historique, clés chiffrées, course connect/disconnect, reprise transitoire, cooldown persistant, Orca/Ollama (session conservée puis auth invalide), Claude via Claude Code, lecteurs DOM réels, santé des connexions (10 lignes, états typés, dérive SCHEMA_DRIFT sans écraser le dernier relevé), packs signés (3) et sauvegarde d’état, polices Inter + Sora (fichiers+OFL+chargement dashboard/widget, tabular-nums), libellés Hebdo/Horaire/Hebdo Fable/Hebdo Argon et chips, widget vertical Lasmium 360×660 (10 lignes, une information par fenêtre, Ollama Free + crédits, soldes multi-devises, sans défilement ; scroll fin à 320), niveaux textuels, tray, redémarrage, Ollama Free, Antigravity, export nettoyé.');
 }
 
-main().catch(error => { console.error(error); process.exitCode = 1; }).finally(async () => { if (desktop) await desktop.close(); });
+// Un smoke en échec se termine toujours : fermeture d'Electron bornée à 15 s,
+// puis sortie explicite (sinon un Electron bloqué occupe la CI jusqu'au délai).
+async function finish(failed) {
+  if (desktop) await Promise.race([desktop.close().catch(() => {}), new Promise(resolve => setTimeout(resolve, 15000))]);
+  if (failed) process.exit(1);
+}
+
+main().then(() => finish(false), async error => { console.error(error); await finish(true); });

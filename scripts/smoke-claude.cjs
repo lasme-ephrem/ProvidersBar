@@ -295,4 +295,11 @@ async function main() {
   console.log('PASS: Connecter Claude en un clic (statut, jeton refusé, connexion officielle, lecture Horaire/Hebdo/Hebdo Fable, forfait Max), Claude Code lancé sans clé API ni jeton longue durée, migration claude-desktop-local, redémarrage, panne + prochain essai automatique + reprise (message unique), auth-rate-limit sans mention Desktop ni reconnexion, connexion non aboutie avec message clair, aucun jeton persisté dans Lasmium TOKENS-HUB.');
 }
 
-main().catch(async error => { console.error(error); if (desktop) await desktop.close().catch(() => {}); process.exitCode = 1; });
+// Un smoke en échec se termine toujours : fermeture d'Electron bornée à 15 s,
+// puis sortie explicite (sinon un Electron bloqué occupe la CI jusqu'au délai).
+async function finish(failed) {
+  if (desktop) await Promise.race([desktop.close().catch(() => {}), new Promise(resolve => setTimeout(resolve, 15000))]);
+  if (failed) process.exit(1);
+}
+
+main().then(() => finish(false), async error => { console.error(error); await finish(true); });

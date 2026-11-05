@@ -20,7 +20,7 @@ const { secureWindow, secureAccountWindow, applyDataDirAcl, purgeLeftovers } = r
 const { sanitizeStateForExport } = require('./lib/privacy-export.cjs');
 const { buildDiagnosticBundle } = require('./lib/diagnostic-bundle.cjs');
 const antigravityTransport = require('./lib/antigravity-account.cjs');
-const { validatePatch, summary, daysUntil, isTracked, expireSubscriptions, asOllamaFreeSnapshot } = require('./lib/domain.cjs');
+const { validatePatch, summary, daysUntil, isTracked, expireSubscriptions, applyOllamaPlan, asOllamaFreeSnapshot } = require('./lib/domain.cjs');
 const apiSpending = require('./lib/api-spending.cjs');
 const { fetchUsage } = require('./lib/connectors.cjs');
 const { createCredentialStore } = require('./lib/credential-store.cjs');
@@ -334,6 +334,8 @@ function provider(id) {
   return p;
 }
 function record(p, snapshot) {
+  // Ollama : le forfait lu (Free ou payant) fixe le statut avant tout affichage.
+  applyOllamaPlan(p, snapshot);
   if (p.id === 'ollama' && p.subscriptionStatus === 'expired' && snapshot.source === 'api') snapshot = asOllamaFreeSnapshot(snapshot);
   // Valider AVANT de toucher au dernier relevé : une réponse valide HTTP mais
   // illisible ne doit jamais remplacer un relevé sain ni afficher un faux zéro.
@@ -540,6 +542,10 @@ function registerIpc() {
     delete changes.confirmRenewal;
     if ('subscriptionStatus' in changes) changes.active = changes.subscriptionStatus === 'active' || (p.id === 'ollama' && changes.subscriptionStatus === 'expired');
     else if (p.type === 'subscription' && 'active' in changes) changes.subscriptionStatus = changes.active ? 'active' : 'paused';
+    // Ollama : un arrêt choisi prime sur le forfait payant encore affiché par
+    // le site jusqu'à la fin de la période réglée ; une réactivation le lève.
+    if (p.id === 'ollama' && changes.subscriptionStatus === 'expired') p.endedByUser = true;
+    if (p.id === 'ollama' && changes.subscriptionStatus === 'active') delete p.endedByUser;
     Object.assign(p, changes);
     if (p.id === 'ollama' && p.subscriptionStatus === 'expired') p.snapshot = asOllamaFreeSnapshot(p.snapshot);
     expireSubscriptions(state.providers);
@@ -710,9 +716,7 @@ else {
         updateTimer.unref?.();
       }
       const claude = state.providers.find(p => p.id === 'claude');
-      // 0.6.8 : une seule connexion Claude, l'abonnement via Claude Code. Un
-      // ancien suivi Claude Desktop devient ce suivi (le relevé reste affiché).
-      if (claude?.accountSession && claude.accountSession.kind !== 'claude-live-local') claude.accountSession = { kind: 'claude-live-local' };
+      // Ancienne session Claude Desktop : convertie au chargement (data-store).
       // Restaurer le cooldown d'échec persisté (Retry-After), jamais un succès.
       if (claude?.accountSession?.kind === 'claude-live-local') claudeReader.restore(claude.claudeSync);
       // Claude Code réécrit ce fichier à chaque connexion ou renouvellement :

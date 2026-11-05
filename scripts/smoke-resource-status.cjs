@@ -134,4 +134,11 @@ async function main() {
   assert.deepEqual(errors, []);
   console.log('PASS: negative balances red for all 4 APIs in USD/EUR/CNY and both themes; per-window quota statuses on dashboard cards (Hebdo/Horaire/Hebdo Argon) ; widget vertical complet (une ligne par fenêtre, aucune masquée, fact-values colorées, chip agrégé) ; global status only when every displayed limit is exhausted ; dashboard and widget.');
 }
-main().catch(error => { console.error(error); process.exitCode = 1; }).finally(async () => { if (desktop) await desktop.close(); });
+// Un smoke en échec se termine toujours : fermeture d'Electron bornée à 15 s,
+// puis sortie explicite (sinon un Electron bloqué occupe la CI jusqu'au délai).
+async function finish(failed) {
+  if (desktop) await Promise.race([desktop.close().catch(() => {}), new Promise(resolve => setTimeout(resolve, 15000))]);
+  if (failed) process.exit(1);
+}
+
+main().then(() => finish(false), async error => { console.error(error); await finish(true); });

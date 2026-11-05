@@ -36,7 +36,7 @@ function subscriptions() {
   const rows = list.map(provider => {
     const expired = provider.subscriptionStatus === 'expired';
     const overdue = subscriptionOverdue(provider);
-    const status = ollamaFree(provider) ? 'Free · forfait payant terminé'
+    const status = ollamaFree(provider) ? 'Free · compté 0 $'
       : expired ? 'Abonnement terminé · hors coûts'
         : overdue ? 'Échéance à vérifier' : '';
     const date = provider.renewalDate ? `${renewalLabel(provider.billingCycle)} · ${shortDate(provider.renewalDate)}` : 'À préciser';
@@ -62,7 +62,7 @@ function subscriptions() {
     + `<tbody>${rows.join('')}</tbody></table></div>`
     + `<p class="settings-foot">Coût mensuel : mensuels + annuels ÷ 12. Les paiements uniques sont comptés à part `
     + `jusqu’à la fin de la période payée. Une échéance dépassée reste comptée et passe « à vérifier ». `
-    + `Ollama reste suivi en Free après la fin d’un forfait payant.</p>`;
+    + `Ollama : le forfait lu sur son site décide s’il est compté (Free = 0 $).</p>`;
 }
 
 /* ------------------------------------------------------------------ *
@@ -71,7 +71,7 @@ function subscriptions() {
 function connections() {
   const cards = state.providers.filter(hasConnector).map(provider => {
     const warning = provider.subscriptionStatus === 'expired'
-      ? (ollamaFree(provider) ? 'Forfait payant terminé · suivi Free actif' : 'Abonnement terminé · suivi arrêté')
+      ? (ollamaFree(provider) ? 'Forfait Free · compté 0 $, suivi actif' : 'Abonnement terminé · suivi arrêté')
       : provider.error ? escapeHtml(provider.error) : '';
     return `<section class="connection-card" aria-labelledby="connection-${escapeHtml(provider.id)}">`
       + `<div class="card-top">${logo(provider)}<div class="provider-title">`
@@ -336,7 +336,7 @@ function subscriptionPriceText(provider) {
 
 // Ce que l'abonnement représente dans les coûts, recalculé pendant la saisie.
 function subscriptionCostLine(provider) {
-  if (ollamaFree(provider)) return 'Forfait payant terminé : Ollama est suivi en Free (0 $).';
+  if (ollamaFree(provider)) return 'Forfait Free lu sur Ollama : compté 0 $.';
   if (provider.subscriptionStatus === 'expired') return 'Abonnement terminé : il n’est plus compté.';
   const currency = provider.currency || 'USD';
   if (typeof provider.amount !== 'number') return 'Indique le prix pour l’inclure dans tes coûts.';
@@ -357,9 +357,10 @@ function providerInfoBody(provider) {
     `<option value="${id}"${id === provider.currency ? ' selected' : ''}>${text}</option>`).join('');
   return `<form id="provider-form">`
     + `${expired ? `<div class="connection-note">${ollamaFree(provider)
-      ? 'Forfait payant terminé : Ollama reste suivi en Free.'
-      : 'Tu n’as plus cet abonnement : il est exclu des coûts et du suivi.'} `
-      + 'Pour le réactiver, indique la prochaine échéance puis « Réactiver ».</div>' : ''}`
+      ? 'Ollama indique le forfait Free : il est compté 0 $ et reste suivi. Si tu reprends un forfait payant, '
+        + 'il sera détecté à la prochaine synchronisation ; indique ici son prix et sa fréquence.'
+      : 'Tu n’as plus cet abonnement : il est exclu des coûts et du suivi. '
+        + 'Pour le réactiver, indique la prochaine échéance puis « Réactiver ».'}</div>` : ''}`
     + `<div class="fields">`
     + `${inputField('Forfait', 'plan', provider.plan, 'text', 'maxlength="200" placeholder="Ex. Max, Plus, Pro"', true)}`
     + `<div class="field"><label for="amount">Prix</label><div class="price-input">`
@@ -378,7 +379,7 @@ function providerInfoBody(provider) {
     + `<div class="form-actions">`
     + `${expired ? '' : '<button type="button" class="link-button" data-action="subscription-end">Je n’ai plus cet abonnement</button>'}`
     + `<button type="button" class="secondary" data-action="close-dialog">Annuler</button>`
-    + `<button type="submit" class="primary">${expired ? 'Réactiver' : 'Enregistrer'}</button></div></form>`;
+    + `<button type="submit" class="primary">${expired && !ollamaFree(provider) ? 'Réactiver' : 'Enregistrer'}</button></div></form>`;
 }
 
 function quotaWindowsNote(provider, extra = '') {
