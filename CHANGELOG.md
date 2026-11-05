@@ -1,5 +1,34 @@
 # Historique des versions
 
+## 0.6.7 — 5 novembre 2026
+
+Version **corrective** : Claude retrouve seul Hebdo Fable après un repli, et deux
+textes collés de l'interface sont séparés. Toutes les fonctionnalités 0.6.6 sont
+conservées.
+
+### Corrections
+
+- Claude : après un refus de renouvellement du jeton Claude Code
+  (`auth-rate-limit`), le repli vers Claude Desktop remplaçait définitivement le
+  mode choisi. La lecture directe, seule source d'Hebdo Fable, n'était plus
+  retentée sans clic sur « Activer la lecture directe ». Le repli garde désormais
+  la lecture directe voulue : dès que Claude Code réécrit son fichier de jeton,
+  elle est relancée ; sinon un essai a lieu au plus tous les quarts d'heure, en
+  respectant le délai demandé par Anthropic. Un essai échoué reste sur Claude
+  Desktop sans afficher d'erreur.
+- Claude : les messages annoncent la vérité. La carte indique « Hebdo Fable
+  masquée : lecture de secours Claude Desktop », la fiche affiche « Lecture
+  directe en pause », l'heure du prochain essai et le bouton « Réessayer la
+  lecture directe maintenant ».
+- Affichage : la date de réinitialisation et son compte à rebours étaient collés
+  (« 13:20dans 6 j 23 h ») ; ils sont séparés par un point médian. La réserve
+  Ollama affiche « Réserve supplémentaire : 1,05 $US ».
+
+### Qualité
+
+- 355 tests (trois nouveaux sur la reprise après repli) ; smoke Claude étendu
+  au repli avec reprise planifiée.
+
 ## 0.6.6 — 5 novembre 2026
 
 Version **Qualité**, issue de l'analyse du dépôt. Aucun changement fonctionnel pour

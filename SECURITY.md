@@ -9,7 +9,7 @@ manière de signaler une vulnérabilité.
 
 | Version | Support sécurité |
 | --- | --- |
-| 0.6.x (branche `main`) | oui — dernière version publiée : 0.6.6 |
+| 0.6.x (branche `main`) | oui — dernière version publiée : 0.6.7 |
 | 0.5.x et antérieures | non — mettre à jour vers la dernière version |
 
 Les correctifs de sécurité sont livrés dans la dernière version ; il n'existe
@@ -223,6 +223,9 @@ les tests destructifs contre des services tiers ne sont pas autorisés.
 
 ## 9. Historique
 
+- 2026-11 (version 0.6.7) : reprise automatique de la lecture directe Claude
+  après un repli Claude Desktop, sans renouvellement de jeton supplémentaire
+  entre deux essais (au plus un essai par quart d'heure, Retry-After respecté).
 - 2026-11 (version 0.6.6) : correction d'un timer orphelin du navigateur de
   connexion Ollama, URL du manifeste de mise à jour vers le dépôt renommé,
   workflow de release avec contrôle de l'archive par réextraction, ESLint et
