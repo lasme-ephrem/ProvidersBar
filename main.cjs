@@ -719,6 +719,13 @@ else {
       secureWindow(mainWindow);
       mainWindow.on('close', event => { if (!quitting) { event.preventDefault(); mainWindow.hide(); } });
       // Démarrage de Windows (--hidden) : seule l'icône de notification apparaît.
+      // Icône de la barre des tâches donnée explicitement (fichier .ico livré avec
+      // l'application) : Windows ne réutilise pas une ancienne icône gardée en
+      // cache pour le chemin de l'exécutable ou d'un raccourci.
+      if (process.platform === 'win32') {
+        mainWindow.setAppDetails({ appId: 'com.lasmium.tokenshub', appIconPath: path.join(__dirname, 'assets', 'icon.ico'), appIconIndex: 0,
+          ...(app.isPackaged ? { relaunchCommand: `"${process.execPath}"`, relaunchDisplayName: 'Lasmium TOKENS-HUB' } : {}) });
+      }
       mainWindow.once('ready-to-show', () => { if (!startsHidden()) mainWindow.show(); });
       await mainWindow.loadFile(uiPath);
       quickWindow = new BrowserWindow({ width: 360, height: Math.min(660, screen.getPrimaryDisplay().workAreaSize.height - 16), show: false, frame: false, resizable: false, skipTaskbar: true, alwaysOnTop: true, icon: path.join(__dirname, 'assets/icon.png'), backgroundColor: windowBackground, webPreferences });

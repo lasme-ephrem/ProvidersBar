@@ -30,10 +30,11 @@ test('le script Inno Setup installe par utilisateur, sans administrateur, avec l
   const iss = fs.readFileSync(path.join(root, 'installer', 'LasmiumTokensHub.iss'), 'utf8');
   for (const line of ['PrivilegesRequired=lowest', String.raw`DefaultDirName={localappdata}\Programs\LasmiumTokensHub`,
     'Parameters: "--autostart=on"; Tasks: autostart', 'Parameters: "--autostart=off"; Flags: runhidden waituntilterminated; RunOnceId',
-    'AppUserModelID: "com.lasmium.tokenshub"', String.raw`MessagesFile: "compiler:Languages\French.isl"`, 'CloseApplications=force']) {
+    'AppUserModelID: "com.lasmium.tokenshub"', String.raw`IconFilename: "{app}\resources\app\assets\icon.ico"`, String.raw`MessagesFile: "compiler:Languages\French.isl"`, 'CloseApplications=force']) {
     assert.ok(iss.includes(line), line);
   }
   assert.doesNotMatch(iss, /[\u2018\u2019\u201C\u201D\t]/, 'aucun guillemet typographique ni tabulation');
   const main = fs.readFileSync(path.join(root, 'main.cjs'), 'utf8');
   assert.match(main, /setAppUserModelId\('com\.lasmium\.tokenshub'\)/, 'même identifiant que les raccourcis de l’installeur');
+  assert.match(main, /setAppDetails\(\{ appId: 'com\.lasmium\.tokenshub', appIconPath: path\.join\(__dirname, 'assets', 'icon\.ico'\)/, 'icône de barre des tâches explicite');
 });

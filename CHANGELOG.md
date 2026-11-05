@@ -1,5 +1,20 @@
 # Historique des versions
 
+## 0.6.13 — 5 novembre 2026
+
+Version **corrective** : l'icône de la barre des tâches ne dépend plus du cache
+de Windows. Toutes les fonctionnalités 0.6.12 sont conservées.
+
+### Corrections
+
+- Barre des tâches : après la 0.6.12, Windows continuait d'afficher l'ancienne
+  icône, gardée en cache pour le chemin de l'exécutable et du raccourci (même
+  `unins000.exe` l'affichait). La fenêtre principale donne désormais son icône à
+  la barre des tâches (`setAppDetails`) depuis le fichier `icon.ico` livré avec
+  l'application ; l'effet s'applique par simple mise à jour.
+- Installeur : les raccourcis du menu Démarrer et du Bureau prennent leur icône
+  dans ce même fichier `.ico` plutôt que dans l'exécutable.
+
 ## 0.6.12 — 5 novembre 2026
 
 Version **corrective** : la bonne icône partout. Toutes les fonctionnalités

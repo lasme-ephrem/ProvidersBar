@@ -50,8 +50,10 @@ Name: "autostart"; Description: "Lancer Lasmium TOKENS-HUB au démarrage de Wind
 Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{autoprograms}\Lasmium TOKENS-HUB"; Filename: "{app}\LasmiumTokensHub.exe"; AppUserModelID: "com.lasmium.tokenshub"
-Name: "{autodesktop}\Lasmium TOKENS-HUB"; Filename: "{app}\LasmiumTokensHub.exe"; AppUserModelID: "com.lasmium.tokenshub"; Tasks: desktopicon
+; Icône prise dans le fichier .ico livré (et non dans l'exécutable) : un chemin
+; que Windows n'a pas mis en cache avec une ancienne icône.
+Name: "{autoprograms}\Lasmium TOKENS-HUB"; Filename: "{app}\LasmiumTokensHub.exe"; IconFilename: "{app}\resources\app\assets\icon.ico"; AppUserModelID: "com.lasmium.tokenshub"
+Name: "{autodesktop}\Lasmium TOKENS-HUB"; Filename: "{app}\LasmiumTokensHub.exe"; IconFilename: "{app}\resources\app\assets\icon.ico"; AppUserModelID: "com.lasmium.tokenshub"; Tasks: desktopicon
 
 [Run]
 ; Le lancement au démarrage est enregistré par l'application elle-même (même
