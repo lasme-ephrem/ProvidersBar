@@ -46,6 +46,8 @@ workflow de release ; toutes les fonctionnalités 0.6.5 sont conservées.
   alignée sur la version publiée et sur les nouveaux workflows.
 - Validation Windows : 352 tests, lint et les trois smoke tests Electron verts sur
   une session interactive ; essai à blanc du workflow de release réussi sur GitHub.
+- Flux réel 0.6.5 → 0.6.6 validé : détection, installation et relance avec `data/`
+  conservé ([validation-0.6.6.md](docs/validation-0.6.6.md)).
 
 ## 0.6.5 — 4 novembre 2026
 
