@@ -45,8 +45,16 @@ réutilisait l'icône mise en cache pour ces chemins lors de l'installation 0.6.
 sans message, puis trois lancements consécutifs ont réussi ; échec non reproduit
 (probablement le premier démarrage d'un exécutable neuf).
 
-## À constater chez l'utilisateur
+## Constaté chez l'utilisateur
 
-Mise à jour 0.6.12 → 0.6.13 puis icône « L » dans la barre des tâches. Pour un
-raccourci déjà épinglé ou `unins000.exe`, le cache peut persister jusqu'à
-`ie4uinit.exe -show` ou une nouvelle session Windows.
+- Désinstallation complète de la 0.6.12 (dossier, raccourci, entrée des
+  applications et lancement au démarrage retirés), puis `ie4uinit.exe -show`.
+- Installation neuve par `LasmiumTokensHub-Setup-0.6.13.exe` : icône Lasmium
+  « L » correcte (« c'est corrigé »).
+- Dossier `data/` sauvegardé avant la désinstallation, recopié dans
+  `%LOCALAPPDATA%\Programs\LasmiumTokensHub\data` application fermée : comptes,
+  historique et réglages repris sans reconnexion (« ça passe nickel »).
+
+Pour un raccourci déjà épinglé ou `unins000.exe` issus d'une installation
+antérieure, le cache d'icônes peut persister jusqu'à `ie4uinit.exe -show` ou une
+nouvelle session Windows.
