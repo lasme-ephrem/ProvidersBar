@@ -2,6 +2,8 @@
 
 Application desktop Windows pour suivre les abonnements, quotas et crédits de **dix fournisseurs d’IA**. Un tableau de bord et un widget dans la zone de notification regroupent les abonnements et les API avec leurs ressources restantes et leurs dates de réinitialisation.
 
+**Version 0.6.11 — 5 novembre 2026 :** **installation et finitions** : installeur Windows (par utilisateur, sans administrateur), lancement au démarrage de Windows, icône Lasmium sur l'exécutable et barre du haut façon VS Code. Détails dans [CHANGELOG.md](CHANGELOG.md).
+
 **Version 0.6.10 — 5 novembre 2026 :** version **corrective** : Ollama suit le forfait lu sur son site (Free = 0 $, forfait payant compté même après son échéance), textes d'un abonnement terminé harmonisés, smoke Claude fiable en CI. Détails dans [CHANGELOG.md](CHANGELOG.md).
 
 **Version 0.6.9 — 5 novembre 2026 :** **coûts en clair** : fiche d'abonnement à quatre champs (forfait, prix, fréquence, échéance), coût mensuel et paiements uniques distingués, suivi des dépenses API par recharges détectées, fiche API réduite à la clé. Détails dans [CHANGELOG.md](CHANGELOG.md).
@@ -13,6 +15,13 @@ Application desktop Windows pour suivre les abonnements, quotas et crédits de *
 **Version 0.6.6 — 5 novembre 2026 :** version **Qualité** : correction d'un timer orphelin du navigateur de connexion Ollama, URL de mise à jour vers le dépôt renommé, CI fusionnée et workflow de release automatisé, ESLint, 352 tests, renderer découpé. Toutes les fonctionnalités 0.6.5 sont conservées ; détails dans [CHANGELOG.md](CHANGELOG.md).
 
 **Version 0.6.5 — 4 novembre 2026 :** **mise à jour automatique signée** du portable, vérifiée par manifeste Ed25519 et SHA-256, avec remplacement après fermeture et conservation stricte de `data/` ; **canary live** prêt à recevoir des clés de test locales. Toutes les fonctionnalités 0.5.0 sont conservées. Détails dans [CHANGELOG.md](CHANGELOG.md), [updates.md](docs/updates.md), la [matrice fournisseurs](docs/provider-matrix.md) et le [runbook](docs/runbook-connectors.md).
+
+## Maintenance 0.6.11
+
+- **Installation** : installeur Inno Setup par utilisateur publié avec chaque release ; lancement au démarrage (installeur et Réglages, démarrage discret `--hidden`).
+- **Interface** : barre du haut intégrée (boutons Windows natifs), recherche au centre, actions Synchroniser, widget, thème, Réglages et « Mettre à jour ».
+- **Exécutable** : icône et informations de version de Lasmium TOKENS-HUB (ressources réécrites par `resedit`).
+- **Qualité** : 365 tests, lint sans erreur, trois smoke tests Windows.
 
 ## Maintenance 0.6.10
 
@@ -117,7 +126,9 @@ Application desktop Windows pour suivre les abonnements, quotas et crédits de *
 
 ## Utiliser l’application
 
-Lancer **`Lancer Lasmium TOKENS-HUB.cmd`** (portable personnel) ou `dist/ProvidersBar-win32-x64/LasmiumTokensHub.exe` (dossier historique conservé pour les données). Conserver tout le dossier du portable : Node.js n’est pas nécessaire sur le PC qui l’utilise. Le dossier `dist/` est généré et exclu de Git ; pour produire une distribution propre, voir la section « Fabriquer et mettre à jour » ci-dessous.
+**Installer** : télécharger `LasmiumTokensHub-Setup-<version>.exe` depuis la [dernière release](https://github.com/lasme-ephrem/lasmium-tokens-bar/releases/latest) et le lancer. L’installation se fait dans ton profil (`%LOCALAPPDATA%\Programs\LasmiumTokensHub`), sans droits administrateur, avec raccourcis menu Démarrer (et Bureau en option) et la case **« Lancer au démarrage de Windows »** : l’application s’ouvre alors discrètement dans la zone de notification. Le lancement au démarrage se change aussi dans **Réglages**. L’installeur n’étant pas signé, Windows SmartScreen peut demander « Informations complémentaires → Exécuter quand même ». La désinstallation (Paramètres Windows → Applications) demande si tes données doivent être conservées. Les mises à jour automatiques signées continuent de fonctionner sur l’application installée.
+
+Version portable : lancer **`Lancer Lasmium TOKENS-HUB.cmd`** (portable personnel) ou `dist/ProvidersBar-win32-x64/LasmiumTokensHub.exe` (dossier historique conservé pour les données). Conserver tout le dossier du portable : Node.js n’est pas nécessaire sur le PC qui l’utilise. Le dossier `dist/` est généré et exclu de Git ; pour produire une distribution propre, voir la section « Fabriquer et mettre à jour » ci-dessous.
 
 1. **Connexions** : connecter les comptes et renseigner les clés API.
 2. **Vue d’ensemble** : cartes par fournisseur, ressources restantes, prochaine réinitialisation.
@@ -192,6 +203,7 @@ Pour une **API**, la fiche ne garde que la clé (onglet Connexion) et le **suivi
 
 ## Interface et accessibilité
 
+- **Barre du haut** (comme VS Code) : marque et page à gauche, **recherche** au centre, puis **Mettre à jour** (seulement si une version est disponible), **Synchroniser**, **widget**, **thème clair/sombre** et **Réglages** ; les boutons Windows (réduire, agrandir, fermer) restent natifs.
 - **Thèmes** : Clair, Sombre ou **Système (Windows)**. `system` suit `prefers-color-scheme` en direct ; les anciens inventaires gardent leur choix explicite clair ou sombre.
 - **Mise en page** : navigation latérale sur desktop ; sous 900 px CSS (fenêtre réduite ou zoom), la navigation devient une **barre supérieure toujours visible**, jamais `display:none`. Lien d’évitement « Aller au contenu ».
 - **Contrastes** : paires texte/fond ≥ 4,5:1 et indicateur de focus ≥ 3:1 (contrastes calculés, voir [renderer/CONTRAT-UI.md](renderer/CONTRAT-UI.md)). Aucune information portée par la couleur seule ; les niveaux sont aussi écrits.
@@ -274,7 +286,10 @@ npm run test:claude:desktop
 npm run package:release
 npm run release:artifacts
 npm run release:verify
+npm run package:installer
 ```
+
+`npm run package:installer` construit `dist/LasmiumTokensHub-Setup-<version>.exe` avec **Inno Setup 6** (`winget install JRSoftware.InnoSetup`) et ajoute son empreinte à `SHA256SUMS-<version>.txt`. L’exécutable porte l’icône et le nom de Lasmium TOKENS-HUB (ressources réécrites par `scripts/exe-resources.cjs`).
 
 La distribution propre est créée dans `dist/LasmiumTokensHub-<version>-win32-x64/` ; la commande refuse un dossier de release déjà existant. `npm run release:artifacts` produit l'archive ZIP et `dist/SHA256SUMS-<version>.txt`, et refuse d'archiver une release contenant un dossier de données personnelles. `npm run release:verify` réextrait l'archive avec le même code que la mise à jour automatique et contrôle les fichiers indispensables, la version, l'absence de `data/` et l'empreinte SHA-256. Le portable personnel reste dans `dist/ProvidersBar-win32-x64/`, à côté de ses données.
 
@@ -282,7 +297,7 @@ La distribution propre est créée dans `dist/LasmiumTokensHub-<version>-win32-x
 
 Les ressources applicatives sont préparées dans un dossier temporaire puis remplacées ensemble : les fichiers retirés des sources ne subsistent pas dans l’installation. `npm run update:portable` conserve `data/` et les sessions, ferme l’ancien processus s’il est joignable en diagnostic, puis nécessite de relancer l’application ; sinon, la quitter manuellement avant la mise à jour. Le packaging inclut les dépendances de production (`proper-lockfile`, `yauzl` et leurs dépendances) et leurs notices.
 
-L’exécutable **n’est pas signé** et conserve les métadonnées binaires Electron ; conserver toutes les licences et notices du dossier distribué. La mise à jour automatique du portable repose sur le manifeste `latest.json` signé Ed25519 et sur l'empreinte SHA-256 de l'archive, pas sur un certificat Authenticode : SmartScreen peut demander une confirmation. La génération de la clé, la signature du manifeste et la publication sont décrites dans [docs/updates.md](docs/updates.md).
+L’exécutable et l’installeur **ne sont pas signés** (aucun certificat Authenticode) ; conserver toutes les licences et notices du dossier distribué. La mise à jour automatique du portable repose sur le manifeste `latest.json` signé Ed25519 et sur l'empreinte SHA-256 de l'archive, pas sur un certificat Authenticode : SmartScreen peut demander une confirmation. La génération de la clé, la signature du manifeste et la publication sont décrites dans [docs/updates.md](docs/updates.md).
 
 ## Limites connues
 

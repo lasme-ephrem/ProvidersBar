@@ -16,7 +16,7 @@
  * ------------------------------------------------------------------ */
 function overview() {
   return heading('TOUT SOUS LES YEUX', 'Tes usages, en un regard.',
-    'Quotas, crédits et abonnements. Garde le fil de tes outils IA.', syncButton())
+    'Quotas, crédits et abonnements. Garde le fil de tes outils IA.')
     + stats()
     + `<div class="section-heading"><h2>Mes fournisseurs `
     + `<small>${state.providers.length} services</small></h2>`
@@ -88,7 +88,7 @@ function connections() {
       + `</div></section>`;
   });
   return heading('SYNCHRONISATION', 'Connecte tes comptes.',
-    'Tes soldes et quotas, lus directement auprès des fournisseurs.', syncButton())
+    'Tes soldes et quotas, lus directement auprès des fournisseurs.')
     + healthPanel()
     + `<div class="connection-grid">${cards.join('')}</div>`
     + `<div class="info-box"><p>Les clés sont chiffrées par Windows et ne sont jamais incluses dans `
@@ -267,6 +267,12 @@ function settingsPage({ version = null, electronVersion = null, packaged = null,
     + `<span>Relit tes comptes connectés toutes les 5 minutes. `
     + `L’application doit rester ouverte, même dans la zone de notification.</span></span>`
     + `<input name="autoRefresh" type="checkbox" ${state.settings.autoRefresh ? 'checked' : ''}></label>`
+    + `<label class="settings-row"><span class="settings-row-text"><strong>Lancer au démarrage de Windows</strong>`
+    + `<span>${state.app?.autostart?.supported
+      ? 'Lasmium TOKENS-HUB s’ouvre discrètement dans la zone de notification à l’ouverture de ta session.'
+      : 'Disponible dans l’application installée.'}</span></span>`
+    + `<input name="autostart" type="checkbox" ${state.app?.autostart?.enabled ? 'checked' : ''}`
+    + `${state.app?.autostart?.supported ? '' : ' disabled'}></label>`
     + `<label class="settings-row"><span class="settings-row-text"><strong>Notifications Windows</strong>`
     + `<span>Échéance dans les 3 jours, quota inférieur ou égal à 20 % ou solde USD sous le seuil choisi. `
     + `Une alerte par jour et par motif.</span></span>`

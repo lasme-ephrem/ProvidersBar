@@ -40,12 +40,17 @@ const { createUpdater } = require('./lib/updater.cjs');
 const claudeLive = require('./lib/claude-live-usage.cjs');
 const { CREDENTIAL_PATH } = require('./lib/claude-connection.cjs');
 const { createClaudeCli } = require('./lib/claude-cli.cjs');
+const { createAutostart, autostartCommand, startsHidden } = require('./lib/autostart.cjs');
 const { watchFile, unwatchFile } = require('node:fs');
 
 app.setName('Lasmium TOKENS-HUB');
 // Identité stable des notifications Windows (toasts), indépendante du raccourci
 // que l'utilisateur a éventuellement créé pour l'application.
 if (process.platform === 'win32') app.setAppUserModelId('com.lasmium.tokenshub');
+// Lancement au démarrage de Windows (Réglages et installeur).
+const autostart = createAutostart({ app });
+let autostartRequest = null;
+try { autostartRequest = autostartCommand(); } catch (error) { console.error(error.message); }
 const dataDir = (process.env.LASMIUM_DATA_DIR || process.env.PROVIDERSBAR_DATA_DIR) || (app.isPackaged ? path.join(path.dirname(process.execPath), 'data') : path.join(__dirname, '.local'));
 app.setPath('userData', dataDir);
 const store = createDataStore({ dataDir });
@@ -251,8 +256,10 @@ function appInfo() {
 }
 // Version minimale exposée dans publicState() : aucun chemin absolu.
 function publicAppInfo() {
-  return { version: app.getVersion(), electron: process.versions.electron || null, packaged: app.isPackaged };
+  return { version: app.getVersion(), electron: process.versions.electron || null, packaged: app.isPackaged, autostart: autostart.info() };
 }
+// Couleur de la barre du haut (identique à la barre latérale, dans les deux thèmes).
+const TITLE_BAR_OVERLAY = { color: '#070b10', symbolColor: '#eaf2f8', height: 40 };
 // `system` suit le thème Windows ; ce fond de fenêtre n'a qu'un rôle visuel, le
 // thème CSS étant appliqué par le renderer.
 function windowBackgroundFor(theme) {
@@ -610,6 +617,9 @@ function registerIpc() {
   handle('sync:one', (id, options = {}) => syncOne(id, { force: options?.force !== false }));
   handle('settings:update', async patch => {
     if (typeof patch.autoRefresh !== 'boolean' || typeof patch.notifications !== 'boolean' || !Number.isFinite(patch.lowBalance) || patch.lowBalance < 0 || patch.lowBalance > 10000 || !['light', 'dark', 'system'].includes(patch.theme)) throw new Error('Réglages invalides.');
+    if ('autostart' in patch && typeof patch.autostart !== 'boolean') throw new Error('Réglages invalides.');
+    // Lancement au démarrage : état tenu par Windows, pas par state.json.
+    if ('autostart' in patch && autostart.supported && patch.autostart !== autostart.info().enabled) autostart.set(patch.autostart);
     const resumeClaude = patch.autoRefresh && !state.settings.autoRefresh;
     state.settings = { ...state.settings, autoRefresh: patch.autoRefresh, notifications: patch.notifications, lowBalance: patch.lowBalance, theme: patch.theme };
     const backgroundColor = windowBackgroundFor(patch.theme);
@@ -653,9 +663,16 @@ function registerIpc() {
   });
   handle('data:erase', eraseAllData);
   handle('window:main', showMain);
+  handle('window:toggle-quick', toggleQuick);
 }
 
-if (!app.requestSingleInstanceLock()) app.quit();
+if (autostartRequest !== null) {
+  // Commande de l'installeur (--autostart=on|off) : appliquer puis quitter, sans fenêtre.
+  app.whenReady().then(() => {
+    try { autostart.set(autostartRequest); } catch (error) { console.error(error.message); }
+    app.exit(0);
+  });
+} else if (!app.requestSingleInstanceLock()) app.quit();
 else {
   app.on('second-instance', () => { if (mainWindow) showMain(); });
   let browsersClosed = false;
@@ -696,10 +713,13 @@ else {
       registerIpc();
       const webPreferences = { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true, spellcheck: false, devTools: false };
       const windowBackground = windowBackgroundFor(state.settings.theme);
-      mainWindow = new BrowserWindow({ width: 1360, height: 940, minWidth: 900, minHeight: 680, show: false, title: 'Lasmium TOKENS-HUB', icon: path.join(__dirname, 'assets/icon.png'), backgroundColor: windowBackground, autoHideMenuBar: true, webPreferences });
+      // Barre de titre intégrée (comme VS Code) : les boutons Windows restent
+      // natifs (accrochage, info-bulles), dessinés sur la couleur de la barre.
+      mainWindow = new BrowserWindow({ width: 1360, height: 940, minWidth: 900, minHeight: 680, show: false, title: 'Lasmium TOKENS-HUB', icon: path.join(__dirname, 'assets/icon.png'), backgroundColor: windowBackground, autoHideMenuBar: true, titleBarStyle: 'hidden', titleBarOverlay: TITLE_BAR_OVERLAY, webPreferences });
       secureWindow(mainWindow);
       mainWindow.on('close', event => { if (!quitting) { event.preventDefault(); mainWindow.hide(); } });
-      mainWindow.once('ready-to-show', () => mainWindow.show());
+      // Démarrage de Windows (--hidden) : seule l'icône de notification apparaît.
+      mainWindow.once('ready-to-show', () => { if (!startsHidden()) mainWindow.show(); });
       await mainWindow.loadFile(uiPath);
       quickWindow = new BrowserWindow({ width: 360, height: Math.min(660, screen.getPrimaryDisplay().workAreaSize.height - 16), show: false, frame: false, resizable: false, skipTaskbar: true, alwaysOnTop: true, icon: path.join(__dirname, 'assets/icon.png'), backgroundColor: windowBackground, webPreferences });
       secureWindow(quickWindow);

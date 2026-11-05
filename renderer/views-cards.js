@@ -416,7 +416,7 @@ function card(provider) {
     note = provider.billingCycle === 'monthly' ? 'par mois'
       : provider.billingCycle === 'yearly' ? 'par an'
         : provider.billingCycle === 'one-time' ? 'paiement unique'
-          : 'Périodicité à préciser';
+          : 'Fréquence à préciser';
     unit = provider.currency || 'USD';
   } else {
     label = 'Crédits restants';

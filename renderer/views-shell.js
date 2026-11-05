@@ -1,6 +1,7 @@
 /* Lasmium TOKENS-HUB — coquille du tableau de bord (renderer).
  * Libellés de navigation, marque, en-têtes de page, bouton de synchronisation,
- * légende des niveaux, chiffres clés et barre d'outils (filtres + recherche).
+ * barre du haut (recherche, synchronisation, widget, thème, réglages), légende
+ * des niveaux, chiffres clés et barre d'outils (filtres).
  * Pur affichage : lit l'état global fourni par app.js, ne modifie rien, aucun accès réseau.
  * Dépend de ui-core.js (escapeHtml, icon, money, days, hasConnector, isTracked)
  * et des globals d'app.js (state, page, syncing) au moment du rendu.
@@ -32,11 +33,36 @@ function heading(kicker, title, description, action = '') {
     + `${action}</header>`;
 }
 
-function syncButton(compact = false) {
+// Barre du haut façon VS Code (fenêtre sans cadre, boutons Windows natifs à
+// droite) : marque et page, recherche au centre, puis mise à jour (si
+// disponible), synchronisation, widget, thème et réglages.
+function titleBarButton(action, iconName, label, extra = '') {
+  return `<button type="button" class="titlebar-button" data-action="${action}" title="${escapeHtml(label)}"`
+    + ` aria-label="${escapeHtml(label)}"${extra}>${icon(iconName, 16)}</button>`;
+}
+
+function titleBar(activePage) {
+  const update = state.update || {};
+  const busyUpdate = ['downloading', 'extracting', 'installing'].includes(update.state);
+  const updatePill = update.available && ['available', 'ready'].includes(update.state)
+    ? `<button type="button" class="titlebar-update" data-action="update-install"`
+      + ` title="Installer la version ${escapeHtml(update.available.version)} et redémarrer">Mettre à jour</button>`
+    : busyUpdate ? '<span class="titlebar-update is-busy" role="status">Mise à jour…</span>' : '';
   const busy = typeof syncing !== 'undefined' && syncing;
-  return `<button class="primary${compact ? ' primary-compact' : ''}" type="button"`
-    + ` data-action="sync" aria-busy="${busy}" ${busy ? 'disabled' : ''}>`
-    + `${icon('refresh', 16)}<span>${busy ? 'Synchronisation…' : 'Synchroniser'}</span></button>`;
+  const dark = document.documentElement.dataset.theme === 'dark';
+  return `<header class="titlebar" aria-label="Barre de l’application">`
+    + `<div class="titlebar-brand"><img src="../assets/brand/lasmium-mark.svg" alt="" width="18" height="18" draggable="false">`
+    + `<span class="titlebar-name">Lasmium TOKENS-HUB</span>`
+    + `<span class="titlebar-page">${escapeHtml(NAV_LABELS[activePage] || '')}</span></div>`
+    + `<label class="titlebar-search"><span class="sr-only">Rechercher un service</span>${icon('search', 14)}`
+    + `<input id="search" type="search" autocomplete="off" spellcheck="false" placeholder="Rechercher un service…"`
+    + ` aria-label="Rechercher un service" value="${escapeHtml(typeof query === 'string' ? query : '')}"></label>`
+    + `<div class="titlebar-actions">${updatePill}`
+    + titleBarButton('sync', 'refresh', busy ? 'Synchronisation…' : 'Synchroniser', ` aria-busy="${busy}"${busy ? ' disabled' : ''}`)
+    + titleBarButton('toggle-widget', 'widget', 'Ouvrir le widget')
+    + titleBarButton('toggle-theme', dark ? 'sun' : 'moon', dark ? 'Passer en thème clair' : 'Passer en thème sombre')
+    + titleBarButton('open-settings', 'settings', 'Réglages', activePage === 'settings' ? ' aria-current="page"' : '')
+    + `</div></header>`;
 }
 
 function nav(id, label, iconName, count) {
@@ -48,9 +74,8 @@ function nav(id, label, iconName, count) {
 }
 
 function shell(content, activePage) {
-  const label = NAV_LABELS[activePage] || '';
-  const now = new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
   return `<a class="skip-link" href="#main-content">Aller au contenu</a>`
+    + titleBar(activePage)
     + `<div class="app-shell">`
     + `<aside class="sidebar">${brand}`
     + `<div class="workspace"><div class="workspace-text"><strong>Espace local</strong>`
@@ -68,10 +93,6 @@ function shell(content, activePage) {
     + `</nav><p class="local-status">${icon('shield', 14)} Données stockées sur cet appareil</p></div>`
     + `</aside>`
     + `<div class="main">`
-    + `<header class="topbar"><p class="crumb"><span>Espace local</span>`
-    + `<span class="crumb-separator" aria-hidden="true">/</span><span>${escapeHtml(label)}</span></p>`
-    + `<div class="top-actions"><span class="local-pill">${icon('shield', 13)} Stockage local</span>`
-    + `<time class="today" datetime="${new Date().toISOString().slice(0, 10)}">${now}</time></div></header>`
     + `<main class="content" id="main-content" tabindex="-1">${content}</main>`
     + `</div></div>`;
 }
@@ -141,9 +162,6 @@ function toolbar(activeFilter, queryValue) {
       + ` class="${activeFilter === id ? 'is-active' : ''}"`
       + ` aria-pressed="${activeFilter === id}">${label}</button>`).join('')
     + `</div>`
-    + `<label class="search"><span class="sr-only">Rechercher un service</span>`
-    + `${icon('search', 16)}<input id="search" type="search" autocomplete="off"`
-    + ` placeholder="Rechercher un service…" aria-label="Rechercher un service"`
-    + ` value="${escapeHtml(queryValue)}"></label>`
+    + `${queryValue ? `<p class="search-note">Recherche : « ${escapeHtml(queryValue)} »</p>` : ''}`
     + `</div>`;
 }

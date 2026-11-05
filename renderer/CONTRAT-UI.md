@@ -229,6 +229,15 @@ Vérifiés par audit statique sur toutes les vues :
   `.resource-status`, `.badge`, `.ollama-reserve.stale`.
 - Recherche/filtres : `#search`, `[data-filter="all|subscription|api|favorite"]`,
   `[data-favorite]`, `.stats`, `.data-table`, `.data-table tbody tr`.
+- Barre du haut (0.6.11) : `.titlebar` (zone de déplacement, `titleBarOverlay`
+  natif à droite), `.titlebar-page`, `.titlebar #search` (recherche ; depuis une
+  autre page, revient à la vue d'ensemble), `.titlebar-update`
+  `[data-action="update-install"]` (seulement si une mise à jour est disponible),
+  `[data-action="sync"]`, `[data-action="toggle-widget"]`,
+  `[data-action="toggle-theme"]`, `[data-action="open-settings"]`. L'ancienne
+  barre `.topbar` (fil d'Ariane, date) et le bouton Synchroniser des en-têtes
+  de page sont retirés. Réglages : `[name="autostart"]` (désactivé hors
+  application installée).
 - Connexions : `.connection-card`, `[data-open]` avec `data-tab="connection"`,
   `.connection-success`, `.dialog-body`, `#api-key`, `#connection-form`,
   `#account-connection-progress`, `#orca-connection-progress`,

@@ -43,7 +43,7 @@ const rendererSharedGlobals = {
   // renderer/reset-ui.js
   resetMarkup: 'readonly',
   // renderer/views-shell.js, views-cards.js, views-pages.js, views-quick.js (ancien views.js)
-  NAV_LABELS: 'readonly', brand: 'readonly', heading: 'readonly', syncButton: 'readonly', nav: 'readonly',
+  NAV_LABELS: 'readonly', brand: 'readonly', heading: 'readonly', titleBar: 'readonly', titleBarButton: 'readonly', nav: 'readonly',
   shell: 'readonly', resourceLegend: 'readonly', stats: 'readonly', toolbar: 'readonly',
   filteredCards: 'readonly', overview: 'readonly', statusBadge: 'readonly', strategyLabel: 'readonly',
   healthPresentation: 'readonly', healthPanel: 'readonly', packStatusMarkup: 'readonly',

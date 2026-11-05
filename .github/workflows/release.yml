@@ -98,6 +98,14 @@ jobs:
       - name: Contrôler l'archive (extraction, contenu, SHA-256)
         run: npm run release:verify
 
+      # Installeur par utilisateur (Inno Setup 6) : publié à côté du ZIP, qui
+      # reste la source des mises à jour automatiques signées.
+      - name: Installer Inno Setup
+        run: choco install innosetup --no-progress -y
+
+      - name: Construire l'installeur Windows
+        run: npm run package:installer
+
       - name: Extraire les notes de version du CHANGELOG
         run: node scripts/release-notes.cjs --out dist/release-notes.md
 
@@ -152,6 +160,7 @@ jobs:
           name: release-${{ steps.version.outputs.version }}
           path: |
             dist/LasmiumTokensHub-${{ steps.version.outputs.version }}-win32-x64.zip
+            dist/LasmiumTokensHub-Setup-${{ steps.version.outputs.version }}.exe
             dist/SHA256SUMS-${{ steps.version.outputs.version }}.txt
             dist/release-notes.md
             dist/latest.json
@@ -187,8 +196,8 @@ jobs:
             gh release create "$RELEASE_TAG" --draft --verify-tag --title "Lasmium TOKENS-HUB $RELEASE_VERSION" --notes-file dist/release-notes.md
           fi
 
-      - name: Joindre le ZIP, SHA256SUMS et latest.json (si signé)
+      - name: Joindre le ZIP, l'installeur, SHA256SUMS et latest.json (si signé)
         run: |
-          assets=("dist/LasmiumTokensHub-$RELEASE_VERSION-win32-x64.zip" "dist/SHA256SUMS-$RELEASE_VERSION.txt")
+          assets=("dist/LasmiumTokensHub-$RELEASE_VERSION-win32-x64.zip" "dist/LasmiumTokensHub-Setup-$RELEASE_VERSION.exe" "dist/SHA256SUMS-$RELEASE_VERSION.txt")
           if [ -f dist/latest.json ]; then assets+=("dist/latest.json"); fi
           gh release upload "$RELEASE_TAG" "${assets[@]}" --clobber

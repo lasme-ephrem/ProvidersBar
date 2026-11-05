@@ -77,6 +77,7 @@ Tous les canaux passent par une garde unique : la frame émettrice doit être la
 | diagnostics.cjs | Contrôles de prérequis lecture seule (utilisés par `scripts/doctor.cjs`) |
 | claude-connection.cjs | Renouvellement OAuth de Claude Code sous verrous, écriture atomique |
 | claude-live-usage.cjs | Lecture directe des quotas Anthropic (instance unique côté `main.cjs`) |
+| autostart.cjs | Lancement au démarrage de Windows (Réglages et installeur `--autostart=on|off`), démarrage discret `--hidden` |
 | api-spending.cjs | Suivi des dépenses API : montant de départ, recharges détectées par hausse du solde (≥ 0,50), crédits offerts, totaux du mois |
 | claude-cli.cjs | Connexion à l’abonnement via Claude Code : `auth status --json`, `auth login --claudeai`, environnement sans clé API |
 

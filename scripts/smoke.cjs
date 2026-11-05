@@ -120,6 +120,20 @@ async function main() {
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   await page.waitForSelector('.cards .card');
+  // Barre du haut façon VS Code (0.6.11) : boutons Windows natifs à droite,
+  // recherche au centre, actions utiles ; plus de second bouton Réglages.
+  assert.equal(await page.evaluate(() => Boolean(navigator.windowControlsOverlay?.visible)), true, 'boutons Windows natifs');
+  assert.deepEqual(await page.locator('.titlebar-actions [data-action]').evaluateAll(items => items.map(item => item.dataset.action)),
+    ['sync', 'toggle-widget', 'toggle-theme', 'open-settings']);
+  assert.equal(await page.locator('.titlebar #search').count(), 1);
+  await page.locator('[data-action="open-settings"]').click();
+  await page.waitForSelector('#settings-form');
+  // Lancement au démarrage : disponible dans l'exécutable construit, pas en développement.
+  const packagedApp = await page.evaluate(() => Boolean(state.app?.packaged));
+  assert.equal(await page.locator('[name="autostart"]').isDisabled(), !packagedApp, 'lancement au démarrage réservé à l’application installée');
+  await page.locator('#search').fill('claude');
+  await page.waitForFunction(() => page === 'overview' && document.activeElement?.id === 'search');
+  await page.locator('#search').fill('');
 
   // ------------------------------------------------------------------ *
   // Démarrage : marque neutre, thème forcé, version dynamique, IPC app:info

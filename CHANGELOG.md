@@ -1,5 +1,36 @@
 # Historique des versions
 
+## 0.6.11 — 5 novembre 2026
+
+Version **Installation et finitions** : installeur Windows, lancement au
+démarrage, icône propre et barre du haut façon VS Code. Toutes les
+fonctionnalités 0.6.10 sont conservées.
+
+### Nouveautés
+
+- Installeur `LasmiumTokensHub-Setup-<version>.exe` (Inno Setup 6) : installation
+  par utilisateur dans `%LOCALAPPDATA%\Programs\LasmiumTokensHub`, sans droits
+  administrateur, raccourcis menu Démarrer et Bureau (option), désinstalleur qui
+  demande s'il faut conserver les données. Publié à côté du ZIP, qui reste la
+  source des mises à jour automatiques signées.
+- Lancement au démarrage de Windows : case de l'installeur et des Réglages ;
+  l'application s'ouvre alors discrètement dans la zone de notification.
+- Barre du haut façon VS Code : boutons Windows natifs, recherche au centre,
+  « Mettre à jour » quand une version est disponible, Synchroniser, widget,
+  thème clair/sombre et Réglages.
+
+### Corrections
+
+- L'exécutable affichait l'icône et le nom d'Electron (Explorateur, barre des
+  tâches, Gestionnaire des tâches) : il porte désormais l'icône, le nom, l'éditeur
+  et la version de Lasmium TOKENS-HUB.
+- Cartes : « Fréquence à préciser » au lieu de « Périodicité à préciser ».
+
+### Qualité
+
+- 365 tests (ressources de l'exécutable, lancement au démarrage, installeur) ;
+  smoke principal étendu à la barre du haut.
+
 ## 0.6.10 — 5 novembre 2026
 
 Version **corrective** : Ollama suit le forfait lu sur son site, textes d'un

@@ -1,6 +1,6 @@
 # Confidentialité — Lasmium TOKENS-HUB
 
-Ce document décrit le comportement de la version **0.6.10** ; la version
+Ce document décrit le comportement de la version **0.6.11** ; la version
 installée est affichée dans les réglages de l'application.
 
 Lasmium TOKENS-HUB est une application **locale pour Windows x64**. Elle ne dispose
@@ -83,6 +83,13 @@ Il ne faut jamais partager ni synchroniser ce dossier.
 - **Suppression locale** : la déconnexion d'un fournisseur efface sa session
   (profil ou partition) et sa clé API ; les sessions Ollama et OrcaRouter sont
   effacées via `clearStorageData`.
+
+## 3 ter. Lancement au démarrage
+
+Si tu l'actives (installeur ou Réglages), Windows enregistre une valeur sous
+`HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run` qui
+lance l'application avec `--hidden`. Aucune autre donnée n'est écrite dans le
+registre ; la désinstallation retire cette valeur.
 
 ## 3 bis. Suivi des dépenses API
 

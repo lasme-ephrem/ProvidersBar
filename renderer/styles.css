@@ -85,16 +85,17 @@ svg { display: block; }
 .app-shell {
   display: grid;
   grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
-  min-height: 100vh;
+  min-height: calc(100vh - var(--titlebar-height));
+  margin-top: var(--titlebar-height);
 }
 
 .sidebar {
   position: sticky;
-  top: 0;
+  top: var(--titlebar-height);
   display: flex;
   flex-direction: column;
   gap: 18px;
-  height: 100vh;
+  height: calc(100vh - var(--titlebar-height));
   padding: 22px 16px 16px;
   overflow-y: auto;
   color: var(--sidebar-text);
@@ -967,8 +968,9 @@ html[data-theme="light"] .card { background: var(--surface); }
  * ------------------------------------------------------------------ */
 dialog {
   width: min(600px, calc(100vw - 36px));
-  max-height: calc(100vh - 36px);
-  margin: 18px 18px 18px auto;
+  max-height: calc(100vh - var(--titlebar-height) - 36px);
+  margin: calc(var(--titlebar-height) + 18px) 18px 18px auto;
+  -webkit-app-region: no-drag;
   padding: 0;
   border: 1px solid var(--border);
   border-radius: var(--radius-xl);
@@ -1008,7 +1010,7 @@ dialog::backdrop { background: rgba(4, 8, 12, 0.55); backdrop-filter: blur(4px);
 .dialog-tabs button:hover { color: var(--text); }
 .dialog-tabs button.is-active { color: var(--text); }
 .dialog-tabs button.is-active::after { content: ""; position: absolute; left: 10px; right: 10px; bottom: -1px; height: 2px; border-radius: 2px; background: var(--accent); }
-.dialog-body { padding: 18px 20px 22px; overflow-y: auto; max-height: calc(100vh - 190px); }
+.dialog-body { padding: 18px 20px 22px; overflow-y: auto; max-height: calc(100vh - var(--titlebar-height) - 190px); }
 .dialog-body > * + * { margin-top: 12px; }
 .dialog-body h3 { font-size: 15px; }
 .dialog-body .section-heading { margin-top: 18px; }
@@ -1276,4 +1278,64 @@ body.quick-mode { background: transparent; }
 @media (max-width: 520px) {
   .spending-totals { grid-template-columns: 1fr; }
   .top-up { grid-template-columns: 1fr auto; }
+}
+
+/* ------------------------------------------------------------------ *
+ * Barre du haut façon VS Code (fenêtre sans cadre, titleBarOverlay)
+ * ------------------------------------------------------------------ */
+:root { --titlebar-height: 40px; --titlebar-bg: #070b10; }
+body.quick-mode { --titlebar-height: 0px; }
+.titlebar {
+  position: fixed;
+  inset: 0 0 auto 0;
+  z-index: 40;
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(220px, 460px) minmax(180px, 1fr);
+  align-items: center;
+  gap: 12px;
+  height: var(--titlebar-height);
+  /* Les boutons Windows (réduire, agrandir, fermer) occupent la droite. */
+  padding: 0 calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw) + 8px) 0 12px;
+  color: var(--sidebar-text);
+  background: var(--titlebar-bg);
+  border-bottom: 1px solid var(--sidebar-border);
+  -webkit-app-region: drag;
+  user-select: none;
+}
+.titlebar button, .titlebar input, .titlebar label { -webkit-app-region: no-drag; }
+.titlebar-brand { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 12px; }
+.titlebar-name { font-weight: 650; white-space: nowrap; }
+.titlebar-page { overflow: hidden; color: var(--sidebar-muted); text-overflow: ellipsis; white-space: nowrap; }
+.titlebar-page:not(:empty)::before { content: '/'; margin-right: 8px; color: var(--sidebar-border); }
+.titlebar-search {
+  display: flex; align-items: center; gap: 8px; height: 26px; padding: 0 10px;
+  border: 1px solid var(--sidebar-border); border-radius: 7px;
+  background: rgba(255, 255, 255, 0.05); color: var(--sidebar-muted);
+}
+.titlebar-search:focus-within { border-color: var(--accent); background: rgba(255, 255, 255, 0.08); }
+.titlebar-search input {
+  flex: 1; min-width: 0; padding: 0; border: 0; background: transparent;
+  color: var(--sidebar-text); font: inherit; font-size: 12px; outline: none; box-shadow: none;
+}
+.titlebar-search input::placeholder { color: var(--sidebar-muted); }
+.titlebar-actions { display: flex; align-items: center; justify-content: flex-end; gap: 2px; }
+.titlebar-button {
+  display: grid; place-items: center; width: 32px; height: 28px; padding: 0;
+  border: 0; border-radius: 6px; background: transparent; color: var(--sidebar-muted); cursor: pointer;
+}
+.titlebar-button:hover, .titlebar-button[aria-current="page"] { background: var(--nav-hover-bg); color: var(--sidebar-text); }
+.titlebar-button:focus-visible, .titlebar-update:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.titlebar-button[aria-busy="true"] svg { animation: titlebar-spin 0.9s linear infinite; }
+.titlebar-button:disabled { cursor: default; opacity: 0.8; }
+.titlebar-update {
+  margin-right: 6px; padding: 3px 10px; border: 0; border-radius: 6px;
+  background: var(--accent); color: #0b1406; font: inherit; font-size: 12px; font-weight: 650; cursor: pointer; white-space: nowrap;
+}
+.titlebar-update.is-busy { background: var(--nav-active-bg); color: var(--nav-active-text); cursor: default; }
+.search-note { margin-left: auto; color: var(--text-soft); font-size: var(--text-xs); }
+@keyframes titlebar-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .titlebar-button[aria-busy="true"] svg { animation: none; } }
+@media (max-width: 760px) {
+  .titlebar { grid-template-columns: auto minmax(120px, 1fr) auto; }
+  .titlebar-name, .titlebar-page { display: none; }
 }

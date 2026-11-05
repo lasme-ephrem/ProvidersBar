@@ -1,6 +1,6 @@
 {
   "name": "lasmium-tokens-hub",
-  "version": "0.6.10",
+  "version": "0.6.11",
   "private": true,
   "description": "Lasmium TOKENS-HUB — suivi local des abonnements, quotas et crédits IA pour Windows",
   "main": "main.cjs",
@@ -19,6 +19,7 @@
     "update:portable": "node scripts/update-portable.cjs",
     "test:claude:desktop": "node scripts/smoke-claude.cjs",
     "package:release": "node scripts/package.cjs --release",
+    "package:installer": "node scripts/build-installer.cjs",
     "release:artifacts": "node scripts/release-artifacts.cjs",
     "release:verify": "node scripts/verify-release-archive.cjs",
     "verify:connections": "node scripts/verify-connections.cjs",
@@ -36,7 +37,8 @@
     "electron": "44.10.2",
     "eslint": "9.39.5",
     "globals": "17.14.0",
-    "playwright": "1.63.0"
+    "playwright": "1.63.0",
+    "resedit": "3.1.0"
   },
   "engines": {
     "node": ">=24"

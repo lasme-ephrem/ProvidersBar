@@ -25,7 +25,9 @@ const FIXTURE_RENDERER = '<main>fixture renderer v1</main>\n';
 
 async function runNode(cwd, args) {
   try {
-    const { stdout, stderr } = await execFileAsync(process.execPath, args, { cwd, windowsHide: true, timeout: 60000, maxBuffer: 8 * 1024 * 1024, encoding: 'utf8' });
+    // Faux Electron (quelques octets) : l'icône de l'exécutable n'est pas écrite.
+    const env = { ...process.env, LASMIUM_FAKE_ELECTRON: '1' };
+    const { stdout, stderr } = await execFileAsync(process.execPath, args, { cwd, env, windowsHide: true, timeout: 60000, maxBuffer: 8 * 1024 * 1024, encoding: 'utf8' });
     return { code: 0, stdout, stderr };
   } catch (error) {
     return { code: typeof error.code === 'number' ? error.code : 1, stdout: error.stdout || '', stderr: error.stderr || String(error.message) };

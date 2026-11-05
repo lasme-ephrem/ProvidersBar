@@ -1,6 +1,7 @@
 const fs=require('node:fs/promises');
 const path=require('node:path');
 const { updateAppResources }=require('./app-resources.cjs');
+const { brandExecutable }=require('./exe-resources.cjs');
 async function main(){
   const root=path.resolve(__dirname,'..');
   const executable=require('electron');
@@ -14,6 +15,9 @@ async function main(){
   await updateAppResources(root,out);
   await fs.copyFile(path.join(out,'electron.exe'),path.join(out,'LasmiumTokensHub.exe'));
   await fs.unlink(path.join(out,'electron.exe'));
+  // Icône Lasmium et nom du produit dans l'exécutable (sinon ceux d'Electron).
+  // Seuls les tests de packaging, qui utilisent un faux Electron, s'en passent.
+  if(process.env.LASMIUM_FAKE_ELECTRON!=='1') await brandExecutable(path.join(out,'LasmiumTokensHub.exe'),{ iconPath: path.join(root,'assets','icon.ico'), version: require('../package.json').version });
   console.log(`Application : ${path.join(out,'LasmiumTokensHub.exe')}`);
 }
 main().catch(error=>{console.error(error);process.exitCode=1;});

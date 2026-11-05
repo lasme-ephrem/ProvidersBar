@@ -173,7 +173,7 @@ async function showClaudeFailure(error) {
 }
 
 async function runAction(action, button) {
-  if (!state.desktop && !['close-dialog', 'main', 'erase-cancel'].includes(action)) {
+  if (!state.desktop && !['close-dialog', 'main', 'erase-cancel', 'open-settings'].includes(action)) {
     toast('Cette action est disponible dans l’application Windows.');
     return;
   }
@@ -318,6 +318,16 @@ async function runAction(action, button) {
     } finally {
       button.disabled = false;
     }
+    return;
+  }
+  // Barre du haut : widget de la zone de notification et thème clair/sombre.
+  if (action === 'toggle-widget') { await api.toggleQuick(); return; }
+  if (action === 'open-settings') { page = 'settings'; dialogId = null; render(); return; }
+  if (action === 'toggle-theme') {
+    const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+    state = await api.updateSettings({ ...state.settings, theme: next });
+    applyTheme(next);
+    render();
     return;
   }
   if (action === 'sync') {
@@ -476,6 +486,15 @@ document.addEventListener('input', event => {
 document.addEventListener('input', event => {
   if (event.target.id !== 'search') return;
   query = event.target.value;
+  // Recherche de la barre du haut : depuis une autre page, on revient aux cartes.
+  if (page !== 'overview' && !quick) {
+    page = 'overview';
+    render();
+    const field = document.getElementById('search');
+    field?.focus();
+    field?.setSelectionRange(query.length, query.length);
+    return;
+  }
   const container = document.getElementById('provider-cards');
   if (container) container.innerHTML = filteredCards();
   clearTimeout(searchTimer);
@@ -539,6 +558,7 @@ document.addEventListener('submit', async event => {
     if (form.id === 'settings-form') {
       state = await api.updateSettings({
         autoRefresh: data.has('autoRefresh'),
+        ...(state.app?.autostart?.supported ? { autostart: data.has('autostart') } : {}),
         notifications: data.has('notifications'),
         lowBalance: num('lowBalance'),
         theme: get('theme') || 'light',
