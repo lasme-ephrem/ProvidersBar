@@ -105,6 +105,22 @@ l'âge du relevé ; une session Desktop issue d'un repli 0.6.6 (`claudeSync` ave
 code `auth-*`) doit être reconnue comme reprenable ; le message ne doit plus
 conseiller de déconnecter.
 
+### Cause du jeton jamais renouvelé, et résolution
+
+Les variables d'environnement utilisateur `CLAUDE_CODE_OAUTH_TOKEN` et
+`ANTHROPIC_API_KEY` sont définies sur le PC. Claude Code en ligne de commande s'en
+sert et ne lit ni ne renouvelle `~/.claude/.credentials.json`. L'application Claude
+de bureau ne le renouvelle pas non plus. Le fichier lu par Lasmium restait donc
+bloqué sur un jeton expiré (`claude -p "ok"` réussissait sans le modifier).
+
+Résolution à 14:04 (heure locale) : `claude` lancé dans un PowerShell où les deux
+variables étaient masquées, puis `/login`. Le fichier a reçu un jeton valable jusqu'à
+22:04. Lasmium (mode direct, surveillance du fichier) a relu les quotas à 14:05:27 :
+`5 heures 85 %`, `Semaine 76 %`, **`Fable · Semaine 65 %`**, sans erreur.
+
+Tant que ces variables restent définies, seul Lasmium renouvelle ce fichier ; un
+nouveau refus d'Anthropic ramènerait le repli Claude Desktop.
+
 ## Limites connues
 
 - Tant que Claude Code n'a pas renouvelé son jeton et qu'Anthropic refuse le
