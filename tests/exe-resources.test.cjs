@@ -32,3 +32,20 @@ test('brandExecutable remplace l’icône et le nom d’Electron dans l’exécu
   assert.equal(after.strings.LegalCopyright, '© 2026 Lasmium');
   assert.deepEqual(after.iconSizes, [16, 32, 48, 64, 128, 256], 'les six tailles de assets/icon.ico');
 });
+
+test('assets/icon.ico est la marque Lasmium (issue de icon.png), pas l’ancienne icône ProvidersBar', () => {
+  const fss = require('node:fs');
+  const crypto = require('node:crypto');
+  const ico = fss.readFileSync(path.join(root, 'assets', 'icon.ico'));
+  // Ancienne icône à barres vertes (ProvidersBar), restée dans l'exécutable 0.6.11.
+  const OLD_PROVIDERSBAR_ICO = '6db8e7c6991eb515507f9bc09fb6a237057b6a0b139dcb5409939432ccd98f0a';
+  assert.notEqual(crypto.createHash('sha256').update(ico).digest('hex'), OLD_PROVIDERSBAR_ICO);
+  const count = ico.readUInt16LE(4);
+  const sizes = Array.from({ length: count }, (_, index) => ico[6 + 16 * index] || 256);
+  assert.deepEqual(sizes, [16, 32, 48, 64, 128, 256]);
+  // icon.png (source unique) est plus récent ou identique en contenu : le
+  // générateur ne dessine plus rien lui-même.
+  const generator = fss.readFileSync(path.join(root, 'scripts', 'generate-icon.py'), 'utf8');
+  assert.match(generator, /Image\.open\(ASSETS \/ 'icon\.png'\)/);
+  assert.doesNotMatch(generator, /rounded_rectangle/);
+});

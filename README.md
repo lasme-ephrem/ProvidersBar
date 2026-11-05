@@ -2,6 +2,8 @@
 
 Application desktop Windows pour suivre les abonnements, quotas et crédits de **dix fournisseurs d’IA**. Un tableau de bord et un widget dans la zone de notification regroupent les abonnements et les API avec leurs ressources restantes et leurs dates de réinitialisation.
 
+**Version 0.6.12 — 5 novembre 2026 :** version **corrective** : l'exécutable, la barre des tâches, le menu Démarrer et l'installeur affichent la marque Lasmium « L » au lieu de l'ancienne icône ProvidersBar. Détails dans [CHANGELOG.md](CHANGELOG.md).
+
 **Version 0.6.11 — 5 novembre 2026 :** **installation et finitions** : installeur Windows (par utilisateur, sans administrateur), lancement au démarrage de Windows, icône Lasmium sur l'exécutable et barre du haut façon VS Code. Détails dans [CHANGELOG.md](CHANGELOG.md).
 
 **Version 0.6.10 — 5 novembre 2026 :** version **corrective** : Ollama suit le forfait lu sur son site (Free = 0 $, forfait payant compté même après son échéance), textes d'un abonnement terminé harmonisés, smoke Claude fiable en CI. Détails dans [CHANGELOG.md](CHANGELOG.md).
@@ -15,6 +17,10 @@ Application desktop Windows pour suivre les abonnements, quotas et crédits de *
 **Version 0.6.6 — 5 novembre 2026 :** version **Qualité** : correction d'un timer orphelin du navigateur de connexion Ollama, URL de mise à jour vers le dépôt renommé, CI fusionnée et workflow de release automatisé, ESLint, 352 tests, renderer découpé. Toutes les fonctionnalités 0.6.5 sont conservées ; détails dans [CHANGELOG.md](CHANGELOG.md).
 
 **Version 0.6.5 — 4 novembre 2026 :** **mise à jour automatique signée** du portable, vérifiée par manifeste Ed25519 et SHA-256, avec remplacement après fermeture et conservation stricte de `data/` ; **canary live** prêt à recevoir des clés de test locales. Toutes les fonctionnalités 0.5.0 sont conservées. Détails dans [CHANGELOG.md](CHANGELOG.md), [updates.md](docs/updates.md), la [matrice fournisseurs](docs/provider-matrix.md) et le [runbook](docs/runbook-connectors.md).
+
+## Maintenance 0.6.12
+
+- **Icône** : `assets/icon.ico` construit depuis `assets/icon.png` (marque Lasmium) par `python scripts/generate-icon.py` ; un test refuse l'ancienne icône ProvidersBar.
 
 ## Maintenance 0.6.11
 

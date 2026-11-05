@@ -1,5 +1,21 @@
 # Historique des versions
 
+## 0.6.12 — 5 novembre 2026
+
+Version **corrective** : la bonne icône partout. Toutes les fonctionnalités
+0.6.11 sont conservées.
+
+### Corrections
+
+- L'exécutable, la barre des tâches, le menu Démarrer et l'installeur
+  affichaient l'ancienne icône ProvidersBar (barres vertes) : `assets/icon.ico`
+  n'avait jamais été régénéré depuis la nouvelle identité. Il est désormais
+  construit à partir de `assets/icon.png` (marque Lasmium « L »), comme la
+  fenêtre et la zone de notification.
+- `scripts/generate-icon.py` ne dessine plus l'ancienne icône : il produit
+  `icon.ico` (16 à 256 px) depuis `icon.png`, source unique ; un test refuse
+  l'ancienne icône.
+
 ## 0.6.11 — 5 novembre 2026
 
 Version **Installation et finitions** : installeur Windows, lancement au
