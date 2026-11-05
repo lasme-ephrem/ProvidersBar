@@ -75,6 +75,8 @@ function renderDialog() {
   if (!provider) return;
   const dialog = document.getElementById('detail-dialog');
   const token = dialog.contains(document.activeElement) ? captureFocus() : null;
+  // Abonnement : Informations/Connexion ; API : Connexion/Dépenses.
+  dialogTab = normalizeDialogTab(provider, dialogTab);
   dialog.innerHTML = dialogMarkup(provider, dialogTab);
   if (token) restoreFocus(token);
 }
@@ -178,6 +180,34 @@ async function runAction(action, button) {
   if (action === 'close-dialog') {
     document.getElementById('detail-dialog').close();
     dialogId = null;
+    return;
+  }
+  // Fiche abonnement et suivi des dépenses API (0.6.9).
+  if (['subscription-end', 'spending-stop', 'topup-toggle'].includes(action)) {
+    const id = dialogId;
+    button.disabled = true;
+    try {
+      if (action === 'subscription-end') {
+        state = await api.updateProvider(id, { subscriptionStatus: 'expired' });
+        document.getElementById('detail-dialog').close();
+        dialogId = null;
+        toast('Abonnement retiré des coûts. Tu peux le réactiver depuis sa fiche.');
+      } else if (action === 'spending-stop') {
+        state = await api.stopApiSpending(id);
+        toast('Suivi des dépenses arrêté.');
+      } else {
+        state = await api.markTopUp(id, button.dataset.topup, button.dataset.offered === 'true');
+        toast(button.dataset.offered === 'true' ? 'Recharge retirée des dépenses (crédit offert).' : 'Recharge comptée comme payée.');
+      }
+      render();
+      if (dialogId) renderDialog();
+    } catch (error) {
+      const node = document.querySelector('#detail-dialog .form-error');
+      const message = error.message.replace(IPC_ERROR_PREFIX, '');
+      if (node) node.textContent = message; else toast(message);
+    } finally {
+      button.disabled = false;
+    }
     return;
   }
   if (action === 'main') { api.showMain(); return; }
@@ -427,6 +457,22 @@ document.addEventListener('keydown', event => {
 });
 
 let searchTimer = null;
+// Fiche abonnement : libellé de l'échéance et coût recalculés pendant la saisie.
+document.addEventListener('input', event => {
+  const form = event.target.closest?.('#provider-form');
+  if (!form) return;
+  const provider = state.providers.find(item => item.id === dialogId);
+  if (!provider) return;
+  const data = new FormData(form);
+  const amount = data.get('amount') === '' ? null : Number(data.get('amount'));
+  const draft = { ...provider, amount: Number.isFinite(amount) ? amount : null, currency: data.get('currency'),
+    billingCycle: data.get('billingCycle'), renewalDate: data.get('renewalDate') || null };
+  const label = document.getElementById('renewalDate-label');
+  if (label) label.textContent = renewalLabel(draft.billingCycle);
+  const line = document.getElementById('cost-line');
+  if (line) line.textContent = subscriptionCostLine(draft);
+});
+
 document.addEventListener('input', event => {
   if (event.target.id !== 'search') return;
   query = event.target.value;
@@ -469,45 +515,19 @@ document.addEventListener('submit', async event => {
         currency: get('currency'),
         billingCycle: get('billingCycle'),
         renewalDate: get('renewalDate') || null,
-        nextAmount: num('nextAmount'),
-        priceChangeDate: get('priceChangeDate') || null,
-        notes: get('notes'),
-        reviewed: data.has('reviewed'),
       };
-      if (provider.type === 'subscription') {
-        patch.subscriptionStatus = get('subscriptionStatus');
-        patch.statusMessage = get('statusMessage');
-        patch.confirmRenewal = data.has('confirmRenewal');
-      } else {
-        patch.active = data.has('active');
-      }
+      // Abonnement terminé : « Réactiver » confirme le renouvellement (échéance future exigée).
+      const reactivate = provider.subscriptionStatus === 'expired';
+      if (reactivate) Object.assign(patch, { subscriptionStatus: 'active', confirmRenewal: true });
       state = await api.updateProvider(dialogId, patch);
       document.getElementById('detail-dialog').close();
       dialogId = null;
-      toast('Fiche enregistrée.');
+      toast(reactivate ? 'Abonnement réactivé.' : 'Fiche enregistrée.');
     }
-    if (form.id === 'resets-form') {
-      const provider = state.providers.find(item => item.id === dialogId);
-      const dates = Object.fromEntries(QuotaResets.slots(provider).map((slot, index) => [
-        slot.key,
-        get(`reset-date-${index}`)
-          ? { date: get(`reset-date-${index}`), time: get(`reset-time-${index}`) || null }
-          : null,
-      ]));
-      state = await api.saveResets(dialogId, dates);
+    if (form.id === 'spending-form') {
+      state = await api.startApiSpending(dialogId, num('startAmount'));
       renderDialog();
-      toast('Dates de réinitialisation enregistrées.');
-    }
-    if (form.id === 'manual-form') {
-      state = await api.saveManual(dialogId, {
-        balance: num('balance'),
-        currency: get('currency'),
-        quotaRemaining: num('quotaRemaining'),
-        resetAt: get('resetAt') ? new Date(get('resetAt')).toISOString() : null,
-      });
-      document.getElementById('detail-dialog').close();
-      dialogId = null;
-      toast('Relevé ajouté à l’historique.');
+      toast('Suivi des dépenses enregistré.');
     }
     if (form.id === 'connection-form') {
       state = await api.connect(dialogId, get('key'));
@@ -568,7 +588,11 @@ function receiveState(data) {
         && document.activeElement.matches('input, textarea, select'));
     if (!editingField) render();
   }
-  if (changedAccounts.some(provider => provider.id === dialogId) && dialogTab === 'connection') {
+  // Onglet Dépenses ouvert : une recharge détectée apparaît sans rouvrir la
+  // fiche (sauf pendant la saisie du montant de départ).
+  const spendingOpen = dialogTab === 'spending' && dialogId
+    && !document.querySelector('#spending-form input:focus');
+  if ((changedAccounts.some(provider => provider.id === dialogId) && dialogTab === 'connection') || spendingOpen) {
     renderDialog();
   }
   for (const provider of justConnected) {

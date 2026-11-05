@@ -90,37 +90,40 @@ function resourceLegend() {
 /* ------------------------------------------------------------------ *
  * Vue d'ensemble : chiffres clés et barre d'outils
  * ------------------------------------------------------------------ */
+// Coûts en clair (0.6.9) : récurrent par mois, paiements uniques à part,
+// dépenses API du mois, puis la prochaine échéance.
 function stats() {
-  const subscriptions = state.providers.filter(provider => provider.type === 'subscription' && isTracked(provider));
-  const apiCount = state.providers.filter(provider => provider.type === 'api' && isTracked(provider)).length;
-  const connected = state.providers.filter(provider => provider.connected).length;
-  const totals = Object.entries(state.summary.monthly);
-  const monthly = totals.length
-    ? totals.map(([currency, value]) => money(value, currency)).join(' + ')
-    : '—';
+  const summary = state.summary || {};
+  const totals = values => {
+    const entries = Object.entries(values || {});
+    return entries.length ? entries.map(([currency, value]) => money(value, currency)).join(' + ') : '—';
+  };
+  const api = summary.api || { month: {}, tracked: 0, topUps: 0 };
   const next = state.providers
-    .filter(provider => isTracked(provider) && provider.renewalDate && days(provider.renewalDate) >= 0)
+    .filter(provider => isTracked(provider) && provider.type === 'subscription' && provider.subscriptionStatus !== 'expired'
+      && provider.renewalDate && days(provider.renewalDate) >= 0)
     .sort((a, b) => a.renewalDate.localeCompare(b.renewalDate))[0];
-  const autoRefresh = state.settings?.autoRefresh;
-  const refreshNote = !autoRefresh
-    ? 'Actualisation automatique désactivée'
-    : 'Actualisation auto : comptes toutes les 5 min';
+  const recurringNote = summary.overdue
+    ? `${summary.overdue} échéance${summary.overdue > 1 ? 's' : ''} à vérifier`
+    : summary.unpriced ? `${summary.unpriced} prix ou fréquence à préciser` : 'Mensuels + annuels ÷ 12';
+  const oneTimeNote = summary.oneTimeCount
+    ? `${summary.oneTimeCount} paiement${summary.oneTimeCount > 1 ? 's' : ''}${summary.nextOneTimeEnd
+      ? ` · prochaine fin le ${shortDate(summary.nextOneTimeEnd)}` : ''}`
+    : 'Aucun paiement unique en cours';
+  const apiNote = api.tracked
+    ? `${api.topUps} recharge${api.topUps > 1 ? 's' : ''} détectée${api.topUps > 1 ? 's' : ''} ce mois`
+    : 'Indique un montant de départ dans une fiche API';
   return `<section class="stats" aria-label="Chiffres clés">`
-    + `<div class="stat"><p class="stat-label">Services suivis ${icon('grid', 16)}</p>`
-    + `<p class="stat-value">${subscriptions.length + apiCount}<small>services</small></p>`
-    + `<p class="stat-note">${subscriptions.length} abonnements · ${apiCount} accès API</p></div>`
     + `<div class="stat"><p class="stat-label">Abonnements / mois ${icon('wallet', 16)}</p>`
-    + `<p class="stat-value">${monthly}</p><p class="stat-note">`
-    + `${state.summary.unpriced
-      ? `${state.summary.unpriced} périodicités ou tarifs à préciser`
-      : 'Équivalent mensuel des tarifs renseignés'}</p></div>`
-    + `<div class="stat"><p class="stat-label">Comptes connectés ${icon('plug', 16)}</p>`
-    + `<p class="stat-value accent">${connected}<small>/ ${state.providers.filter(hasConnector).length} connectables</small></p>`
-    + `<p class="stat-note">${connected ? refreshNote : 'Connecte un compte pour démarrer le suivi automatique'}</p></div>`
+    + `<p class="stat-value">${totals(summary.monthly)}</p><p class="stat-note">${recurringNote}</p></div>`
+    + `<div class="stat"><p class="stat-label">Paiements uniques en cours ${icon('grid', 16)}</p>`
+    + `<p class="stat-value">${totals(summary.oneTime)}</p><p class="stat-note">${escapeHtml(oneTimeNote)}</p></div>`
+    + `<div class="stat"><p class="stat-label">Dépenses API · ce mois ${icon('plug', 16)}</p>`
+    + `<p class="stat-value accent">${totals(api.month)}</p><p class="stat-note">${apiNote}</p></div>`
     + `<div class="stat"><p class="stat-label">Prochaine échéance ${icon('clock', 16)}</p>`
     + `<p class="stat-value">${next ? `${days(next.renewalDate)}<small>jours</small>` : '—'}</p>`
     + `<p class="stat-note">${next
-      ? `${escapeHtml(next.name)}${next.reviewed ? '' : ' · date à vérifier'}`
+      ? `${escapeHtml(next.name)} · ${next.billingCycle === 'one-time' ? 'fin du paiement unique' : 'prochain paiement'}`
       : 'Aucune date à venir renseignée'}</p></div>`
     + `</section>`;
 }

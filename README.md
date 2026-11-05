@@ -163,11 +163,13 @@ La fiche n’a que trois états : **connecté** (« Vérifier maintenant »), **
 
 ## Abonnements, dates et API
 
-Une échéance dépassée marque l’abonnement **expiré** et le retire du budget. La réactivation demande de confirmer le renouvellement et de fournir une nouvelle échéance future. Ollama continue sous Free à 0 USD avec les ressources réellement lisibles. Une échéance de facturation ne remet jamais un quota à 100 %.
+La fiche d’un abonnement ne demande que quatre informations : **forfait**, **prix** (et devise), **fréquence** (mensuel, annuel ou paiement unique) et **échéance** (prochain paiement, ou fin de la période payée pour un paiement unique). Les quotas, dates de remise à zéro et soldes sont lus automatiquement : plus de relevé ni de date de réinitialisation à saisir à la main.
 
-Chaque limite affiche sa prochaine réinitialisation si elle est fournie. Une date passée demande une nouvelle lecture. Dans la fiche → **Réinitialisations**, ajouter une date manquante, avec heure facultative. Les dates fournisseur restent prioritaires ; les compléments manuels sont identifiés et ne créent aucun relevé de consommation.
+- **Abonnements / mois** : mensuels + annuels ÷ 12, par devise.
+- **Paiements uniques en cours** : affichés à part, jamais répartis sur les mois ; tous ceux qui ne sont pas terminés s’additionnent, quelle que soit leur durée, et chacun sort du total à sa date de fin.
+- **Échéance dépassée** d’un mensuel ou d’un annuel : l’abonnement reste compté et passe « à vérifier » jusqu’à ce que la prochaine date soit indiquée. « Je n’ai plus cet abonnement » le retire des coûts et du suivi ; « Réactiver » demande une échéance future. Ollama repasse en Free à 0 USD à la fin d’un forfait payant.
 
-Les abonnements et les API sont simplement listés, avec leurs quotas, soldes et dates. Le widget affiche les abonnements puis les API ; aucune recommandation, aucun classement de modèles et aucun réglage d’ordre de consommation ne sont proposés.
+Pour une **API**, la fiche ne garde que la clé (onglet Connexion) et le **suivi des dépenses** (onglet Dépenses) : indique le montant de ta dernière recharge, puis chaque hausse du solde est comptée comme une recharge payée (« C’était un crédit offert » la retire). La vue d’ensemble affiche les **dépenses API du mois**. Le montant détecté est la hausse du solde entre deux lectures : une consommation entre-temps le sous-estime légèrement.
 
 ## Interface et accessibilité
 

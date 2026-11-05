@@ -4,7 +4,7 @@
  * Pur affichage : lit l'état global fourni par app.js, ne modifie rien, aucun accès réseau.
  * Dépend de ui-core.js, de views-shell.js (heading, syncButton, stats, toolbar,
  * resourceLegend), de views-cards.js (filteredCards, statusBadge, healthPanel,
- * providerResourceLevel, ollamaUsageCredits), de reset-ui.js (resetForm) et des globals
+ * providerResourceLevel, ollamaUsageCredits) et des globals
  * d'app.js (state, filter, query, historyLoaded, historyError, historyProvider,
  * historyPeriod) au moment du rendu. reset-ui.js appelle inputField défini ici.
  * Les hooks DOM documentés dans renderer/CONTRAT-UI.md sont conservés.
@@ -35,43 +35,34 @@ function subscriptions() {
   const list = state.providers.filter(provider => provider.type === 'subscription');
   const rows = list.map(provider => {
     const expired = provider.subscriptionStatus === 'expired';
-    const status = ollamaFree(provider) ? 'Free · forfait payant expiré'
-      : expired ? 'Expiré · désactivé'
-        : isTracked(provider)
-          ? (provider.reviewed ? 'Informations vérifiées' : 'Informations à vérifier')
-          : 'En pause';
-    const date = expired
-      ? (provider.renewalDate ? `Fin du forfait : ${shortDate(provider.renewalDate)}` : 'Aucun renouvellement prévu')
-      : shortDate(provider.renewalDate);
-    const past = !expired && provider.renewalDate && days(provider.renewalDate) < 0;
-    const dateNote = past ? '<span class="past-date">Date passée · à vérifier</span>' : '';
-    const amountText = ollamaFree(provider) ? money(0, 'USD')
-      : typeof provider.amount === 'number' ? money(provider.amount, provider.currency || 'USD') : '—';
-    const nextAmount = !expired && typeof provider.nextAmount === 'number'
-      ? `<span class="price-next">Puis ${money(provider.nextAmount, provider.currency || 'USD')}</span>` : '';
-    const billing = { unknown: 'À préciser', monthly: 'Mensuelle', yearly: 'Annuelle', 'one-time': 'Paiement unique' }[provider.billingCycle];
+    const overdue = subscriptionOverdue(provider);
+    const status = ollamaFree(provider) ? 'Free · forfait payant terminé'
+      : expired ? 'Abonnement terminé · hors coûts'
+        : overdue ? 'Échéance à vérifier' : '';
+    const date = provider.renewalDate ? `${renewalLabel(provider.billingCycle)} · ${shortDate(provider.renewalDate)}` : 'À préciser';
     return `<tr class="${expired ? 'expired-row' : ''}">`
       + `<td><div class="table-name">${logo(provider, true)}<div>`
-      + `<strong>${escapeHtml(provider.name)}</strong><small>${status}</small>`
-      + `${expired ? `<small class="expired-reason">${escapeHtml(provider.statusMessage || 'Renouvellement indisponible.')}</small>` : ''}`
+      + `<strong>${escapeHtml(provider.name)}</strong>`
+      + `${provider.plan && provider.plan !== provider.name ? `<small>${escapeHtml(provider.plan)}</small>` : ''}`
+      + `${status ? `<small class="${overdue ? 'past-date' : ''}">${status}</small>` : ''}`
       + `</div></div></td>`
-      + `<td>${amountText}${nextAmount}</td>`
-      + `<td class="muted">${escapeHtml(billing || 'À préciser')}</td>`
-      + `<td class="${expired ? 'expired-date' : past ? 'warning' : 'muted'}">${date}${dateNote}</td>`
+      + `<td>${escapeHtml(subscriptionPriceText(provider))}</td>`
+      + `<td class="muted">${BILLING_LABELS[provider.billingCycle] || 'À préciser'}</td>`
+      + `<td class="${overdue ? 'warning' : 'muted'}">${date}</td>`
       + `<td><button type="button" class="secondary" data-open="${escapeHtml(provider.id)}"`
       + ` aria-label="Modifier ${escapeHtml(provider.name)}">Modifier</button></td></tr>`;
   });
   return heading('BUDGET & ÉCHÉANCES', 'Tes abonnements.',
-    'Retrouve tes tarifs, les abonnements expirés et les prochaines échéances.')
+    'Ce que tu paies chaque mois, tes paiements uniques et tes prochaines échéances.')
     + stats()
     + `<div class="table-wrap"><table class="data-table">`
-    + `<thead><tr><th scope="col">Service</th><th scope="col">Tarif</th>`
-    + `<th scope="col">Périodicité</th><th scope="col">Prochaine échéance</th>`
+    + `<thead><tr><th scope="col">Service</th><th scope="col">Prix</th>`
+    + `<th scope="col">Fréquence</th><th scope="col">Échéance</th>`
     + `<th scope="col"><span class="sr-only">Actions</span></th></tr></thead>`
     + `<tbody>${rows.join('')}</tbody></table></div>`
-    + `<p class="settings-foot">Les abonnements expirés ou en pause sont exclus du budget et de l’ordre `
-    + `d’utilisation. Ollama reste synchronisé en Free pour afficher sa limite et ses crédits. `
-    + `Leurs anciens relevés restent consultables.</p>`;
+    + `<p class="settings-foot">Coût mensuel : mensuels + annuels ÷ 12. Les paiements uniques sont comptés à part `
+    + `jusqu’à la fin de la période payée. Une échéance dépassée reste comptée et passe « à vérifier ». `
+    + `Ollama reste suivi en Free après la fin d’un forfait payant.</p>`;
 }
 
 /* ------------------------------------------------------------------ *
@@ -80,9 +71,7 @@ function subscriptions() {
 function connections() {
   const cards = state.providers.filter(hasConnector).map(provider => {
     const warning = provider.subscriptionStatus === 'expired'
-      ? escapeHtml(provider.statusMessage || (ollamaFree(provider)
-        ? 'Forfait payant expiré · suivi Free actif'
-        : 'Abonnement expiré · suivi désactivé'))
+      ? (ollamaFree(provider) ? 'Forfait payant terminé · suivi Free actif' : 'Abonnement terminé · suivi arrêté')
       : provider.error ? escapeHtml(provider.error) : '';
     return `<section class="connection-card" aria-labelledby="connection-${escapeHtml(provider.id)}">`
       + `<div class="card-top">${logo(provider)}<div class="provider-title">`
@@ -325,75 +314,71 @@ function selectField(label, name, value, options) {
     + `<select id="${name}" name="${name}">${items}</select></div>`;
 }
 
-function providerInfoBody(provider) {
-  const currencies = [['USD', 'USD · Dollar US'], ['EUR', 'EUR · Euro'], ['CNY', 'CNY · Yuan']];
-  const subscriptionFields = provider.type === 'subscription'
-    ? `${selectField('Statut de l’abonnement', 'subscriptionStatus', subscriptionStatus(provider),
-      [['active', 'Actif'], ['paused', 'En pause'],
-        ['expired', provider.id === 'ollama' ? 'Expiré · Free' : 'Expiré · désactivé']])}`
-      + `<div class="field"><label for="statusMessage">Message affiché si expiré</label>`
-      + `<textarea name="statusMessage" id="statusMessage" maxlength="500" `
-      + `placeholder="Ex. Renouvellement indisponible pour ce plan.">${escapeHtml(provider.statusMessage || '')}</textarea></div>`
-      + `${provider.subscriptionStatus === 'expired' ? '<label class="check-row"><input type="checkbox" name="confirmRenewal">'
-        + 'Je confirme avoir renouvelé ce forfait</label>' : ''}`
-      + `<p class="hint full status-hint">Un forfait expiré sort du budget et des recommandations. `
-      + `Ollama reste suivi en Free. Pour réactiver un forfait payant, confirme son renouvellement `
-      + `et indique une nouvelle échéance future.</p>`
-    : '';
-  const amountLabel = ollamaFree(provider) ? 'Ancien tarif du forfait'
-    : provider.type === 'subscription' ? 'Tarif' : 'Budget de référence (facultatif)';
-  return `<form id="provider-form"><div class="fields">`
-    + `${inputField('Offre / formule', 'plan', provider.plan, 'text',
-      'maxlength="200" placeholder="Nom de ton offre"', true)}`
-    + `${subscriptionFields}`
-    + `${inputField(amountLabel, 'amount', provider.amount, 'number',
-      'min="0" max="1000000000000" step="0.01" placeholder="Inconnu"')}`
-    + `${selectField('Devise', 'currency', provider.currency, currencies)}`
-    + `${selectField('Périodicité', 'billingCycle', provider.billingCycle,
-      [['unknown', 'À préciser'], ['monthly', 'Mensuelle'], ['yearly', 'Annuelle'], ['one-time', 'Paiement unique']])}`
-    + `${inputField(provider.type === 'subscription' && subscriptionStatus(provider) === 'expired'
-      ? 'Dernière échéance connue' : 'Prochaine échéance', 'renewalDate', provider.renewalDate, 'date')}`
-    + `${inputField('Prochain tarif (facultatif)', 'nextAmount', provider.nextAmount, 'number',
-      'min="0" step="0.01" placeholder="Aucun"')}`
-    + `${inputField('Date du changement de tarif', 'priceChangeDate', provider.priceChangeDate, 'date')}`
-    + `<div class="field full"><label for="notes">Notes</label>`
-    + `<textarea name="notes" id="notes" maxlength="2000">${escapeHtml(provider.notes)}</textarea></div></div>`
-    + `<label class="check-row"><input type="checkbox" name="reviewed" ${provider.reviewed ? 'checked' : ''}>`
-    + `J’ai vérifié les informations de cette fiche</label>`
-    + `${provider.type === 'subscription' ? ''
-      : `<label class="check-row"><input type="checkbox" name="active" ${provider.active ? 'checked' : ''}>`
-        + `Inclure ce service dans le suivi actif</label>`}`
-    + `<p class="form-error" role="alert"></p>`
-    + `<div class="form-actions"><button type="button" class="secondary" data-action="close-dialog">Annuler</button>`
-    + `<button type="submit" class="primary">Enregistrer</button></div></form>`;
+// Fiche d'un abonnement (0.6.9) : forfait, prix, fréquence, échéance. Rien
+// d'autre : les quotas, dates de remise à zéro et soldes sont lus seuls.
+const BILLING_LABELS = { monthly: 'Mensuel', yearly: 'Annuel', 'one-time': 'Paiement unique', unknown: 'À préciser' };
+
+function renewalLabel(cycle) {
+  return cycle === 'one-time' ? 'Fin de la période payée' : 'Prochain paiement';
 }
 
-function providerManualBody(provider) {
-  const snapshot = provider.snapshot;
-  const balance = snapshot?.balances.find(item => item.currency === provider.currency);
-  let localReset = '';
-  if (snapshot?.resetAt) {
-    const date = new Date(snapshot.resetAt);
-    localReset = new Date(date - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+function subscriptionOverdue(provider) {
+  return provider.type === 'subscription' && provider.subscriptionStatus !== 'expired'
+    && provider.billingCycle !== 'one-time' && Boolean(provider.renewalDate) && days(provider.renewalDate) < 0;
+}
+
+function subscriptionPriceText(provider) {
+  if (ollamaFree(provider)) return 'Free · 0 $';
+  if (typeof provider.amount !== 'number') return '—';
+  const price = money(provider.amount, provider.currency || 'USD');
+  return { monthly: `${price} / mois`, yearly: `${price} / an`, 'one-time': `${price} · une fois` }[provider.billingCycle] || price;
+}
+
+// Ce que l'abonnement représente dans les coûts, recalculé pendant la saisie.
+function subscriptionCostLine(provider) {
+  if (ollamaFree(provider)) return 'Forfait payant terminé : Ollama est suivi en Free (0 $).';
+  if (provider.subscriptionStatus === 'expired') return 'Abonnement terminé : il n’est plus compté.';
+  const currency = provider.currency || 'USD';
+  if (typeof provider.amount !== 'number') return 'Indique le prix pour l’inclure dans tes coûts.';
+  if (provider.billingCycle === 'monthly') return `Compté ${money(provider.amount, currency)} par mois.`;
+  if (provider.billingCycle === 'yearly') return `Compté ${money(provider.amount / 12, currency)} par mois (${money(provider.amount, currency)} par an).`;
+  if (provider.billingCycle === 'one-time') {
+    return `Compté à part dans « Paiements uniques en cours »${provider.renewalDate
+      ? ` jusqu’au ${shortDate(provider.renewalDate)}` : ''}, pas dans le coût mensuel.`;
   }
-  if (provider.connected) {
-    return `<div class="connection-success">Ce compte est synchronisé automatiquement.</div>`
-      + `<p class="hint">Pour saisir un solde manuel, déconnecte d’abord le compte dans l’onglet `
-      + `Connexion. Le dernier relevé restera dans l’historique.</p>`;
-  }
-  const currencies = [['USD', 'USD · Dollar US'], ['EUR', 'EUR · Euro'], ['CNY', 'CNY · Yuan']];
-  return `<form id="manual-form"><p class="hint">Saisis une valeur lue sur ton compte. `
-    + `Ce relevé sera daté et identifié comme manuel. Un champ vide reste inconnu.</p>`
+  return 'Choisis la fréquence pour l’inclure dans tes coûts.';
+}
+
+function providerInfoBody(provider) {
+  const currencies = [['USD', 'USD'], ['EUR', 'EUR'], ['CNY', 'CNY']];
+  const expired = provider.subscriptionStatus === 'expired';
+  const overdue = subscriptionOverdue(provider);
+  const currencyOptions = currencies.map(([id, text]) =>
+    `<option value="${id}"${id === provider.currency ? ' selected' : ''}>${text}</option>`).join('');
+  return `<form id="provider-form">`
+    + `${expired ? `<div class="connection-note">${ollamaFree(provider)
+      ? 'Forfait payant terminé : Ollama reste suivi en Free.'
+      : 'Tu n’as plus cet abonnement : il est exclu des coûts et du suivi.'} `
+      + 'Pour le réactiver, indique la prochaine échéance puis « Réactiver ».</div>' : ''}`
     + `<div class="fields">`
-    + `${inputField('Solde restant', 'balance', balance?.remaining ?? null, 'number',
-      'step="0.01" placeholder="Inconnu"')}`
-    + `${selectField('Devise du solde', 'currency', provider.currency, currencies)}`
-    + `${inputField('Quota restant (%)', 'quotaRemaining', snapshot?.quotaRemaining, 'number',
-      'min="0" max="100" step="0.1" placeholder="Inconnu"')}`
-    + `${inputField('Prochaine réinitialisation (heure locale)', 'resetAt', localReset, 'datetime-local')}`
-    + `</div><p class="form-error" role="alert"></p>`
-    + `<div class="form-actions"><button type="submit" class="primary">Enregistrer le relevé</button>`
-    + `</div></form>`;
+    + `${inputField('Forfait', 'plan', provider.plan, 'text', 'maxlength="200" placeholder="Ex. Max, Plus, Pro"', true)}`
+    + `<div class="field"><label for="amount">Prix</label><div class="price-input">`
+    + `<input id="amount" name="amount" type="number" min="0" max="1000000000000" step="0.01" placeholder="Inconnu"`
+    + ` value="${escapeHtml(provider.amount ?? '')}">`
+    + `<select id="currency" name="currency" aria-label="Devise">${currencyOptions}</select></div></div>`
+    + `${selectField('Fréquence', 'billingCycle', provider.billingCycle,
+      [['monthly', 'Mensuel'], ['yearly', 'Annuel'], ['one-time', 'Paiement unique'], ['unknown', 'À préciser']])}`
+    + `<div class="field"><label for="renewalDate" id="renewalDate-label">${renewalLabel(provider.billingCycle)}</label>`
+    + `<input id="renewalDate" name="renewalDate" type="date" value="${escapeHtml(provider.renewalDate || '')}"></div>`
+    + `</div>`
+    + `<p class="cost-line" id="cost-line" aria-live="polite">${escapeHtml(subscriptionCostLine(provider))}</p>`
+    + `${overdue ? '<p class="form-warning">Échéance dépassée : l’abonnement reste compté. '
+      + 'Indique la prochaine date de paiement pour confirmer le renouvellement.</p>' : ''}`
+    + `<p class="form-error" role="alert"></p>`
+    + `<div class="form-actions">`
+    + `${expired ? '' : '<button type="button" class="link-button" data-action="subscription-end">Je n’ai plus cet abonnement</button>'}`
+    + `<button type="button" class="secondary" data-action="close-dialog">Annuler</button>`
+    + `<button type="submit" class="primary">${expired ? 'Réactiver' : 'Enregistrer'}</button></div></form>`;
 }
 
 function quotaWindowsNote(provider, extra = '') {
@@ -414,26 +399,56 @@ function providerConnectionBody(provider) {
 }
 
 function apiKeyConnectionBody(provider) {
-  const connectedNote = provider.connected
-    ? '<div class="connection-success">Compte connecté · clé enregistrée et chiffrée</div>' : '';
-  const details = provider.snapshot?.details?.length
-    ? `<div class="source-note">${provider.snapshot.details.map(detail =>
-      `${escapeHtml(detail.label)} : <strong>${money(detail.amount, detail.currency)}</strong>`).join('<br>')}`
-      + `<br>${age(provider.snapshot.updatedAt)}</div>`
-    : '';
-  return `${connectedNote}<p class="connection-note">${escapeHtml(provider.connector.instructions)}<br>`
-    + `La connexion est vérifiée avant l’enregistrement de la clé.</p>${details}`
+  return `${provider.connected ? '<div class="connection-success">Clé enregistrée et chiffrée sur ce PC</div>' : ''}`
     + `<form id="connection-form"><div class="field">`
-    + `<label for="api-key">${provider.connected ? 'Remplacer la clé' : escapeHtml(provider.connector.keyLabel)}</label>`
+    + `<label for="api-key">${provider.connected ? 'Remplacer la clé API' : 'Clé API'}</label>`
     + `<input id="api-key" name="key" type="password" autocomplete="off" spellcheck="false" required`
     + ` maxlength="4096" placeholder="Colle ta clé ici">`
-    + `<small>Ta clé ne sera jamais affichée dans l’historique ou dans un export.</small></div>`
+    + `<small>Vérifiée avant d’être enregistrée ; jamais affichée ni exportée.</small></div>`
     + `<p class="form-error" role="alert"></p>`
     + `<div class="form-actions">${provider.connected
       ? '<button type="button" class="secondary" data-action="disconnect">Déconnecter</button>' : ''}`
     + `<button type="submit" class="primary">${provider.connected ? 'Vérifier et remplacer' : 'Vérifier et connecter'}</button>`
     + `</div></form>`
-    + `${provider.error ? `<div class="divider"></div><p class="form-error">${escapeHtml(provider.error)}</p>` : ''}`;
+    + `${provider.error ? `<p class="form-error">${escapeHtml(provider.error)}</p>` : ''}`;
+}
+
+// Onglet Dépenses d'un accès API : montant de départ, puis recharges détectées.
+function apiSpendingBody(provider) {
+  const spending = provider.spending;
+  if (!spending) {
+    return `<form id="spending-form"><p class="hint">Indique le montant de ta dernière recharge : le suivi `
+      + `démarre à partir de là. Ensuite, chaque hausse du solde est comptée automatiquement comme une `
+      + `recharge payée ; tu pourras marquer un crédit offert.</p>`
+      + `<div class="fields">${inputField('Montant de départ', 'startAmount', '', 'number',
+        'min="0" max="1000000000" step="0.01" required placeholder="Ex. 10"')}</div>`
+      + `${provider.snapshot?.balances?.length ? '' : '<p class="hint">Le solde de ce service n’est pas encore lu : '
+        + 'connecte-le pour que les recharges soient détectées.</p>'}`
+      + `<p class="form-error" role="alert"></p>`
+      + `<div class="form-actions"><button type="submit" class="primary">Démarrer le suivi</button></div></form>`;
+  }
+  const currency = spending.currency || 'USD';
+  const totals = provider.spendingTotals || { thisMonth: 0, total: spending.startAmount };
+  const since = new Date(spending.startedAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' });
+  const topUps = (spending.topUps || []).slice(0, 20).map(topUp =>
+    `<li class="top-up${topUp.offered ? ' is-offered' : ''}">`
+    + `<span>${new Date(topUp.at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}</span>`
+    + `<strong>${money(topUp.amount, currency)}</strong>`
+    + `<span class="muted">${topUp.offered ? 'Crédit offert' : 'Recharge payée'}</span>`
+    + `<button type="button" class="link-button" data-action="topup-toggle" data-topup="${escapeHtml(topUp.id)}"`
+    + ` data-offered="${topUp.offered ? 'false' : 'true'}">${topUp.offered ? 'C’était payé' : 'C’était un crédit offert'}</button></li>`).join('');
+  return `<div class="spending-totals">`
+    + `<div><span>Ce mois-ci</span><strong>${money(totals.thisMonth, currency)}</strong></div>`
+    + `<div><span>Depuis le ${escapeHtml(since)}</span><strong>${money(totals.total, currency)}</strong></div></div>`
+    + `<p class="source-note">Montant de départ : ${money(spending.startAmount, currency)}. Une recharge est la hausse `
+    + `du solde entre deux lectures : si des crédits ont été consommés entre-temps, elle était un peu plus élevée.</p>`
+    + `${topUps ? `<ul class="top-ups" aria-label="Recharges détectées">${topUps}</ul>`
+      : '<p class="hint">Aucune recharge détectée pour l’instant.</p>'}`
+    + `<form id="spending-form" class="inline-form"><div class="fields">${inputField('Corriger le montant de départ', 'startAmount',
+      spending.startAmount, 'number', 'min="0" max="1000000000" step="0.01" required')}</div>`
+    + `<p class="form-error" role="alert"></p>`
+    + `<div class="form-actions"><button type="button" class="secondary" data-action="spending-stop">Arrêter le suivi</button>`
+    + `<button type="submit" class="primary">Enregistrer</button></div></form>`;
 }
 
 function accountConnectionBody(provider) {
@@ -575,12 +590,22 @@ function antigravityConnectionBody(provider) {
         + `Arrêter le suivi Antigravity</button></div>` : ''}`;
 }
 
+// Abonnement : Informations + Connexion. API : Connexion (la clé) + Dépenses.
+function dialogTabList(provider) {
+  if (provider.type === 'subscription') {
+    return [['info', 'Informations'], ...(hasConnector(provider) ? [['connection', 'Connexion']] : [])];
+  }
+  return [...(hasConnector(provider) ? [['connection', 'Connexion']] : []), ['spending', 'Dépenses']];
+}
+
+function normalizeDialogTab(provider, tab) {
+  const ids = dialogTabList(provider).map(([id]) => id);
+  return ids.includes(tab) ? tab : ids[0];
+}
+
 function dialogTabs(provider, activeTab) {
-  const tabs = [['info', 'Informations'], ['manual', 'Relevé manuel'],
-    ...(provider.type === 'subscription' ? [['resets', 'Réinitialisations']] : []),
-    ...(hasConnector(provider) ? [['connection', 'Connexion']] : [])];
   return `<div class="dialog-tabs" role="tablist" aria-label="Sections de la fiche">`
-    + tabs.map(([id, label]) => `<button type="button" role="tab" id="tab-${id}"`
+    + dialogTabList(provider).map(([id, label]) => `<button type="button" role="tab" id="tab-${id}"`
       + ` data-dialog-tab="${id}" aria-selected="${activeTab === id}"`
       + ` aria-controls="dialog-panel" tabindex="${activeTab === id ? '0' : '-1'}"`
       + ` class="dialog-tab${activeTab === id ? ' is-active' : ''}">${label}</button>`).join('')
@@ -588,18 +613,17 @@ function dialogTabs(provider, activeTab) {
 }
 
 function dialogBody(provider, activeTab) {
-  if (activeTab === 'info') return providerInfoBody(provider);
-  if (activeTab === 'manual') return providerManualBody(provider);
-  if (activeTab === 'resets' && provider.type === 'subscription') return resetForm(provider);
   if (activeTab === 'connection') return providerConnectionBody(provider);
+  if (activeTab === 'spending') return apiSpendingBody(provider);
   return providerInfoBody(provider);
 }
 
-function dialogMarkup(provider, activeTab) {
+function dialogMarkup(provider, requestedTab) {
+  const activeTab = normalizeDialogTab(provider, requestedTab);
   return `<div class="dialog-head">${logo(provider)}`
     + `<div class="dialog-head-text"><h2 id="detail-title">${escapeHtml(provider.name)}</h2>`
-    + `<p>${provider.type === 'subscription' ? 'Abonnement' : 'Accès API'} · `
-    + `${provider.reviewed ? 'Fiche vérifiée' : 'Fiche à vérifier'}</p>`
+    + `<p>${provider.type === 'subscription'
+      ? `Abonnement · ${escapeHtml(subscriptionPriceText(provider))}` : 'Accès API'}</p>`
     + `${levelPill(providerResourceLevel(provider),
       provider.type === 'api' ? (provider.snapshot?.balances?.[0]?.currency || 'USD') : '%',
       'dialog-level')}</div>`

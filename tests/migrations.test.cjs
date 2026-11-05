@@ -180,3 +180,32 @@ test('API cooldown migration seeds an empty object and preserves valid entries w
   assert.equal(Object.hasOwn(capped.state.apiCooldowns, `key-${MAX_API_COOLDOWNS + 19}:x`), true);
   assert.equal(Object.hasOwn(capped.state.apiCooldowns, 'key-0:x'), false);
 });
+
+test('0.6.9 : la fiche ne garde que forfait, prix, fréquence et échéance, sans toucher aux sessions ni aux relevés', () => {
+  const { simplifySubscriptionFields } = require('../lib/migrations.cjs');
+  const state = createSeed();
+  const openai = state.providers.find(p => p.id === 'openai');
+  Object.assign(openai, { plan: 'Plus', amount: 20, billingCycle: 'monthly', renewalDate: '2026-12-04', notes: 'note', statusMessage: 'msg',
+    reviewed: true, nextAmount: 25, priceChangeDate: '2027-01-01', manualResets: { Semaine: { date: '2026-12-01' } },
+    accountSession: { kind: 'openai-codex' }, snapshot: { source: 'api', updatedAt: 't', balances: [] } });
+  const grok = state.providers.find(p => p.id === 'grok');
+  Object.assign(grok, { subscriptionStatus: 'paused', active: true });
+  const ollama = state.providers.find(p => p.id === 'ollama');
+  Object.assign(ollama, { subscriptionStatus: 'paused' });
+  const deepseek = state.providers.find(p => p.id === 'deepseek');
+  deepseek.active = false;
+  const result = simplifySubscriptionFields(state);
+  assert.equal(result.changed, true);
+  const migrated = Object.fromEntries(result.state.providers.map(p => [p.id, p]));
+  for (const field of ['notes', 'statusMessage', 'reviewed', 'nextAmount', 'priceChangeDate', 'manualResets']) {
+    assert.equal(field in migrated.openai, false, field);
+  }
+  assert.deepEqual([migrated.openai.plan, migrated.openai.amount, migrated.openai.billingCycle, migrated.openai.renewalDate], ['Plus', 20, 'monthly', '2026-12-04']);
+  assert.deepEqual(migrated.openai.accountSession, { kind: 'openai-codex' });
+  assert.equal(migrated.openai.snapshot.source, 'api');
+  assert.deepEqual([migrated.grok.subscriptionStatus, migrated.grok.active], ['expired', false], 'en pause → « je n’ai plus cet abonnement »');
+  assert.deepEqual([migrated.ollama.subscriptionStatus, migrated.ollama.active], ['expired', true], 'Ollama reste suivi en Free');
+  assert.equal(migrated.deepseek.active, true, 'un accès API revient dans le suivi : sa fiche ne garde que la clé');
+  assert.equal(state.providers.find(p => p.id === 'openai').notes, 'note', 'l’état d’origine n’est pas modifié');
+  assert.deepEqual(simplifySubscriptionFields(result.state), { changed: false, state: result.state }, 'migration idempotente');
+});

@@ -1,5 +1,5 @@
 /* Lasmium TOKENS-HUB — dates de réinitialisation et formulaire associé (renderer).
- * Les dates fournisseur restent prioritaires ; les compléments manuels sont identifiés.
+ * Les dates viennent des fournisseurs ; une ancienne date manuelle reste identifiée.
  */
 'use strict';
 
@@ -31,25 +31,4 @@ function resetMarkup(provider, key, compact = false) {
     + `${compact
       ? (past ? '<small>Date passée</small>' : '')
       : `<small>${escapeHtml(countdown)}</small>`}</span>`;
-}
-
-function resetForm(provider) {
-  const slots = QuotaResets.slots(provider).map((slot, index) => {
-    const manual = provider.manualResets?.[slot.key];
-    const current = resetMarkup(provider, slot.key);
-    const slotLabel = typeof quotaSlotLabel === 'function' ? quotaSlotLabel(provider, slot) : slot.key;
-    return `<fieldset class="reset-field"><legend>${escapeHtml(slotLabel)}</legend>`
-      + `${current ? `<p class="reset-current">${current}</p>` : ''}`
-      + `<div class="fields">`
-      + `${inputField('Date manuelle', `reset-date-${index}`, manual?.date || '', 'date')}`
-      + `${inputField('Heure locale (facultative)', `reset-time-${index}`, manual?.time || '', 'time')}`
-      + `</div></fieldset>`;
-  }).join('');
-  return '<form id="resets-form">'
-    + '<p class="hint">Dates de réinitialisation des quotas, indépendantes de la facturation. '
-    + 'Les dates fournies par le service ont priorité. Tu peux compléter celles qui manquent sans '
-    + 'déconnecter le compte. L’heure locale est facultative ; vider la date efface la saisie manuelle.</p>'
-    + `${slots}<p class="form-error" role="alert"></p>`
-    + '<div class="form-actions"><button type="submit" class="primary">Enregistrer les dates</button>'
-    + '</div></form>';
 }

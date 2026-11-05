@@ -1253,3 +1253,27 @@ body.quick-mode { background: transparent; }
   color: var(--text-muted);
   font-size: var(--text-sm);
 }
+
+/* ------------------------------------------------------------------ *
+ * 0.6.9 — fiche abonnement réduite et suivi des dépenses API
+ * ------------------------------------------------------------------ */
+.price-input { display: flex; gap: 6px; }
+.price-input input { flex: 1; min-width: 0; }
+.price-input select { flex: 0 0 76px; width: 76px; }
+.cost-line { margin-top: 12px; color: var(--text-muted); font-size: var(--text-sm); line-height: 1.5; }
+.form-warning { margin-top: 8px; padding: 8px 10px; border-radius: var(--radius-xs); background: var(--warn-soft); color: var(--warn); font-size: 10.5px; line-height: 1.5; }
+.link-button { margin-right: auto; padding: 0; border: 0; background: none; color: var(--text-muted); font: inherit; font-size: 11px; text-decoration: underline; cursor: pointer; }
+.link-button:hover { color: var(--text); }
+.top-up .link-button { margin-right: 0; }
+.spending-totals { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+.spending-totals > div { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border-radius: var(--radius-sm); background: var(--surface-inset); }
+.spending-totals span { color: var(--text-muted); font-size: 10.5px; }
+.spending-totals strong { color: var(--text); font-family: var(--font-display); font-size: 18px; font-weight: 650; letter-spacing: -0.02em; }
+.top-ups { display: flex; flex-direction: column; gap: 4px; margin: 10px 0 0; padding: 0; list-style: none; }
+.top-up { display: grid; grid-template-columns: 64px auto 1fr auto; align-items: baseline; gap: 10px; padding: 6px 10px; border-radius: var(--radius-sm); background: var(--surface-inset); font-size: 11px; }
+.top-up.is-offered strong { color: var(--text-soft); text-decoration: line-through; }
+.inline-form { margin-top: 14px; }
+@media (max-width: 520px) {
+  .spending-totals { grid-template-columns: 1fr; }
+  .top-up { grid-template-columns: 1fr auto; }
+}

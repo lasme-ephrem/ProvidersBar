@@ -84,6 +84,13 @@ Il ne faut jamais partager ni synchroniser ce dossier.
   (profil ou partition) et sa clé API ; les sessions Ollama et OrcaRouter sont
   effacées via `clearStorageData`.
 
+## 3 bis. Suivi des dépenses API
+
+Si tu démarres le suivi des dépenses d'un accès API, `state.json` conserve le
+montant de départ, sa date, le dernier solde lu et la liste des recharges
+détectées (date, montant, crédit offert ou non). Ces montants restent sur
+l'appareil, comme les soldes, et sont inclus dans l'export de tes données.
+
 ## 4. Jetons Claude Code
 
 La lecture des quotas Claude est activée par le bouton « Connecter Claude ».

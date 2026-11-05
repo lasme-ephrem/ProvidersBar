@@ -8,7 +8,6 @@
 // que le cycle de vie, les fenêtres, l'IPC et l'état en mémoire.
 const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, nativeTheme, screen, safeStorage, dialog, Notification, session, powerMonitor, net } = require('electron');
 const fsSync = require('node:fs');
-const quotaResets = require('./lib/quota-resets.js');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
@@ -21,7 +20,8 @@ const { secureWindow, secureAccountWindow, applyDataDirAcl, purgeLeftovers } = r
 const { sanitizeStateForExport } = require('./lib/privacy-export.cjs');
 const { buildDiagnosticBundle } = require('./lib/diagnostic-bundle.cjs');
 const antigravityTransport = require('./lib/antigravity-account.cjs');
-const { validatePatch, manualSnapshot, summary, daysUntil, isTracked, expireSubscriptions, asOllamaFreeSnapshot } = require('./lib/domain.cjs');
+const { validatePatch, summary, daysUntil, isTracked, expireSubscriptions, asOllamaFreeSnapshot } = require('./lib/domain.cjs');
+const apiSpending = require('./lib/api-spending.cjs');
 const { fetchUsage } = require('./lib/connectors.cjs');
 const { createCredentialStore } = require('./lib/credential-store.cjs');
 const { connectors, connectionInfo } = require('./lib/provider-catalog.cjs');
@@ -289,6 +289,7 @@ function publicState() {
       connected: isConnected(p),
       syncing: busy.has(p.id),
       health: publicHealth(state.connectorHealth?.[p.id], p.snapshot),
+      ...(p.spending ? { spendingTotals: apiSpending.providerSpending(p) } : {}),
       ...presentAccountConnection(p),
     };
   }
@@ -301,7 +302,7 @@ function publicState() {
     historyCount: history.length,
     historyRevision: history[0]?.id || null,
     providers: state.providers.map(presentProvider),
-    summary: summary(state.providers),
+    summary: summary(state.providers, new Date(), { apiSpending: apiSpending.spendingSummary(state.providers) }),
     desktop: true,
   };
 }
@@ -339,6 +340,8 @@ function record(p, snapshot) {
   assertSnapshot(p.id, snapshot);
   p.snapshot = snapshot;
   p.error = null;
+  // Suivi des dépenses API : une hausse du solde est une recharge détectée.
+  apiSpending.trackBalance(p, snapshot);
   state.connectorHealth = state.connectorHealth || {};
   state.connectorHealth[p.id] = healthSuccess(state.connectorHealth[p.id], {
     providerId: p.id,
@@ -472,9 +475,17 @@ function registerIpc() {
     if (tray) positionQuick();
     else quickWindow.setSize(360, target);
   });
-  handle('provider:resets', async (id, input) => {
-    const p = provider(id);
-    p.manualResets = quotaResets.validate(p, input);
+  // Suivi des dépenses API : montant de départ, arrêt, recharge offerte.
+  handle('api:spending-start', async (id, amount) => {
+    apiSpending.startSpending(provider(id), amount);
+    await persist(); broadcast(); return publicState();
+  });
+  handle('api:spending-stop', async id => {
+    apiSpending.stopSpending(provider(id));
+    await persist(); broadcast(); return publicState();
+  });
+  handle('api:top-up', async (id, topUpId, offered) => {
+    apiSpending.markTopUp(provider(id), topUpId, offered);
     await persist(); broadcast(); return publicState();
   });
   handle('orca:open-account', openOrcaAccount);
@@ -518,7 +529,7 @@ function registerIpc() {
   });
   handle('provider:update', async (id, patch) => {
     const p = provider(id), changes = validatePatch(patch);
-    if (p.type !== 'subscription' && ('subscriptionStatus' in changes || 'statusMessage' in changes)) throw new Error('Statut réservé aux abonnements.');
+    if (p.type !== 'subscription' && 'subscriptionStatus' in changes) throw new Error('Statut réservé aux abonnements.');
     if (changes.confirmRenewal && p.type !== 'subscription') throw new Error('Confirmation réservée aux abonnements.');
     if (changes.subscriptionStatus === 'active' && changes.renewalDate && daysUntil(changes.renewalDate) < 0) throw new Error('Indique une prochaine échéance future pour activer le forfait.');
     if (p.subscriptionStatus === 'expired' && changes.subscriptionStatus === 'active') {
@@ -533,11 +544,6 @@ function registerIpc() {
     if (p.id === 'ollama' && p.subscriptionStatus === 'expired') p.snapshot = asOllamaFreeSnapshot(p.snapshot);
     expireSubscriptions(state.providers);
     await persist(); broadcast(); return publicState();
-  });
-  handle('provider:manual', async (id, input) => {
-    const p = provider(id);
-    if (isConnected(p)) throw new Error('Déconnecte la synchronisation avant de saisir un relevé manuel.');
-    record(p, manualSnapshot(input)); await persist(); broadcast(); notify(); return publicState();
   });
   handle('provider:connect', async (id, key) => {
     provider(id);

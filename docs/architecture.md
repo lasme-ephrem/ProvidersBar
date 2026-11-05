@@ -77,6 +77,7 @@ Tous les canaux passent par une garde unique : la frame émettrice doit être la
 | diagnostics.cjs | Contrôles de prérequis lecture seule (utilisés par `scripts/doctor.cjs`) |
 | claude-connection.cjs | Renouvellement OAuth de Claude Code sous verrous, écriture atomique |
 | claude-live-usage.cjs | Lecture directe des quotas Anthropic (instance unique côté `main.cjs`) |
+| api-spending.cjs | Suivi des dépenses API : montant de départ, recharges détectées par hausse du solde (≥ 0,50), crédits offerts, totaux du mois |
 | claude-cli.cjs | Connexion à l’abonnement via Claude Code : `auth status --json`, `auth login --claudeai`, environnement sans clé API |
 
 Claude n’a qu’une connexion : l’abonnement Claude via Claude Code (`accountSession = { kind: 'claude-live-local', plan?, email? }`). `claude-cli.cjs` trouve `claude.exe` (PATH, puis `%USERPROFILE%\.local\bin`), l’exécute sans fenêtre et retire de son environnement `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_OAUTH_TOKEN` et les bascules Bedrock/Vertex : la connexion lue est toujours `authMethod: 'claude.ai'`, sinon `not-subscription`. `auth status` ne renouvelle pas le jeton (vérifié dans Claude Code 2.1.316) : il ne sert qu’à l’identité.

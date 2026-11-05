@@ -233,12 +233,18 @@ Vérifiés par audit statique sur toutes les vues :
   `.connection-success`, `.dialog-body`, `#api-key`, `#connection-form`,
   `#account-connection-progress`, `#orca-connection-progress`,
   `#ollama-connection-progress`.
-- Fiche : `[data-dialog-tab="info|manual|resets|connection"]`, `#provider-form`
-  (`#plan`, `#amount`, `#currency`, `#billingCycle`, `#renewalDate`, `#nextAmount`,
-  `#priceChangeDate`, `#notes`, `#subscriptionStatus`, `#statusMessage`,
-  `[name="reviewed"]`, `[name="confirmRenewal"]`, `[name="active"]`),
-  `#manual-form` (`#balance`, `#quotaRemaining`, `#resetAt`), `#resets-form`
-  (`#reset-date-N`, `#reset-time-N`), `.form-error`.
+- Fiche (0.6.9) : abonnement `[data-dialog-tab="info|connection"]`, accès API
+  `[data-dialog-tab="connection|spending"]` (`normalizeDialogTab` choisit le premier
+  onglet valide). `#provider-form` (`#plan`, `#amount`, `#currency`,
+  `#billingCycle` Mensuel/Annuel/Paiement unique/À préciser, `#renewalDate` et son
+  libellé `#renewalDate-label`, `#cost-line` recalculé pendant la saisie,
+  `.form-warning` si l'échéance d'un récurrent est dépassée,
+  `[data-action="subscription-end"]` « Je n'ai plus cet abonnement » ; un abonnement
+  terminé affiche « Réactiver »). API : `#connection-form` (`#api-key` seulement),
+  `#spending-form` (`#startAmount`), `.spending-totals`, `.top-up`,
+  `[data-action="topup-toggle"]` (`data-topup`, `data-offered`),
+  `[data-action="spending-stop"]`. `.form-error`. Les formulaires de relevé manuel
+  et de dates de réinitialisation manuelles sont retirés.
 - Historique : `#history-provider`, `#history-period`, `.chart-panel`,
   `.chart-grid`, `.chart-line`, `.chart-point`, `.data-table`.
 - Réglages : `#settings-form`, `[name="theme"]`, `[name="autoRefresh"]`,

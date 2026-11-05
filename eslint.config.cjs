@@ -41,7 +41,7 @@ const rendererSharedGlobals = {
   restoreFocus: 'readonly', toastTimer: 'writable', toast: 'readonly', announce: 'readonly',
   disclosureState: 'readonly',
   // renderer/reset-ui.js
-  resetMarkup: 'readonly', resetForm: 'readonly',
+  resetMarkup: 'readonly',
   // renderer/views-shell.js, views-cards.js, views-pages.js, views-quick.js (ancien views.js)
   NAV_LABELS: 'readonly', brand: 'readonly', heading: 'readonly', syncButton: 'readonly', nav: 'readonly',
   shell: 'readonly', resourceLegend: 'readonly', stats: 'readonly', toolbar: 'readonly',
@@ -57,7 +57,10 @@ const rendererSharedGlobals = {
   quickFact: 'readonly', quickSubscriptionFacts: 'readonly', quickApiFacts: 'readonly',
   quickChip: 'readonly', quickDetailText: 'readonly', quickAccountRow: 'readonly', quickHeader: 'readonly',
   inputField: 'readonly', selectField: 'readonly', providerInfoBody: 'readonly',
-  providerManualBody: 'readonly', quotaWindowsNote: 'readonly', providerConnectionBody: 'readonly',
+  quotaWindowsNote: 'readonly', providerConnectionBody: 'readonly',
+  BILLING_LABELS: 'readonly', renewalLabel: 'readonly', subscriptionOverdue: 'readonly',
+  subscriptionPriceText: 'readonly', subscriptionCostLine: 'readonly', apiSpendingBody: 'readonly',
+  dialogTabList: 'readonly', normalizeDialogTab: 'readonly',
   apiKeyConnectionBody: 'readonly', accountConnectionBody: 'readonly', claudeConnectionBody: 'readonly', claudeConnectionState: 'readonly',
   antigravityConnectionBody: 'readonly', dialogTabs: 'readonly', dialogBody: 'readonly',
   dialogMarkup: 'readonly',

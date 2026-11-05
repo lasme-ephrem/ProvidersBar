@@ -221,55 +221,61 @@ async function main() {
   await page.locator('[data-filter="all"]').click();
 
   // ------------------------------------------------------------------ *
-  // Fiche fournisseur : édition, expiration, réactivation, relevé manuel
+  // Fiche abonnement (0.6.9) : forfait, prix, fréquence, échéance ; fin et
+  // réactivation ; aucun onglet « Relevé manuel » ni « Réinitialisations ».
   // ------------------------------------------------------------------ *
   await openProvider(page, 'openai');
+  assert.deepEqual(await page.locator('[role="tab"]').allTextContents(), ['Informations', 'Connexion']);
+  for (const removed of ['#notes', '#statusMessage', '#nextAmount', '#priceChangeDate', '[name="reviewed"]', '#subscriptionStatus']) {
+    assert.equal(await page.locator(removed).count(), 0, `${removed} ne doit plus exister`);
+  }
   await page.screenshot({ path: path.join(results, 'provider-details.png') });
   await page.locator('#plan').fill('Offre de test');
   await page.locator('#amount').fill('103');
+  await page.locator('#billingCycle').selectOption('yearly');
+  assert.match(await page.locator('#cost-line').innerText(), /8,58.*par mois/);
+  await page.locator('#billingCycle').selectOption('one-time');
+  assert.equal(await page.locator('#renewalDate-label').innerText(), 'Fin de la période payée');
   await page.locator('#billingCycle').selectOption('monthly');
+  assert.equal(await page.locator('#renewalDate-label').innerText(), 'Prochain paiement');
   await page.locator('#renewalDate').fill(futureDate);
-  await page.locator('[name="reviewed"]').check();
   await page.locator('#provider-form button[type="submit"]').click();
   await page.waitForFunction(() => !document.querySelector('dialog').open);
   assert.ok((await page.locator('.stats').innerText()).includes('103'));
   await openProvider(page, 'openai');
-  await page.locator('#subscriptionStatus').selectOption('expired');
-  await page.locator('#statusMessage').fill('Renouvellement indisponible pour ce plan.');
-  await page.locator('#provider-form button[type="submit"]').click();
+  await page.locator('[data-action="subscription-end"]').click();
   await page.waitForFunction(() => !document.querySelector('dialog').open);
   const expiredState = await page.evaluate(() => window.lasmium.getState());
   assert.equal(expiredState.providers.find(p => p.id === 'openai').active, false);
   assert.equal(expiredState.providers.find(p => p.id === 'openai').subscriptionStatus, 'expired');
   assert.deepEqual(expiredState.summary.monthly, {});
-  assert.match(await page.locator('.expired-card').innerText(), /Renouvellement indisponible pour ce plan/);
+  assert.match(await page.locator('.expired-card').innerText(), /Tu n’as plus cet abonnement/);
   await page.screenshot({ path: path.join(results, 'expired-subscription.png'), fullPage: true });
   await assert.rejects(page.evaluate(() => window.lasmium.syncOne('openai')), /expiré/);
   await page.locator('[data-nav="subscriptions"]').click();
-  assert.match(await page.locator('.expired-row').innerText(), /Fin du forfait/);
+  assert.match(await page.locator('.expired-row').innerText(), /Abonnement terminé/);
   await page.locator('[data-nav="overview"]').click();
   await openProvider(page, 'openai');
-  await page.locator('#subscriptionStatus').selectOption('active');
+  assert.equal(await page.locator('#provider-form button[type="submit"]').innerText(), 'Réactiver');
+  await page.locator('#renewalDate').fill(pastDate);
   await page.locator('#provider-form button[type="submit"]').click();
-  assert.match(await page.locator('#provider-form .form-error').innerText(), /Confirme le renouvellement/);
-  await page.locator('[name="confirmRenewal"]').check();
+  assert.match(await page.locator('#provider-form .form-error').innerText(), /échéance future/);
+  await page.locator('#renewalDate').fill(futureDate);
   await page.locator('#provider-form button[type="submit"]').click();
   await page.waitForFunction(() => !document.querySelector('dialog').open);
   assert.ok((await page.locator('.stats').innerText()).includes('103'));
-  await openProvider(page, 'openai', 'manual');
-  await page.locator('#quotaRemaining').fill('62');
-  await page.locator('#manual-form button[type="submit"]').click();
-  await page.waitForFunction(() => !document.querySelector('dialog').open);
-
-  // ------------------------------------------------------------------ *
-  // Historique (chargement paresseux par IPC)
-  // ------------------------------------------------------------------ *
-  await page.locator('[data-nav="history"]').click();
-  await page.waitForSelector('#history-provider');
-  await page.locator('#history-provider').selectOption('openai');
-  assert.equal(await page.locator('.chart-panel').count(), 1);
-  assert.ok((await page.locator('.data-table').innerText()).includes('62 %'));
-  await page.screenshot({ path: path.join(results, 'history.png'), fullPage: true });
+  // Un mensuel dont l'échéance est passée reste compté et passe « à vérifier ».
+  const overdueState = await page.evaluate(renewalDate => window.lasmium.updateProvider('openai', { renewalDate }), pastDate);
+  assert.equal(overdueState.providers.find(p => p.id === 'openai').subscriptionStatus, 'active');
+  assert.equal(overdueState.summary.monthly.USD, 103);
+  assert.equal(overdueState.summary.overdue, 1);
+  await page.waitForFunction(() => document.querySelector('.stats')?.innerText.includes('échéance à vérifier'));
+  await page.evaluate(renewalDate => window.lasmium.updateProvider('openai', { renewalDate }), futureDate);
+  // Paiement unique : compté à part, jamais dans le coût mensuel.
+  const oneTimeState = await page.evaluate(renewalDate => window.lasmium.updateProvider('grok', { amount: 199, billingCycle: 'one-time', renewalDate }), futureDate);
+  assert.deepEqual(oneTimeState.summary.oneTime, { USD: 199 });
+  assert.equal(oneTimeState.summary.monthly.USD, 103);
+  await page.evaluate(() => window.lasmium.updateProvider('grok', { amount: null, billingCycle: 'unknown', renewalDate: null }));
 
   // ------------------------------------------------------------------ *
   // Connecteurs API : validation, chiffrement, course connect/disconnect,
@@ -328,7 +334,46 @@ async function main() {
   const recovered = await page.evaluate(() => window.lasmium.syncOne('openrouter'));
   assert.equal(recovered.providers.find(p => p.id === 'openrouter').error, null);
   assert.equal(recovered.providers.find(p => p.id === 'openrouter').connected, true);
+  // Fiche API (0.6.9) : la clé seulement, puis le suivi des dépenses.
+  assert.deepEqual(await page.locator('[role="tab"]').allTextContents(), ['Connexion', 'Dépenses']);
+  assert.equal(await page.locator('#plan').count(), 0);
+  await page.locator('[data-dialog-tab="spending"]').click();
+  await page.locator('#startAmount').fill('10');
+  await page.locator('#spending-form button[type="submit"]').click();
+  await page.waitForFunction(() => state.providers.find(p => p.id === 'openrouter').spending?.startAmount === 10);
+  // Le solde passe de 74,50 à 94,50 : une recharge de 20 $ est détectée et comptée.
+  await desktop.evaluate(({ session }) => {
+    session.defaultSession.fetch = async () => ({ ok: true, json: async () => ({ data: { total_credits: 120, total_usage: 25.5 } }) });
+  });
+  const toppedUp = (await page.evaluate(() => window.lasmium.syncOne('openrouter'))).providers.find(p => p.id === 'openrouter');
+  assert.equal(toppedUp.spending.topUps.length, 1);
+  assert.equal(toppedUp.spending.topUps[0].amount, 20);
+  assert.deepEqual(toppedUp.spendingTotals, { currency: 'USD', thisMonth: 30, total: 30, topUps: 1 });
+  await page.waitForFunction(() => document.querySelector('.top-up'));
+  await page.locator('[data-action="topup-toggle"]').click();
+  await page.waitForFunction(() => state.providers.find(p => p.id === 'openrouter').spending.topUps[0].offered === true);
+  const offeredState = await page.evaluate(() => window.lasmium.getState());
+  assert.equal(offeredState.providers.find(p => p.id === 'openrouter').spendingTotals.thisMonth, 10, 'un crédit offert sort des dépenses');
+  assert.deepEqual(offeredState.summary.api.month, { USD: 10 });
+  await page.screenshot({ path: path.join(results, 'api-spending.png') });
+  await desktop.evaluate(({ session }) => {
+    session.defaultSession.fetch = async () => ({ ok: true, json: async () => ({ data: { total_credits: 100, total_usage: 25.5 } }) });
+  });
+  await page.locator('[data-action="spending-stop"]').click();
+  await page.waitForFunction(() => !state.providers.find(p => p.id === 'openrouter').spending);
+  // Solde d'origine rétabli pour la suite du scénario (74,50 $).
+  await page.evaluate(() => window.lasmium.syncOne('openrouter'));
   await closeDialog(page);
+  // ------------------------------------------------------------------ *
+  // Historique (chargement paresseux par IPC) : relevés OpenRouter réels.
+  // ------------------------------------------------------------------ *
+  await page.locator('[data-nav="history"]').click();
+  await page.waitForSelector('#history-provider');
+  await page.locator('#history-provider').selectOption('openrouter');
+  assert.equal(await page.locator('.chart-panel').count(), 1);
+  assert.ok((await page.locator('.data-table').innerText()).includes('94,50'));
+  await page.screenshot({ path: path.join(results, 'history.png'), fullPage: true });
+  await page.locator('[data-nav="connections"]').first().click();
   // Second connecteur API : RunInfra (clé d'espace de travail).
   await desktop.evaluate(() => {
     process.mainModule.require('electron').session.defaultSession.fetch = async url => {
@@ -887,7 +932,7 @@ const fontBytes = await fs.readFile(fontFile);
   await page.screenshot({ path: path.join(results, 'compact-window.png') });
   const loaded = await page.evaluate(() => window.lasmium.getState());
   assert.equal(loaded.providers.find(p => p.id === 'openai').plan, 'Offre de test');
-  assert.equal(loaded.providers.find(p => p.id === 'openai').snapshot.quotaRemaining, 62);
+  assert.deepEqual(['amount', 'billingCycle'].map(key => loaded.providers.find(p => p.id === 'openai')[key]), [103, 'monthly']);
   assert.equal(loaded.providers.find(p => p.id === 'grok').favorite, true);
   assert.equal(loaded.providers.find(p => p.id === 'openrouter').connected, false);
   assert.equal(loaded.settings.autoRefresh, false);
@@ -1033,22 +1078,6 @@ const fontBytes = await fs.readFile(fontFile);
     }
     await closeDialog(page);
   }
-  // ------------------------------------------------------------------ *
-  // Réinitialisations : édition manuelle sans créer de relevé (zai reste connecté)
-  // ------------------------------------------------------------------ *
-  await openProvider(page, 'zai', 'resets');
-  await page.locator('#reset-date-0').fill('2099-09-19');
-  await page.locator('#resets-form button[type="submit"]').click();
-  await page.waitForFunction(() => document.querySelector('#toast').textContent === 'Dates de réinitialisation enregistrées.');
-  assert.match(await page.locator('#resets-form').innerText(), /manuel/);
-  assert.match(await page.locator('#resets-form').innerText(), /heure non précisée/);
-  await page.screenshot({ path: path.join(results, 'reset-editor.png') });
-  const resetState = await page.evaluate(() => window.lasmium.getState());
-  assert.equal(resetState.providers.find(p => p.id === 'zai').connected, true);
-  assert.equal(resetState.providers.find(p => p.id === 'zai').manualResets.Semaine.date, '2099-09-19');
-  assert.equal(resetState.providers.find(p => p.id === 'zai').manualResets.Semaine.at, null);
-  await assert.rejects(page.evaluate(() => window.lasmium.saveResets('zai', { Semaine: { date: '2099-02-30' } })), /invalide/);
-  await closeDialog(page);
   // Claude : connexion à l'abonnement via Claude Code (simulé), en un clic,
   // avec un faux profil Claude Code (USERPROFILE temporaire) et un transport
   // HTTP simulé, jamais le vrai compte.
@@ -1153,8 +1182,8 @@ const fontBytes = await fs.readFile(fontFile);
   // ------------------------------------------------------------------ *
   await page.evaluate(() => window.lasmium.disconnect('ollama'));
   await page.evaluate(() => window.lasmium.disconnect('zai'));
-  const clearedDates = await page.evaluate(() => window.lasmium.saveResets('zai', {}));
-  assert.deepEqual(clearedDates.providers.find(p => p.id === 'zai').manualResets, {});
+  // Plus de dates de réinitialisation manuelles (0.6.9) : l'API n'existe plus.
+  assert.equal(await page.evaluate(() => typeof window.lasmium.saveResets), 'undefined');
   await desktop.evaluate(() => {
     const transport = process.mainModule.require('./lib/antigravity-account.cjs');
     process.mainModule.require('./lib/account-browser.cjs').openSubscriptionBrowser = async () => ({ isOpen: () => true, close: async () => {}, readSubscriptionPage: async () => ({ authenticated: true, windows: [{ label: 'Semaine', remaining: 45, resetAt: null }] }) });
@@ -1206,7 +1235,7 @@ const fontBytes = await fs.readFile(fontFile);
   assert.equal(Array.isArray(erasedState.providers) && erasedState.providers.length, 10);
   assert.deepEqual(erasedState.history, []);
   await desktop.close(); desktop = null;
-  console.log('PASS: marque Lasmium TOKENS-HUB, logo, thèmes clair/sombre/système, version dynamique, app:info, erase-data, recommandations retirées, inventaire 10 fournisseurs, recherche/filtres, édition, historique, clés chiffrées, course connect/disconnect, reprise transitoire, cooldown persistant, Orca/Ollama (session conservée puis auth invalide), Claude Desktop/direct, lecteurs DOM réels, santé des connexions (10 lignes, états typés, dérive SCHEMA_DRIFT sans écraser le dernier relevé), packs signés (3) et sauvegarde d’état, polices Inter + Sora (fichiers+OFL+chargement dashboard/widget, tabular-nums), libellés Hebdo/Horaire/Hebdo Fable/Hebdo Argon et chips, widget vertical Lasmium 360×660 (10 lignes, une information par fenêtre, Ollama Free + crédits, soldes multi-devises, sans défilement ; scroll fin à 320), niveaux textuels, tray, redémarrage, Ollama Free, Antigravity, export nettoyé.');
+  console.log('PASS: marque Lasmium TOKENS-HUB, logo, thèmes clair/sombre/système, version dynamique, app:info, erase-data, recommandations retirées, inventaire 10 fournisseurs, recherche/filtres, fiche abonnement à quatre champs (mensuel/annuel/paiement unique, échéance à vérifier, fin et réactivation), suivi des dépenses API (recharge détectée, crédit offert), historique, clés chiffrées, course connect/disconnect, reprise transitoire, cooldown persistant, Orca/Ollama (session conservée puis auth invalide), Claude via Claude Code, lecteurs DOM réels, santé des connexions (10 lignes, états typés, dérive SCHEMA_DRIFT sans écraser le dernier relevé), packs signés (3) et sauvegarde d’état, polices Inter + Sora (fichiers+OFL+chargement dashboard/widget, tabular-nums), libellés Hebdo/Horaire/Hebdo Fable/Hebdo Argon et chips, widget vertical Lasmium 360×660 (10 lignes, une information par fenêtre, Ollama Free + crédits, soldes multi-devises, sans défilement ; scroll fin à 320), niveaux textuels, tray, redémarrage, Ollama Free, Antigravity, export nettoyé.');
 }
 
 main().catch(error => { console.error(error); process.exitCode = 1; }).finally(async () => { if (desktop) await desktop.close(); });

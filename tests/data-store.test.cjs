@@ -198,3 +198,20 @@ test('theme and cooldown migrations are non-destructive and idempotent', () => {
   assert.deepEqual(cleanedHealth.state.connectorHealth, { claude: health });
   assert.equal(addConnectorHealth(cleanedHealth.state).changed, false);
 });
+
+test('0.6.9 : une copie intégrale précède le retrait des champs saisis à la main', async () => {
+  await withTestDir('data-store-', async dir => {
+    const state = createSeed();
+    Object.assign(state.providers.find(provider => provider.id === 'openai'), { notes: 'à garder en copie', reviewed: true, nextAmount: 25 });
+    await writeState(dir, state);
+    const loaded = await createDataStore({ dataDir: dir }).load();
+    const openai = loaded.state.providers.find(provider => provider.id === 'openai');
+    assert.equal('notes' in openai, false);
+    assert.equal('nextAmount' in openai, false);
+    const copy = await createDataStore({ dataDir: dir }).readJSON('state.before-0.6.9-simplification.json');
+    assert.equal(copy.providers.find(provider => provider.id === 'openai').notes, 'à garder en copie');
+    // Un état déjà simplifié ne produit aucune nouvelle copie.
+    const again = await createDataStore({ dataDir: dir }).load();
+    assert.equal('notes' in again.state.providers.find(provider => provider.id === 'openai'), false);
+  });
+});

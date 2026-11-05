@@ -30,7 +30,7 @@ function extractFunction(name) {
 const DEPENDENCIES = [
   'state', 'providerFlows', 'updater', 'connectorPacks', 'connectorPackErrors', 'packSummary',
   'lastKnownUsageCredits', 'connectionInfo', 'isConnected', 'busy', 'publicHealth', 'openAiAccount',
-  'connectors', 'subscriptionAccounts', 'summary', 'publicAppInfo',
+  'connectors', 'subscriptionAccounts', 'summary', 'publicAppInfo', 'apiSpending',
 ];
 
 function buildPublicState(context) {
@@ -72,7 +72,11 @@ function fakeContext() {
     openAiAccount: { info: () => { calls.push('openAiAccount.info'); return { identity: 'openai-account' }; } },
     connectors: { grok: { browserAccount: true }, openrouter: { browserAccount: false }, openai: {}, ollama: {} },
     subscriptionAccounts: { info: id => { calls.push(`subscriptionAccounts.info:${id}`); return { browser: id }; } },
-    summary: providers => { calls.push('summary'); return { total: providers.length }; },
+    summary: (providers, _now, options) => { calls.push('summary'); return { total: providers.length, api: options.apiSpending }; },
+    apiSpending: {
+      providerSpending: p => { calls.push(`providerSpending:${p.id}`); return { total: 10 }; },
+      spendingSummary: () => { calls.push('spendingSummary'); return { month: { USD: 10 } }; },
+    },
     publicAppInfo: () => { calls.push('publicAppInfo'); return { version: '1.2.3' }; },
   };
 }
@@ -93,7 +97,7 @@ test('publicState expose l’état sans historique ni stratégie, avec les clés
   assert.deepEqual(result.connectorPackErrors, [{ file: 'a.json', provider: null, reason: 'r1' }, { file: 'b.json', provider: 'grok', reason: 'r2' }]);
   assert.equal(result.historyCount, 2);
   assert.equal(result.historyRevision, 'h2');
-  assert.deepEqual(result.summary, { total: 7 });
+  assert.deepEqual(result.summary, { total: 7, api: { month: { USD: 10 } } }, 'le résumé inclut les dépenses API du mois');
   assert.equal(result.desktop, true);
   // L'état en mémoire n'est jamais modifié : historique et champ obsolète restent en place.
   assert.equal(context.state.history.length, 2);
@@ -142,6 +146,11 @@ test('publicState présente chaque fournisseur : connecteur, connexion, synchron
   assert.equal('accountConnection' in byId.openrouter, false);
   assert.deepEqual(Object.keys(byId.openrouter), ['id', 'name', 'connector', 'connected', 'syncing', 'health']);
 
+  // Suivi des dépenses API : totaux exposés seulement quand le suivi existe.
+  context.state.providers[3].spending = { startAmount: 10 };
+  const tracked = buildPublicState(context)().providers.find(p => p.id === 'openrouter');
+  assert.deepEqual(tracked.spendingTotals, { total: 10 });
+
   assert.equal(byId.claude.accountConnection, 'flow-claude');
   assert.equal(byId.antigravity.accountConnection, 'flow-antigravity');
   assert.equal(byId.orcarouter.accountConnection, 'flow-orcarouter');
@@ -159,6 +168,6 @@ test('publicState lit ses dépendances dans un ordre stable', () => {
     'connectionInfo:claude', 'isConnected:claude', 'publicHealth',
     'connectionInfo:antigravity', 'isConnected:antigravity', 'publicHealth',
     'connectionInfo:orcarouter', 'isConnected:orcarouter', 'publicHealth',
-    'summary',
+    'spendingSummary', 'summary',
   ]);
 });

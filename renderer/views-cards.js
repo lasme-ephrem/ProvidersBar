@@ -359,7 +359,7 @@ function quotaGroupsMarkup(groups, provider) {
 
 function expiredCard(provider) {
   const status = statusBadge(provider);
-  const message = escapeHtml(provider.statusMessage || 'Aucun renouvellement prévu pour le moment.');
+  const message = 'Tu n’as plus cet abonnement : il est exclu des coûts. Ouvre la fiche pour le réactiver.';
   return `<article class="card expired-card">`
     + `<button type="button" class="card-open" data-open="${escapeHtml(provider.id)}"`
     + ` aria-label="Configurer ${escapeHtml(provider.name)}"></button>`
@@ -367,7 +367,7 @@ function expiredCard(provider) {
     + `<div class="provider-title"><h3>${escapeHtml(provider.name)}</h3>`
     + `<p>${escapeHtml(provider.plan && provider.plan !== provider.name ? provider.plan : 'Abonnement')} · expiré</p></div>`
     + `${favoriteButton(provider)}</div>`
-    + `<div class="card-content"><p class="expired-title">Abonnement expiré</p>`
+    + `<div class="card-content"><p class="expired-title">Abonnement terminé</p>`
     + `<p class="expired-message">${message}</p>`
     + `<div class="card-bottom"><span class="card-meta">Suivi et recommandations arrêtés</span>${status}</div>`
     + `</div></article>`;
@@ -429,7 +429,8 @@ function card(provider) {
     : snapshot?.resetAt ? resetLabel(snapshot.resetAt)
       : provider.type === 'subscription'
         ? (provider.renewalDate
-          ? `${days(provider.renewalDate) < 0 ? 'Date passée' : 'Échéance'} · ${shortDate(provider.renewalDate)}`
+          ? `${subscriptionOverdue(provider) ? 'Échéance à vérifier'
+            : provider.billingCycle === 'one-time' ? 'Fin du paiement unique' : 'Prochain paiement'} · ${shortDate(provider.renewalDate)}`
           : 'Échéance à préciser')
         : '';
   const meta = groups.length ? freshnessMarkup(snapshot?.updatedAt) : escapeHtml(subline);
