@@ -1,9 +1,10 @@
 # Historique des versions
 
-## Non publié
+## 0.6.6 — 5 novembre 2026
 
-Chantier qualité issu de l'analyse du dépôt. Aucun changement fonctionnel pour
-l'utilisateur, hors les corrections ci-dessous.
+Version **Qualité**, issue de l'analyse du dépôt. Aucun changement fonctionnel pour
+l'utilisateur, hors les corrections ci-dessous. Première version livrée par le
+workflow de release ; toutes les fonctionnalités 0.6.5 sont conservées.
 
 ### Corrections
 
@@ -42,7 +43,9 @@ l'utilisateur, hors les corrections ci-dessous.
   et `views-quick.js` (rendu vérifié identique sur 125 captures) ; `publicState()`
   de `main.cjs` réécrit lisiblement, avec un test d'équivalence.
 - Documentation (README, SECURITY, PRIVACY, architecture, maintenance, updates)
-  alignée sur la 0.6.5 et sur les nouveaux workflows.
+  alignée sur la version publiée et sur les nouveaux workflows.
+- Validation Windows : 352 tests, lint et les trois smoke tests Electron verts sur
+  une session interactive ; essai à blanc du workflow de release réussi sur GitHub.
 
 ## 0.6.5 — 4 novembre 2026
 

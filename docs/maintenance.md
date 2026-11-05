@@ -1,7 +1,7 @@
 # Maintenance
 
 Documentation des commandes réelles de vérification, de l'intégration continue et
-des procédures de maintenance. La version publiée est **0.6.5** (branche `main`,
+des procédures de maintenance. La version publiée est **0.6.6** (branche `main`,
 Node.js ≥ 24, Windows x64, Electron 44.x).
 
 ## Validation locale (Definition of Done)
@@ -64,7 +64,7 @@ vérifications sans toucher aux releases GitHub ; les fichiers produits restent
 7 jours en artefact de workflow). Job **build** (`windows-latest`, 60 minutes) :
 `npm ci` complet (le script postinstall d'Electron télécharge le runtime copié dans
 le portable), `npm run verify`, `npm run lint`, `npm test`, contrôle que
-`package.json` porte la version du tag (`v0.6.5` et `0.6.5`, échec explicite sinon),
+`package.json` porte la version du tag (`v0.6.6` et `0.6.6`, échec explicite sinon),
 `npm run package:release`, `npm run release:artifacts`, `npm run release:verify`
 (extraction de l'archive avec le même `extractZip` que l'application, fichiers
 indispensables, version, absence de `data/`, SHA-256 conforme à

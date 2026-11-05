@@ -2,7 +2,15 @@
 
 Application desktop Windows pour suivre les abonnements, quotas et crédits de **dix fournisseurs d’IA**. Un tableau de bord et un widget dans la zone de notification regroupent les abonnements et les API avec leurs ressources restantes et leurs dates de réinitialisation.
 
+**Version 0.6.6 — 5 novembre 2026 :** version **Qualité** : correction d'un timer orphelin du navigateur de connexion Ollama, URL de mise à jour vers le dépôt renommé, CI fusionnée et workflow de release automatisé, ESLint, 352 tests, renderer découpé. Toutes les fonctionnalités 0.6.5 sont conservées ; détails dans [CHANGELOG.md](CHANGELOG.md).
+
 **Version 0.6.5 — 4 novembre 2026 :** **mise à jour automatique signée** du portable, vérifiée par manifeste Ed25519 et SHA-256, avec remplacement après fermeture et conservation stricte de `data/` ; **canary live** prêt à recevoir des clés de test locales. Toutes les fonctionnalités 0.5.0 sont conservées. Détails dans [CHANGELOG.md](CHANGELOG.md), [updates.md](docs/updates.md), la [matrice fournisseurs](docs/provider-matrix.md) et le [runbook](docs/runbook-connectors.md).
+
+## Maintenance 0.6.6
+
+- **Corrections** : un timer de détection du navigateur système Ollama pouvait survivre à une annulation et interroger tout navigateur ouvert ensuite ; l'URL du manifeste de mise à jour vise désormais `lasme-ephrem/lasmium-tokens-bar` au lieu de l'ancien nom du dépôt.
+- **Livraison** : `quality.yml` fusionné dans `ci.yml` ; nouveau workflow `release.yml` (fabrication sur Windows, contrôle de l'archive par réextraction, notes tirées du CHANGELOG, brouillon de release GitHub, signature de `latest.json` si un secret est fourni). Voir [updates.md](docs/updates.md).
+- **Qualité** : ESLint derrière `npm run lint`, 352 tests dont les tests de l'updater exécutables sur toute plate-forme, `views.js` découpé en quatre fichiers, `publicState()` lisible. Validation Windows complète (tests, lint, trois smoke tests).
 
 ## Maintenance 0.6.5
 
