@@ -9,8 +9,14 @@ const { findPackageRoot, buildWindowsInstallScript } = require('../lib/update-in
 
 function workspace(t, prefix) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
-  // Sous Windows, un descripteur peut se refermer juste après le test : on réessaie.
-  t.after(() => fs.rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
+  // Sous Windows, le script d'installation réel relance un processus détaché
+  // qui peut garder un handle sur le dossier quelques secondes après la fin du
+  // test : on réessaie, puis on laisse le dossier temporaire plutôt que de
+  // faire échouer un test dont les assertions ont déjà réussi.
+  t.after(() => {
+    try { fs.rmSync(root, { recursive: true, force: true, maxRetries: 20, retryDelay: 250 }); }
+    catch (error) { if (!['EPERM', 'EBUSY', 'ENOTEMPTY'].includes(error.code)) throw error; }
+  });
   return root;
 }
 
