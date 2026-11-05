@@ -66,9 +66,44 @@ et la clé publique versionnée :
 
 ## Flux réel 0.6.6 → 0.6.7
 
-À constater sur l'installation de l'utilisateur (`Documents\LasmiumTokensHub`) :
-**Réglages → Mises à jour**, installation, redémarrage, puis version 0.6.7, `data/`
-conservé, et retour d'Hebdo Fable dès que Claude Code a renouvelé son jeton.
+Installation de l'utilisateur, téléchargée depuis une release GitHub
+(`Documents\LasmiumTokensHub`, utilisée au quotidien).
+
+1. 13:57:53 (heure locale) : la 0.6.7 est détectée (« Mise à jour 0.6.7
+   disponible » dans `data/logs/lasmium.log`), installée depuis **Réglages → Mises à
+   jour**.
+2. Le script remplace l'application et la relance ; journal `data/updates/update.log` :
+   - `Attente de l'arrêt du processus 37628`
+   - `Mise à jour copiée ; redémarrage.`
+3. 13:58:00 : `Démarrage 0.6.7`, sauvegarde d'état de démarrage créée.
+
+Résultat vérifié :
+
+- version finale : **0.6.7** (`resources/app/package.json`, confirmée par
+  l'utilisateur) ;
+- `data/` conservé : 10 fournisseurs, 6 abonnements, actualisation automatique
+  active ;
+- sauvegardes de secours `resources/app.rollback-20261105135758` et
+  `LasmiumTokensHub.exe.rollback-20261105135758` présentes.
+
+### Défaut constaté sur Claude après la mise à jour
+
+L'installation avait basculé vers Claude Desktop **sous 0.6.6** : sa session
+(`{ kind: 'claude-desktop-local' }`, sans `resumeLiveAfter`) n'est donc pas
+reconnue comme un repli à reprendre. Le jeton Claude Code était toujours expiré.
+
+- 13:58:30, 13:58:47, 13:58:50 : trois clics « Activer la lecture directe »
+  aboutissent à `AUTH_RATE_LIMITED`. Le relevé Desktop ayant moins de 10 minutes,
+  `shouldFallbackToClaudeDesktop` refuse le repli : Claude passe en mode direct avec
+  une erreur, et le suivi du relevé Desktop s'arrête.
+- Le message d'erreur conseille « Déconnecter puis Connecter » ; le suivi Claude a
+  ensuite été arrêté (`accountSession` absente dans l'état de 13:58:59).
+
+Correction à prévoir : un échec de « Activer la lecture directe » depuis le mode
+Claude Desktop doit retomber sur le repli avec reprise planifiée, quel que soit
+l'âge du relevé ; une session Desktop issue d'un repli 0.6.6 (`claudeSync` avec un
+code `auth-*`) doit être reconnue comme reprenable ; le message ne doit plus
+conseiller de déconnecter.
 
 ## Limites connues
 
