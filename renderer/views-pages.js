@@ -491,6 +491,9 @@ function accountConnectionBody(provider) {
 
 function claudeConnectionBody(provider) {
   const direct = provider.accountSession?.kind === 'claude-live-local';
+  // Repli automatique : la lecture directe reste voulue et sera retentée.
+  const resumeAt = !direct && Number.isFinite(Date.parse(provider.accountSession?.resumeLiveAfter))
+    ? provider.accountSession.resumeLiveAfter : null;
   const retry = provider.claudeSync?.nextAttemptAt;
   const windows = provider.snapshot?.quotaWindows?.length
     ? `<div class="source-note">${provider.snapshot.quotaWindows.map(window =>
@@ -504,7 +507,8 @@ function claudeConnectionBody(provider) {
     ? `<div class="${provider.error ? 'source-note' : 'connection-success'}">${direct
       ? (provider.error ? 'Lecture directe activée · dernier relevé conservé'
         : 'Lecture directe Claude activée · chaque minute')
-      : 'Suivi Claude Desktop activé sur ce PC'}</div>` : ''}`
+      : resumeAt ? 'Lecture directe en pause · relevé Claude Desktop utilisé (sans Hebdo Fable)'
+        : 'Suivi Claude Desktop activé sur ce PC'}</div>` : ''}`
     + `<p class="connection-note">${escapeHtml(provider.connector.instructions)}</p>`
     + `${provider.accountConnection?.message
       ? `<p class="${provider.accountConnection.status === 'error' ? 'form-error' : 'connection-note'}"`
@@ -519,16 +523,22 @@ function claudeConnectionBody(provider) {
       ? '<br><strong>Actualisation automatique désactivée dans Réglages.</strong>' : ''}</div>`
     + `${provider.error && retry && Date.parse(retry) > Date.now()
       ? `<p class="connection-note">Prochaine tentative : ${new Date(retry).toLocaleTimeString('fr-FR')}.</p>` : ''}`
+    + `${resumeAt
+      ? `<p class="connection-note">Reprise automatique dès que Claude Code renouvelle son jeton, `
+        + `sinon prochain essai vers ${new Date(Math.max(Date.parse(resumeAt), Date.parse(retry) || 0)).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}.</p>` : ''}`
     + `${windows}`
-    + `${!direct
+    + `${!direct && !resumeAt
       ? `<p class="connection-note">Activer la lecture directe autorise Lasmium TOKENS-HUB à utiliser et `
         + `renouveler la connexion Claude Code existante auprès d’Anthropic pour lire les quotas. `
         + `Les jetons renouvelés sont enregistrés uniquement dans le fichier de connexion Claude Code, `
-        + `jamais dans les données Lasmium TOKENS-HUB.</p>`
-        + `<div class="form-actions"><button type="button" class="primary" `
-        + `data-action="claude-enable-live">Activer la lecture directe (1 min)</button></div>` : ''}`
-    + `<div class="form-actions"><button type="button" class="secondary" data-action="account-verify">`
-    + `${direct ? 'Actualiser les quotas Claude' : 'Relire le relevé Claude Desktop'}</button></div>`
+        + `jamais dans les données Lasmium TOKENS-HUB.</p>` : ''}`
+    + `${!direct
+      ? `<div class="form-actions"><button type="button" class="primary" `
+        + `data-action="claude-enable-live">${resumeAt ? 'Réessayer la lecture directe maintenant'
+          : 'Activer la lecture directe (1 min)'}</button></div>` : ''}`
+    // En repli, « Vérifier » retente aussi la lecture directe : un seul bouton suffit.
+    + `${resumeAt ? '' : `<div class="form-actions"><button type="button" class="secondary" data-action="account-verify">`
+      + `${direct ? 'Actualiser les quotas Claude' : 'Relire le relevé Claude Desktop'}</button></div>`}`
     + `<p class="form-error" id="account-account-error" role="alert"></p>`
     + `${provider.connected
       ? `<div class="form-actions"><button type="button" class="secondary" data-action="disconnect">`

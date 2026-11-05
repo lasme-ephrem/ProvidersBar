@@ -72,12 +72,16 @@ test('Claude direct fallback announces the switch and keeps an actionable guidan
   assert.match(message, /Claude Code/);
   const source = fsSync.readFileSync(path.join(__dirname, '..', 'lib', 'provider-flows.cjs'), 'utf8');
   assert.ok(
-    source.includes('Lecture directe indisponible (renouvellement du jeton Claude Code limité) ; Lasmium TOKENS-HUB utilise le relevé Claude Desktop.'),
+    source.includes('Lecture directe indisponible (renouvellement du jeton Claude Code limité) ; Lasmium TOKENS-HUB utilise le relevé Claude Desktop, sans Hebdo Fable.'),
     'le message de bascule explicite doit rester câblé dans verifyClaudeDesktop',
   );
   assert.ok(
-    source.includes('Lasmium TOKENS-HUB utilise le dernier relevé Claude Desktop connu (relevé ancien).'),
+    source.includes('Lasmium TOKENS-HUB utilise le dernier relevé Claude Desktop connu (relevé ancien), sans Hebdo Fable.'),
     'la variante « relevé ancien » doit rester annoncée dans verifyClaudeDesktop',
+  );
+  assert.ok(
+    source.includes('La lecture directe reprendra automatiquement dès que Claude Code aura renouvelé son jeton'),
+    'le repli doit annoncer la reprise automatique, qui existe désormais',
   );
   assert.ok(source.includes('{ allowStale: true }'), 'le repli doit lire le relevé Desktop avec allowStale');
 });

@@ -457,7 +457,19 @@ le renouvellement du jeton Claude Code est refusé : l'état retourné par
 `claude:enable-live` contient alors `provider.accountSession.kind =
 'claude-desktop-local'` et `provider.accountConnection.message =
 « Lecture directe indisponible (renouvellement du jeton Claude Code limité) ;
-Lasmium TOKENS-HUB utilise le relevé Claude Desktop. »`.
+Lasmium TOKENS-HUB utilise le relevé Claude Desktop, sans Hebdo Fable. La lecture
+directe reprendra automatiquement dès que Claude Code aura renouvelé son jeton
+(ouvre Claude Code pour l’accélérer). »`.
+
+Depuis 0.6.7, ce repli garde la lecture directe voulue :
+`accountSession.resumeLiveAfter` (date ISO) indique le prochain essai automatique.
+Un fichier de jeton Claude Code réécrit rend l'essai immédiat ; un essai échoué reste
+sur Claude Desktop sans erreur et reporte le suivant d'un quart d'heure. Pendant le
+repli, la fiche affiche « Lecture directe en pause · relevé Claude Desktop utilisé
+(sans Hebdo Fable) » dans `.connection-success`, l'heure du prochain essai, et le
+bouton `[data-action="claude-enable-live"]` devient « Réessayer la lecture directe
+maintenant ». La carte remplace sa mention Hebdo Fable par « Hebdo Fable masquée :
+lecture de secours Claude Desktop… ».
 
 Le renderer (`renderer/app.js`, branche `claude-enable-live` de `runAction`) lit
 cet état après l'appel et applique deux retours distincts :

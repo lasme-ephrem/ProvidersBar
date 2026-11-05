@@ -265,9 +265,15 @@ async function main() {
   const fallbackToast = await page.locator('#toast').innerText();
   assert.match(fallbackToast, /Connexion Claude mise à jour|relevé Claude Desktop|Desktop/);
   assert.doesNotMatch(fallbackToast, /Lecture directe Claude activée/);
+  // 0.6.7 : la lecture directe reste voulue, la fiche annonce la reprise automatique.
+  assert.match(await page.locator('.dialog-body').innerText(), /reprendra automatiquement/);
+  assert.match(await page.locator('.connection-success').innerText(), /Lecture directe en pause/);
+  assert.equal(await page.locator('[data-action="claude-enable-live"]').innerText(), 'Réessayer la lecture directe maintenant');
+  assert.equal(await page.locator('[data-action="account-verify"]').count(), 0);
   await page.screenshot({ path: path.join(results, 'claude-desktop-fallback.png') });
   const fallbackSaved = JSON.parse(await fs.readFile(path.join(fallbackDataDir, 'state.json'), 'utf8')).providers.find(p => p.id === 'claude');
   assert.equal(fallbackSaved.accountSession.kind, 'claude-desktop-local');
+  assert.ok(Date.parse(fallbackSaved.accountSession.resumeLiveAfter) > Date.now(), 'la reprise automatique est planifiée et persistée');
   assert.deepEqual(fallbackSaved.snapshot.quotaWindows.map(window => window.remaining), [100, 38]);
   assert.equal(fallbackSaved.claudeSync.errorCode, 'auth-rate-limit');
   assert.ok(!JSON.stringify(fallbackSaved).includes('fixture-expired'));

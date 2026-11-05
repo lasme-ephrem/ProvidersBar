@@ -178,6 +178,18 @@ function quotaGroups(provider) {
   return groups;
 }
 
+// Hebdo Fable n'existe que dans la lecture directe : le relevé Claude Desktop
+// ne contient que les limites horaire et hebdo partagées.
+function claudeFableHint(provider, groups) {
+  const fableShown = groups.some(group => group.periods.some(period => period.key === 'Fable · Semaine'));
+  if (!fableShown && provider.accountSession?.kind === 'claude-desktop-local') {
+    return provider.accountSession.resumeLiveAfter
+      ? 'Hebdo Fable masquée : lecture de secours Claude Desktop. Retour automatique dès que Claude Code renouvelle son jeton.'
+      : 'Hebdo Fable : visible uniquement avec la lecture directe (fiche Claude).';
+  }
+  return 'Hebdo Fable : disponible avec Max, non incluse avec Pro.';
+}
+
 function quotaPeriodLabel(provider, key, label) {
   if (provider.id === 'claude' && key === 'Fable · Semaine') return 'Hebdo Fable';
   if (provider.id === 'antigravity' && key.includes('Argon')) return 'Hebdo Argon';
@@ -428,8 +440,7 @@ function card(provider) {
   const meta = groups.length ? freshnessMarkup(snapshot?.updatedAt) : escapeHtml(subline);
   const freeHint = ollamaFree(provider)
     ? '<p class="card-hint">Forfait payant expiré · usage Free suivi</p>' : '';
-  const claudeHint = provider.id === 'claude'
-    ? '<p class="card-hint">Hebdo Fable : disponible avec Max, non incluse avec Pro.</p>' : '';
+  const claudeHint = provider.id === 'claude' ? `<p class="card-hint">${claudeFableHint(provider, groups)}</p>` : '';
   const simpleQuota = groups.length ? '' : `<div class="metric-label">${label}</div>`
     + `<div class="metric-row"><p class="metric">${metric}</p>${metricPill}</div>`
     + `<p class="metric-note">${escapeHtml(note)}</p>`

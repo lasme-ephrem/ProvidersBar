@@ -709,11 +709,13 @@ else {
       });
       const claude = state.providers.find(p => p.id === 'claude');
       // Lecture directe : restaurer le cooldown d'échec persisté, jamais un succès.
-      if (claude?.accountSession?.kind === 'claude-live-local') claudeReader.restore(claude.claudeSync);
+      // Un repli en attente de reprise garde aussi son cooldown (Retry-After).
+      if (claude?.accountSession?.kind === 'claude-live-local' || claude?.accountSession?.resumeLiveAfter) claudeReader.restore(claude.claudeSync);
+      // Claude Code réécrit ce fichier quand il renouvelle son jeton : la
+      // lecture directe (ou sa reprise après un repli) est retentée aussitôt.
       watchFile(CREDENTIAL_PATH, { interval: 2000, persistent: false }, (current, previous) => {
         if (current.mtimeMs === previous.mtimeMs && current.size === previous.size) return;
-        claudeReader.credentialsChanged();
-        syncClaudeWhenDue();
+        syncClaudeWhenDue({ credentialsChanged: true });
       });
       // Check the deadline rather than two independent 60-second timers, which
       // could otherwise skip a cycle because of network latency.
