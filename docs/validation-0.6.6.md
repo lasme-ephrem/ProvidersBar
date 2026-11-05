@@ -62,13 +62,17 @@ Résultat vérifié :
   vérifier ») ;
 - `data/` conservé : inventaire de 10 fournisseurs et 6 abonnements et réglages
   personnalisés (actualisation automatique, seuil USD) intacts ;
-- aucune reconnexion de compte ni ressaisie de clé nécessaire.
+- aucune reconnexion de compte ni ressaisie de clé nécessaire ;
+- journal `data/updates/update.log` :
+  - `Attente de l'arrêt du processus 33148`
+  - `Mise à jour copiée ; redémarrage.`
+- sauvegarde de secours `resources/app.rollback-20261105051921` présente.
 
 ## Limites connues
 
-- Le journal `data/updates/update.log` et la présence de `resources/app.rollback-*`
-  n'ont pas été relevés lors de cette validation ; le comportement est celui
-  validé en 0.6.5 (script inchangé).
+- `update.log` est écrit en UTF-8 sans BOM : lu avec `Get-Content` sous Windows
+  PowerShell 5.1, les accents s'affichent déformés ; ajouter `-Encoding UTF8` ou
+  utiliser PowerShell 7. Le fichier lui-même est correct.
 - Une installation placée dans un dossier synchronisé (OneDrive, Documents
   synchronisés) expose son `data/` à la synchronisation : à éviter, voir
   [`SECURITY.md`](../SECURITY.md) §8.
