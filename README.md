@@ -2,6 +2,8 @@
 
 Application desktop Windows pour suivre les abonnements, quotas et crédits de **dix fournisseurs d’IA**. Un tableau de bord et un widget dans la zone de notification regroupent les abonnements et les API avec leurs ressources restantes et leurs dates de réinitialisation.
 
+**Version 0.6.10 — 5 novembre 2026 :** version **corrective** : Ollama suit le forfait lu sur son site (Free = 0 $, forfait payant compté même après son échéance), textes d'un abonnement terminé harmonisés, smoke Claude fiable en CI. Détails dans [CHANGELOG.md](CHANGELOG.md).
+
 **Version 0.6.9 — 5 novembre 2026 :** **coûts en clair** : fiche d'abonnement à quatre champs (forfait, prix, fréquence, échéance), coût mensuel et paiements uniques distingués, suivi des dépenses API par recharges détectées, fiche API réduite à la clé. Détails dans [CHANGELOG.md](CHANGELOG.md).
 
 **Version 0.6.8 — 5 novembre 2026 :** **connexion Claude simplifiée** : un bouton « Connecter Claude », comme pour Codex, toujours sur ton abonnement (jamais une clé API) ; lecture toutes les 5 minutes avec Hebdo Fable ; Claude Desktop n'est plus utilisé. Détails dans [CHANGELOG.md](CHANGELOG.md).
@@ -11,6 +13,13 @@ Application desktop Windows pour suivre les abonnements, quotas et crédits de *
 **Version 0.6.6 — 5 novembre 2026 :** version **Qualité** : correction d'un timer orphelin du navigateur de connexion Ollama, URL de mise à jour vers le dépôt renommé, CI fusionnée et workflow de release automatisé, ESLint, 352 tests, renderer découpé. Toutes les fonctionnalités 0.6.5 sont conservées ; détails dans [CHANGELOG.md](CHANGELOG.md).
 
 **Version 0.6.5 — 4 novembre 2026 :** **mise à jour automatique signée** du portable, vérifiée par manifeste Ed25519 et SHA-256, avec remplacement après fermeture et conservation stricte de `data/` ; **canary live** prêt à recevoir des clés de test locales. Toutes les fonctionnalités 0.5.0 sont conservées. Détails dans [CHANGELOG.md](CHANGELOG.md), [updates.md](docs/updates.md), la [matrice fournisseurs](docs/provider-matrix.md) et le [runbook](docs/runbook-connectors.md).
+
+## Maintenance 0.6.10
+
+- **Ollama** : statut déduit du forfait lu (Free ou payant), plus de bascule en Free à la date d'échéance ; un arrêt choisi n'est pas annulé par le forfait encore affiché jusqu'à la fin de la période réglée.
+- **Interface** : « Abonnement terminé » partout sur la carte d'un abonnement arrêté.
+- **CI** : conversion de l'ancienne session Claude au chargement ; smokes en échec toujours terminés.
+- **Qualité** : 357 tests, lint sans erreur, trois smoke tests Windows.
 
 ## Maintenance 0.6.9
 
@@ -176,7 +185,8 @@ La fiche d’un abonnement ne demande que quatre informations : **forfait**, **p
 
 - **Abonnements / mois** : mensuels + annuels ÷ 12, par devise.
 - **Paiements uniques en cours** : affichés à part, jamais répartis sur les mois ; tous ceux qui ne sont pas terminés s’additionnent, quelle que soit leur durée, et chacun sort du total à sa date de fin.
-- **Échéance dépassée** d’un mensuel ou d’un annuel : l’abonnement reste compté et passe « à vérifier » jusqu’à ce que la prochaine date soit indiquée. « Je n’ai plus cet abonnement » le retire des coûts et du suivi ; « Réactiver » demande une échéance future. Ollama repasse en Free à 0 USD à la fin d’un forfait payant.
+- **Échéance dépassée** d’un mensuel ou d’un annuel : l’abonnement reste compté et passe « à vérifier » jusqu’à ce que la prochaine date soit indiquée. « Je n’ai plus cet abonnement » le retire des coûts et du suivi ; « Réactiver » demande une échéance future.
+- **Ollama** : le forfait lu sur son site décide. Free : suivi actif compté 0 USD. Forfait payant (Pro, Max, Team) : compté avec le prix saisi. La réserve de crédits d’usage est affichée sans être comptée.
 
 Pour une **API**, la fiche ne garde que la clé (onglet Connexion) et le **suivi des dépenses** (onglet Dépenses) : indique le montant de ta dernière recharge, puis chaque hausse du solde est comptée comme une recharge payée (« C’était un crédit offert » la retire). La vue d’ensemble affiche les **dépenses API du mois**. Le montant détecté est la hausse du solde entre deux lectures : une consommation entre-temps le sous-estime légèrement.
 

@@ -1,5 +1,33 @@
 # Historique des versions
 
+## 0.6.10 — 5 novembre 2026
+
+Version **corrective** : Ollama suit le forfait lu sur son site, textes d'un
+abonnement terminé harmonisés, smoke Claude fiable en CI. Toutes les
+fonctionnalités 0.6.9 sont conservées.
+
+### Corrections
+
+- Ollama : un forfait payant renouvelé était basculé en Free à sa date
+  d'échéance et sortait des coûts. Le statut d'Ollama suit désormais le forfait
+  lu sur son site : Free → suivi actif compté 0 $ (sans « prix à préciser » ni
+  échéance) ; forfait payant (Pro, Max, Team) → compté avec le prix saisi, nom du
+  forfait renseigné, échéance dépassée « à vérifier » comme les autres. Après
+  « Je n'ai plus cet abonnement », le forfait payant encore affiché par Ollama
+  jusqu'à la fin de la période réglée ne le réactive pas. La réserve de crédits
+  d'usage reste affichée sans être comptée.
+- Carte d'un abonnement terminé : « Abonnement terminé » sur la carte, le
+  badge et le sous-titre ; « Exclu des coûts · suivi arrêté » remplace la
+  mention obsolète des recommandations.
+- Claude : l'ancienne session Claude Desktop est convertie au chargement des
+  données, avant l'ouverture des fenêtres (course de démarrage vue en CI).
+
+### Qualité
+
+- Un smoke Electron en échec se termine toujours (fermeture bornée à 15 s puis
+  sortie) au lieu d'occuper la CI jusqu'à son délai.
+- 357 tests (forfait Ollama, arrêt choisi, conversion Claude au chargement).
+
 ## 0.6.9 — 5 novembre 2026
 
 Version **Coûts en clair** : fiches réduites à l'essentiel, coûts mensuels et
