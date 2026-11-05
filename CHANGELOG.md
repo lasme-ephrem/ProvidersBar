@@ -1,5 +1,44 @@
 # Historique des versions
 
+## 0.6.9 — 5 novembre 2026
+
+Version **Coûts en clair** : fiches réduites à l'essentiel, coûts mensuels et
+paiements uniques distingués, suivi des dépenses API. Toutes les autres
+fonctionnalités 0.6.8 sont conservées.
+
+### Nouveautés
+
+- Fiche d'un abonnement : quatre champs seulement, forfait, prix (et devise),
+  fréquence (mensuel, annuel, paiement unique) et échéance. Le coût compté est
+  recalculé pendant la saisie. Deux onglets : Informations et Connexion.
+- Vue d'ensemble : « Abonnements / mois » (mensuels + annuels ÷ 12),
+  « Paiements uniques en cours » (affichés à part, additionnés quelle que soit
+  leur durée, chacun retiré à sa date de fin) et « Dépenses API · ce mois ».
+- Suivi des dépenses API (onglet Dépenses) : un montant de départ, puis chaque
+  hausse du solde est comptée comme une recharge payée ; « C'était un crédit
+  offert » la retire du total.
+- Fiche API : la clé seulement (onglet Connexion).
+- « Je n'ai plus cet abonnement » retire un abonnement des coûts ; « Réactiver »
+  le rétablit avec une échéance future.
+
+### Corrections
+
+- Un abonnement mensuel ou annuel n'expire plus à sa date d'échéance (son suivi
+  s'arrêtait) : il reste compté et passe « à vérifier ». Seuls un paiement unique
+  (fin de la période payée) et Ollama (retour en Free) expirent à leur date.
+
+### Retraits
+
+- Onglets « Relevé manuel » et « Réinitialisations », statut et message
+  d'expiration, prochain tarif et date de changement, notes, case « J'ai vérifié ».
+  Ces champs sont retirés des données au premier lancement, après une copie
+  complète `data/state.before-0.6.9-simplification.json`.
+
+### Qualité
+
+- 355 tests (module `api-spending`, résumé des coûts, migration et copie de
+  sécurité) ; smoke principal réécrit pour la fiche et les dépenses API.
+
 ## 0.6.8 — 5 novembre 2026
 
 Version **Connexion Claude simplifiée** : Claude se connecte comme Codex, en un

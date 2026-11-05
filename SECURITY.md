@@ -9,7 +9,7 @@ manière de signaler une vulnérabilité.
 
 | Version | Support sécurité |
 | --- | --- |
-| 0.6.x (branche `main`) | oui — dernière version publiée : 0.6.8 |
+| 0.6.x (branche `main`) | oui — dernière version publiée : 0.6.9 |
 | 0.5.x et antérieures | non — mettre à jour vers la dernière version |
 
 Les correctifs de sécurité sont livrés dans la dernière version ; il n'existe
@@ -223,6 +223,9 @@ les tests destructifs contre des services tiers ne sont pas autorisés.
 
 ## 9. Historique
 
+- 2026-11 (version 0.6.9) : suivi local des dépenses API (montants seulement,
+  aucune donnée de paiement) ; retrait des champs saisis à la main après une
+  copie complète de l'état.
 - 2026-11 (version 0.6.8) : connexion Claude déléguée au Claude Code officiel,
   lancé sans clé API ni jeton longue durée ; lecture du relevé Claude Desktop
   retirée ; lecture des quotas toutes les 5 minutes.

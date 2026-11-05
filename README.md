@@ -2,6 +2,8 @@
 
 Application desktop Windows pour suivre les abonnements, quotas et crédits de **dix fournisseurs d’IA**. Un tableau de bord et un widget dans la zone de notification regroupent les abonnements et les API avec leurs ressources restantes et leurs dates de réinitialisation.
 
+**Version 0.6.9 — 5 novembre 2026 :** **coûts en clair** : fiche d'abonnement à quatre champs (forfait, prix, fréquence, échéance), coût mensuel et paiements uniques distingués, suivi des dépenses API par recharges détectées, fiche API réduite à la clé. Détails dans [CHANGELOG.md](CHANGELOG.md).
+
 **Version 0.6.8 — 5 novembre 2026 :** **connexion Claude simplifiée** : un bouton « Connecter Claude », comme pour Codex, toujours sur ton abonnement (jamais une clé API) ; lecture toutes les 5 minutes avec Hebdo Fable ; Claude Desktop n'est plus utilisé. Détails dans [CHANGELOG.md](CHANGELOG.md).
 
 **Version 0.6.7 — 5 novembre 2026 :** version **corrective** : après un repli vers Claude Desktop, la lecture directe Claude (et donc **Hebdo Fable**) reprend seule dès que Claude Code renouvelle son jeton ; dates de réinitialisation et réserve Ollama mieux séparées. Toutes les fonctionnalités 0.6.6 sont conservées ; détails dans [CHANGELOG.md](CHANGELOG.md).
@@ -9,6 +11,13 @@ Application desktop Windows pour suivre les abonnements, quotas et crédits de *
 **Version 0.6.6 — 5 novembre 2026 :** version **Qualité** : correction d'un timer orphelin du navigateur de connexion Ollama, URL de mise à jour vers le dépôt renommé, CI fusionnée et workflow de release automatisé, ESLint, 352 tests, renderer découpé. Toutes les fonctionnalités 0.6.5 sont conservées ; détails dans [CHANGELOG.md](CHANGELOG.md).
 
 **Version 0.6.5 — 4 novembre 2026 :** **mise à jour automatique signée** du portable, vérifiée par manifeste Ed25519 et SHA-256, avec remplacement après fermeture et conservation stricte de `data/` ; **canary live** prêt à recevoir des clés de test locales. Toutes les fonctionnalités 0.5.0 sont conservées. Détails dans [CHANGELOG.md](CHANGELOG.md), [updates.md](docs/updates.md), la [matrice fournisseurs](docs/provider-matrix.md) et le [runbook](docs/runbook-connectors.md).
+
+## Maintenance 0.6.9
+
+- **Abonnements** : quatre champs, deux onglets ; récurrents par mois, paiements uniques à part ; une échéance dépassée passe « à vérifier » au lieu d'arrêter le suivi.
+- **API** : la clé seulement, et un suivi des dépenses par recharges détectées (crédits offerts exclus).
+- **Données** : champs saisis à la main retirés après une copie complète de `state.json`.
+- **Qualité** : 355 tests, lint sans erreur, trois smoke tests Windows ; migration vérifiée sur une copie de données réelles.
 
 ## Maintenance 0.6.8
 
