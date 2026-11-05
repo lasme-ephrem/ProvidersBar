@@ -108,7 +108,7 @@ Les pourcentages indiquent les **quotas restants**. Une valeur absente reste inc
 | Fournisseur | Connexion requise | Ressources suivies |
 | --- | --- | --- |
 | OpenAI GPT | Codex installé et connecté à ChatGPT | Limites et dates de remise à zéro lues via Codex |
-| Anthropic Claude | Claude Desktop, ou lecture directe activée avec Claude Code connecté | Session de 5 h, semaine, limites par modèle et dates si fournies |
+| Anthropic Claude | Abonnement Claude via Claude Code (bouton « Connecter Claude ») | Session de 5 h, semaine, limites par modèle (Hebdo Fable) et dates |
 | xAI Grok | Compte dans Chrome ou Edge dédié | Quota hebdomadaire du dashboard ; ancien panneau Usage compatible |
 | Antigravity | Antigravity App ouvert et connecté à Google | Gemini et Claude/GPT : semaine + 5 h ; **Gemini 4 Argon : semaine** |
 | Z.ai | Compte Token Plan dans Chrome ou Edge dédié | Semaine et 5 h |
@@ -146,13 +146,13 @@ Argon apparaît dans les cartes, le widget et les dates. Aucun score de qualité
 
 ### Claude
 
-Par défaut, Lasmium TOKENS-HUB lit le fichier local `plan-usage-history.json` de Claude Desktop. Les modifications sont détectées toutes les deux secondes, mais Claude Desktop peut espacer ses propres mesures. Le fichier ne fournit pas les dates de reset ; un relevé ancien est signalé.
+Une seule connexion : ton **abonnement Claude** (Pro ou Max), via le Claude Code officiel installé sur le PC, comme Codex pour OpenAI.
 
-**Connexions → Anthropic Claude → Activer la lecture directe (1 min)** autorise l’utilisation de la connexion Claude Code existante pour lire les quotas Anthropic. Les jetons restent dans le processus principal et dans le fichier officiel Claude Code ; le renouvellement OAuth est effectué par Lasmium TOKENS-HUB avec le même transport réseau, sans jamais copier de jeton vers le renderer ou les données de l’application. Une révocation impose une reconnexion dans Claude Code.
+**Connexions → Anthropic Claude → Connecter Claude** : si Claude Code est déjà connecté à ton compte Claude, la lecture est immédiate ; sinon Lasmium TOKENS-HUB lance la connexion officielle (`claude auth login --claudeai`), qui s’ouvre dans ton navigateur. Le forfait (Pro, Max) et le compte sont ensuite affichés. Claude Code est toujours lancé **sans** `ANTHROPIC_API_KEY` ni `CLAUDE_CODE_OAUTH_TOKEN` : une clé API ou un jeton longue durée présents dans l’environnement ne sont jamais utilisés (le jeton longue durée n’a d’ailleurs pas accès aux quotas).
 
-La lecture directe exige l’actualisation automatique. Elle respecte une minute entre lectures, les erreurs temporaires et `Retry-After`. Une erreur conserve le dernier relevé et son heure réelle : aucun retour silencieux vers un fichier Desktop plus ancien tant qu’un relevé direct existe.
+Les quotas (Horaire, Hebdo, Hebdo Fable et autres limites par modèle) sont lus auprès d’Anthropic **toutes les 5 minutes** : une lecture par minute déclenchait des refus prolongés. La connexion est renouvelée par Lasmium TOKENS-HUB dans le fichier officiel de Claude Code, sans jamais copier de jeton vers le renderer ou les données de l’application ; toute nouvelle connexion de Claude Code est détectée en deux secondes.
 
-Si la lecture directe est bloquée (429 de quota **ou de renouvellement OAuth**, jeton expiré, erreur d’authentification) **et que le dernier relevé direct est absent ou périmé (plus de 10 minutes)**, Lasmium TOKENS-HUB bascule explicitement vers le relevé Claude Desktop, même si un ancien relevé existe : il est périmé, donc rien de valable n’est préservé. La fiche l’annonce (« Lecture directe indisponible (renouvellement du jeton Claude Code limité) ; Lasmium TOKENS-HUB utilise le relevé Claude Desktop ») et enregistre ce relevé. Pendant ce repli, un échantillon Claude Desktop de plus de 45 minutes n’est pas rejeté : il est affiché avec sa **date réelle** et un libellé « relevé ancien » (en lecture Desktop normale, un tel échantillon reste une erreur). Si Claude Desktop n’a pas non plus de relevé lisible au moment du repli, Lasmium TOKENS-HUB ne change pas de mode sans donnée à afficher : il conserve la lecture courante, le dernier relevé et le délai d’attente, et affiche : « Ouvre Claude Desktop (page Utilisation) pour actualiser le relevé ; la lecture directe reprendra après renouvellement du jeton dans Claude Code. » Le cycle de 5 minutes réessaie (et basculera dès qu’un relevé Desktop sera lisible). Un relevé direct de moins de 10 minutes est conservé : aucune bascule dans ce cas. Aucune rotation de jeton n’est forcée ; après renouvellement du jeton dans Claude Code, réactiver la lecture directe si souhaité. [Détails du protocole et de la protection des jetons](docs/architecture.md).
+La fiche n’a que trois états : **connecté** (« Vérifier maintenant »), **dernières valeurs affichées** avec l’heure du prochain essai automatique (réseau, service indisponible, lecture ou renouvellement limités par Anthropic : rien à faire), et **reconnexion nécessaire** (« Connecter Claude »). Le relevé local de Claude Desktop n’est plus utilisé. [Détails du protocole et de la protection des jetons](docs/architecture.md).
 
 ## Abonnements, dates et API
 
@@ -215,7 +215,7 @@ npm start
 | `npm run doctor` | Diagnostic lecture seule des prérequis (17 contrôles, `--json` disponible) |
 | `npm run test:desktop` | Intégration Electron : inventaire, IPC, chiffrement, persistance, widget |
 | `npm run test:resources:desktop` | Couleurs et épuisement de chaque limite dans les deux vues et les deux thèmes |
-| `npm run test:claude:desktop` | Pannes, reprise et persistance du choix de lecture directe Claude |
+| `npm run test:claude:desktop` | Connexion Claude en un clic (Claude Code simulé), pannes, reprise, renouvellement limité |
 | `npm run preview` | Aperçu en lecture seule, sans comptes ni clés, sur `http://127.0.0.1:4317` |
 | `npm run package` | Construire ou actualiser le portable personnel, données conservées |
 | `npm run package:release` | Construire un dossier versionné neuf, sans données personnelles |
@@ -258,9 +258,9 @@ L’exécutable **n’est pas signé** et conserve les métadonnées binaires El
 
 ## Limites connues
 
-- **Lectures réelles** : Claude Desktop, le service local Antigravity, le portail Ollama, le portefeuille OrcaRouter et le solde OpenRouter sont vérifiés sur une machine réelle (voir [docs/validation-0.3.4.md](docs/validation-0.3.4.md)). Les lectures authentifiées des fournisseurs (clés API, sessions web) restent à rejouer après chaque changement de service.
+- **Lectures réelles** : le service local Antigravity, le portail Ollama, le portefeuille OrcaRouter et le solde OpenRouter sont vérifiés sur une machine réelle (voir [docs/validation-0.3.4.md](docs/validation-0.3.4.md)). Les lectures authentifiées des fournisseurs (clés API, sessions web) restent à rejouer après chaque changement de service.
 - Les lecteurs web (Grok, Z.ai, Ollama, bases Antigravity) dépendent des pages et services officiels, qui peuvent changer sans préavis. Un format inconnu produit une erreur, jamais une estimation.
-- Claude Desktop peut suspendre ses mesures ; le fichier local ne fournit pas de dates de reset fiables.
+- Claude exige Claude Code installé et connecté à un abonnement Claude ; Anthropic peut limiter temporairement la lecture ou le renouvellement (dernières valeurs affichées).
 - L’export JSON n’est pas restaurable depuis l’interface ; la connexion des comptes et des clés doit être refaite.
 - L’application liste les abonnements et les API ; elle ne classe plus les modèles et n’embarque plus de catalogue de prix.
 - L’audit d’accessibilité est statique (structure ARIA et contrastes calculés) ; un essai avec lecteur d’écran (NVDA, Narrator) reste recommandé.

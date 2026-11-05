@@ -450,42 +450,26 @@ axe de graphique et boutons `primary`/`danger`. L'indicateur de focus est ≥ 3:
   exclusions, routes, profil de tokens, Contributor) n'est plus rendu dans Réglages,
   et l'action `[data-action="strategy-settings"]` a disparu du tableau de bord.
 
-### 9.1 Repli Claude Desktop après activation de la lecture directe
+### 9.1 Connexion Claude (0.6.8)
 
-Depuis T9, `main.cjs` peut basculer explicitement en lecture Claude Desktop quand
-le renouvellement du jeton Claude Code est refusé : l'état retourné par
-`claude:enable-live` contient alors `provider.accountSession.kind =
-'claude-desktop-local'` et `provider.accountConnection.message =
-« Lecture directe indisponible (renouvellement du jeton Claude Code limité) ;
-Lasmium TOKENS-HUB utilise le relevé Claude Desktop, sans Hebdo Fable. La lecture
-directe reprendra automatiquement dès que Claude Code aura renouvelé son jeton
-(ouvre Claude Code pour l’accélérer). »`.
+Une seule connexion : l'abonnement Claude via Claude Code. La fiche Claude
+(`claudeConnectionBody`, onglet Connexion) dérive son état de
+`claudeConnectionState(provider)` :
 
-Depuis 0.6.7, ce repli garde la lecture directe voulue :
-`accountSession.resumeLiveAfter` (date ISO) indique le prochain essai automatique.
-Un fichier de jeton Claude Code réécrit rend l'essai immédiat ; un essai échoué reste
-sur Claude Desktop sans erreur et reporte le suivant d'un quart d'heure. Pendant le
-repli, la fiche affiche « Lecture directe en pause · relevé Claude Desktop utilisé
-(sans Hebdo Fable) » dans `.connection-success`, l'heure du prochain essai, et le
-bouton `[data-action="claude-enable-live"]` devient « Réessayer la lecture directe
-maintenant ». La carte remplace sa mention Hebdo Fable par « Hebdo Fable masquée :
-lecture de secours Claude Desktop… ».
+| État | Bandeau | Bouton principal |
+|---|---|---|
+| `connected` | `.connection-success` « Connecté à ton abonnement Claude Max (e-mail) · lecture toutes les 5 minutes » | `[data-action="account-verify"]` « Vérifier maintenant » |
+| `waiting` (réseau, service, 429 de lecture ou de renouvellement) | `.connection-note` « … · dernières valeurs affichées », message, « Prochain essai automatique : HH:MM » | « Vérifier maintenant » |
+| `reconnect` (`auth-required`, `auth-unavailable`, `auth-refused`, `not-subscription`, échec de connexion, Claude Code absent) | `.form-error` « Reconnexion nécessaire », message | `[data-action="claude-enable-live"]` « Connecter Claude » |
+| `busy` (connexion ou lecture en cours) | message de progression | « Connecter Claude » désactivé |
+| `disconnected` | consignes, éventuel échec de connexion | « Connecter Claude » |
 
-Le renderer (`renderer/app.js`, branche `claude-enable-live` de `runAction`) lit
-cet état après l'appel et applique deux retours distincts :
-
-| État retourné | Toast (rôle `status`, `#toast`) |
-|---|---|
-| lecture directe réellement active (`accountSession.kind === 'claude-live-local'`) | « Lecture directe Claude activée. » (inchangé) |
-| bascule Desktop, tout autre cas | « Connexion Claude mise à jour : relevé Claude Desktop utilisé. » |
-
-Aucun message « lecture directe active » n'est affiché en cas de bascule. La fiche
-Claude rend toujours le message de bascule via
-`provider.accountConnection.message` (paragraphe `role="status"` dans l'onglet
-Connexion) ainsi que « Suivi Claude Desktop activé sur ce PC » dans
-`.connection-success` ; `renderDialog()` est appelé avant le toast pour que la fiche
-soit déjà à jour. Aucun hook DOM nouveau : `[data-action="claude-enable-live"]`,
-`#account-account-error` et `#toast` sont inchangés.
+Le message d'erreur n'apparaît qu'une fois : après un échec, `renderer/app.js`
+(`showClaudeFailure`) relit l'état au lieu de répéter l'erreur sous le bouton.
+Toast de réussite : « Claude connecté à ton abonnement. Quotas mis à jour. ».
+Aucun texte ne mentionne Claude Desktop. Badge de carte : « Reconnexion
+nécessaire » ou « Dernières valeurs · nouvel essai auto ». La mention Hebdo
+Fable n'apparaît que pour un forfait Pro (« non incluse avec Pro »).
 
 ---
 

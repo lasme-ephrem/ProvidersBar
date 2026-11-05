@@ -37,9 +37,9 @@ const { assertSnapshot, healthSuccess, healthFailure, publicHealth, strategyFor,
 const { loadPacks, packFor, packSummary } = require('./lib/connector-packs.cjs');
 const { createProviderFlows } = require('./lib/provider-flows.cjs');
 const { createUpdater } = require('./lib/updater.cjs');
-const claudeDesktop = require('./lib/claude-desktop-usage.cjs');
 const claudeLive = require('./lib/claude-live-usage.cjs');
 const { CREDENTIAL_PATH } = require('./lib/claude-connection.cjs');
+const { createClaudeCli } = require('./lib/claude-cli.cjs');
 const { watchFile, unwatchFile } = require('node:fs');
 
 app.setName('Lasmium TOKENS-HUB');
@@ -119,12 +119,13 @@ const cooldowns = {
 // (session.defaultSession.fetch) partagé avec les appels API. Le renouvellement
 // OAuth est créé par la même factory, donc sans globalThis.fetch.
 const claudeReader = claudeLive.createClaudeLiveReader({ fetchImpl: apiFetch });
+// Connexion Claude déléguée au Claude Code officiel, toujours sur l'abonnement.
+const claudeCli = createClaudeCli();
 let quickDesiredHeight = 660;
 let connectorPacks = new Map();
 let connectorPackErrors = [];
 const orcaSession = () => session.fromPartition('persist:orcarouter-account');
 const ollamaSession = () => session.fromPartition('persist:ollama-account');
-let stopClaudeWatcher;
 let claudeTimer;
 const isConnected = p => connectors[p.id]?.mode === 'account' ? Boolean(p.accountSession) : credentials.has(p.id);
 const busy = new Map();
@@ -185,7 +186,7 @@ const providerFlows = createProviderFlows({
   showMain,
   syncOne: (id, options) => syncOne(id, options),
   claudeReader,
-  claudeDesktop,
+  claudeCli,
   antigravityTransport,
   fetchWallet,
   validateAccountRef,
@@ -196,7 +197,7 @@ const providerFlows = createProviderFlows({
   assumeOllamaFree,
 });
 const {
-  syncClaudeWhenDue, verifyClaudeDesktop, verifyAntigravity,
+  syncClaudeWhenDue, verifyClaude, connectClaude, verifyAntigravity,
   openOrcaAccount, verifyOrcaAccount,
   openOllamaSystemAccount, openOllamaAccount, verifyOllamaAccount,
 } = providerFlows;
@@ -226,7 +227,7 @@ const connectorSync = createConnectorSync({
   ollamaSession,
   openAiAccount,
   verifyAntigravity,
-  verifyClaudeDesktop,
+  verifyClaude,
   subscriptionAccounts,
   isBrowserAccount: id => Boolean(connectors[id]?.browserAccount),
   breakerOpen,
@@ -485,7 +486,7 @@ function registerIpc() {
     provider(id);
     if (disconnecting.has(id) || quitting) throw new Error('Déconnexion en cours.');
     if (id === 'antigravity') return verifyAntigravity();
-    if (id === 'claude') return verifyClaudeDesktop({ manual: true });
+    if (id === 'claude') return connectClaude();
     if (id === 'openai') return openAiAccount.open();
     if (id === 'orcarouter') return openOrcaAccount();
     if (id === 'ollama') return openOllamaAccount();
@@ -497,7 +498,7 @@ function registerIpc() {
     try {
       if (id === 'openai') await openAiAccount.read(provider(id).accountSession?.identity);
       else if (id === 'antigravity') await verifyAntigravity();
-      else if (id === 'claude') await verifyClaudeDesktop({ manual: true });
+      else if (id === 'claude') await verifyClaude({ manual: true });
       else if (id === 'orcarouter') await verifyOrcaAccount();
       else if (id === 'ollama') await verifyOllamaAccount();
       else await subscriptionAccounts.read(id, { background: true, interactive: true });
@@ -510,9 +511,9 @@ function registerIpc() {
     }
     return publicState();
   });
-  // Explicit activation only: never reuse a local credential on migration/startup.
+  // « Connecter Claude » : connexion officielle de Claude Code (abonnement).
   handle('claude:enable-live', async () => {
-    await verifyClaudeDesktop({ enableLive: true, manual: true });
+    await connectClaude();
     return publicState();
   });
   handle('provider:update', async (id, patch) => {
@@ -648,7 +649,6 @@ else {
   let browsersClosed = false;
   app.on('before-quit', event => {
     quitting = true;
-    stopClaudeWatcher?.();
     clearInterval(claudeTimer);
     clearInterval(updateTimer);
     clearTimeout(updateStartupTimer);
@@ -703,16 +703,14 @@ else {
         updateTimer = setInterval(() => { if (!quitting) updater.check().catch(() => {}); }, 6 * 60 * 60 * 1000);
         updateTimer.unref?.();
       }
-      stopClaudeWatcher = claudeDesktop.watchClaudeDesktopUsage(() => {
-        const p = state.providers.find(p => p.id === 'claude');
-        if (!quitting && state.settings.autoRefresh && p && isTracked(p) && isConnected(p) && p.accountSession.kind === 'claude-desktop-local') verifyClaudeDesktop().catch(() => {});
-      });
       const claude = state.providers.find(p => p.id === 'claude');
-      // Lecture directe : restaurer le cooldown d'échec persisté, jamais un succès.
-      // Un repli en attente de reprise garde aussi son cooldown (Retry-After).
-      if (claude?.accountSession?.kind === 'claude-live-local' || claude?.accountSession?.resumeLiveAfter) claudeReader.restore(claude.claudeSync);
-      // Claude Code réécrit ce fichier quand il renouvelle son jeton : la
-      // lecture directe (ou sa reprise après un repli) est retentée aussitôt.
+      // 0.6.8 : une seule connexion Claude, l'abonnement via Claude Code. Un
+      // ancien suivi Claude Desktop devient ce suivi (le relevé reste affiché).
+      if (claude?.accountSession && claude.accountSession.kind !== 'claude-live-local') claude.accountSession = { kind: 'claude-live-local' };
+      // Restaurer le cooldown d'échec persisté (Retry-After), jamais un succès.
+      if (claude?.accountSession?.kind === 'claude-live-local') claudeReader.restore(claude.claudeSync);
+      // Claude Code réécrit ce fichier à chaque connexion ou renouvellement :
+      // un cooldown d'authentification est levé et la lecture retentée.
       watchFile(CREDENTIAL_PATH, { interval: 2000, persistent: false }, (current, previous) => {
         if (current.mtimeMs === previous.mtimeMs && current.size === previous.size) return;
         syncClaudeWhenDue({ credentialsChanged: true });

@@ -58,7 +58,7 @@ const rendererSharedGlobals = {
   quickChip: 'readonly', quickDetailText: 'readonly', quickAccountRow: 'readonly', quickHeader: 'readonly',
   inputField: 'readonly', selectField: 'readonly', providerInfoBody: 'readonly',
   providerManualBody: 'readonly', quotaWindowsNote: 'readonly', providerConnectionBody: 'readonly',
-  apiKeyConnectionBody: 'readonly', accountConnectionBody: 'readonly', claudeConnectionBody: 'readonly',
+  apiKeyConnectionBody: 'readonly', accountConnectionBody: 'readonly', claudeConnectionBody: 'readonly', claudeConnectionState: 'readonly',
   antigravityConnectionBody: 'readonly', dialogTabs: 'readonly', dialogBody: 'readonly',
   dialogMarkup: 'readonly',
   // renderer/app.js — état et variables assignables (aussi par les smoke tests)

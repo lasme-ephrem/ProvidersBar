@@ -104,7 +104,7 @@ function stats() {
   const autoRefresh = state.settings?.autoRefresh;
   const refreshNote = !autoRefresh
     ? 'Actualisation automatique désactivée'
-    : 'Actualisation auto : comptes toutes les 5 min · Claude chaque minute';
+    : 'Actualisation auto : comptes toutes les 5 min';
   return `<section class="stats" aria-label="Chiffres clés">`
     + `<div class="stat"><p class="stat-label">Services suivis ${icon('grid', 16)}</p>`
     + `<p class="stat-value">${subscriptions.length + apiCount}<small>services</small></p>`

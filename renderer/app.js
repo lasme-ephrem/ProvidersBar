@@ -155,6 +155,21 @@ function loadHistory() {
  * ------------------------------------------------------------------ */
 const IPC_ERROR_PREFIX = /^Error invoking remote method '[^']+': (Error: )?/;
 
+// Claude : l'état du main porte déjà le message clair (fiche, une seule fois).
+// Après un échec, on relit l'état au lieu de répéter l'erreur sous le bouton.
+async function showClaudeFailure(error) {
+  const message = error.message.replace(IPC_ERROR_PREFIX, '');
+  try {
+    state = await api.getState();
+    render();
+    if (dialogId) renderDialog();
+    announce(message);
+  } catch {
+    const node = document.getElementById('account-account-error');
+    if (node) node.textContent = message; else toast(message);
+  }
+}
+
 async function runAction(action, button) {
   if (!state.desktop && !['close-dialog', 'main', 'erase-cancel'].includes(action)) {
     toast('Cette action est disponible dans l’application Windows.');
@@ -211,18 +226,9 @@ async function runAction(action, button) {
       state = await api.enableClaudeLive();
       render();
       if (dialogId) renderDialog();
-      const claude = state.providers.find(item => item.id === 'claude');
-      // Le main bascule explicitement en lecture Desktop si le renouvellement du
-      // jeton Claude Code est refusé : ne jamais annoncer une lecture directe qui
-      // n'est pas active (le message de bascule reste visible dans la fiche).
-      if (claude?.accountSession?.kind === 'claude-live-local') {
-        toast('Lecture directe Claude activée.');
-      } else {
-        toast('Connexion Claude mise à jour : relevé Claude Desktop utilisé.');
-      }
+      toast('Claude connecté à ton abonnement. Quotas mis à jour.');
     } catch (error) {
-      const node = document.getElementById('account-account-error');
-      if (node) node.textContent = error.message.replace(IPC_ERROR_PREFIX, '');
+      await showClaudeFailure(error);
     } finally {
       button.disabled = false;
     }
@@ -243,12 +249,13 @@ async function runAction(action, button) {
         if (dialogId) renderDialog();
         const provider = state.providers.find(item => item.id === id);
         toast(provider.error || (id === 'claude'
-          ? 'Relevé Claude récupéré.' : 'Compte connecté. Quotas mis à jour.'));
+          ? 'Quotas Claude à jour.' : 'Compte connecté. Quotas mis à jour.'));
         announce(provider.error
           ? 'La vérification a échoué ; le dernier relevé est conservé.'
           : 'Vérification terminée.');
       }
     } catch (error) {
+      if (id === 'claude') { await showClaudeFailure(error); return; }
       const message = error.message.replace(IPC_ERROR_PREFIX, '');
       const node = document.getElementById('account-account-error');
       if (node) node.textContent = message; else toast(message);

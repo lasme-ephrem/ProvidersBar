@@ -21,13 +21,11 @@ function statusBadge(provider) {
   }
   if (!isTracked(provider)) return '<span class="badge badge-warn">En pause</span>';
   if (provider.syncing) return '<span class="badge">Synchronisation…</span>';
-  if (provider.id === 'claude' && provider.error?.startsWith('Relevé Claude Desktop ancien')) {
-    return '<span class="badge badge-warn">Relevé ancien</span>';
-  }
   if (provider.error) {
-    if (provider.id === 'claude' && provider.accountSession?.kind === 'claude-live-local') {
-      return `<span class="badge badge-error">${provider.claudeSync?.errorCode === 'auth-required'
-        ? 'Reconnexion requise' : 'Dernier relevé · reprise en attente'}</span>`;
+    if (provider.id === 'claude' && typeof claudeConnectionState === 'function') {
+      return claudeConnectionState(provider).state === 'reconnect'
+        ? '<span class="badge badge-error">Reconnexion nécessaire</span>'
+        : '<span class="badge badge-warn">Dernières valeurs · nouvel essai auto</span>';
     }
     if (provider.connected && provider.error.includes('quota indisponible')) {
       return '<span class="badge badge-warn">Quota indisponible</span>';
@@ -178,16 +176,13 @@ function quotaGroups(provider) {
   return groups;
 }
 
-// Hebdo Fable n'existe que dans la lecture directe : le relevé Claude Desktop
-// ne contient que les limites horaire et hebdo partagées.
+// Hebdo Fable n'est pas incluse avec Pro : on le dit plutôt que d'afficher un
+// vide. Avec Max, la ligne apparaît dès qu'Anthropic la fournit.
 function claudeFableHint(provider, groups) {
   const fableShown = groups.some(group => group.periods.some(period => period.key === 'Fable · Semaine'));
-  if (!fableShown && provider.accountSession?.kind === 'claude-desktop-local') {
-    return provider.accountSession.resumeLiveAfter
-      ? 'Hebdo Fable masquée : lecture de secours Claude Desktop. Retour automatique dès que Claude Code renouvelle son jeton.'
-      : 'Hebdo Fable : visible uniquement avec la lecture directe (fiche Claude).';
-  }
-  return 'Hebdo Fable : disponible avec Max, non incluse avec Pro.';
+  if (fableShown) return '';
+  const plan = provider.accountSession?.plan || provider.plan || '';
+  return /^pro$/i.test(plan.trim()) ? 'Hebdo Fable : non incluse avec Pro.' : '';
 }
 
 function quotaPeriodLabel(provider, key, label) {
@@ -440,7 +435,8 @@ function card(provider) {
   const meta = groups.length ? freshnessMarkup(snapshot?.updatedAt) : escapeHtml(subline);
   const freeHint = ollamaFree(provider)
     ? '<p class="card-hint">Forfait payant expiré · usage Free suivi</p>' : '';
-  const claudeHint = provider.id === 'claude' ? `<p class="card-hint">${claudeFableHint(provider, groups)}</p>` : '';
+  const fableHint = provider.id === 'claude' ? claudeFableHint(provider, groups) : '';
+  const claudeHint = fableHint ? `<p class="card-hint">${fableHint}</p>` : '';
   const simpleQuota = groups.length ? '' : `<div class="metric-label">${label}</div>`
     + `<div class="metric-row"><p class="metric">${metric}</p>${metricPill}</div>`
     + `<p class="metric-note">${escapeHtml(note)}</p>`

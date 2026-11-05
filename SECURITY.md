@@ -80,7 +80,7 @@ un utilisateur légitime qui contrôle sa session et son dossier de données.
   l'environnement navigateur) ;
 - la compromission d'un fournisseur, de ses API, de son certificat TLS ou de la
   connexion réseau (proxy d'entreprise, antivirus TLS) ;
-- les composants tiers : Claude Code, Claude Desktop, Codex/Antigravity, dont les
+- les composants tiers : Claude Code, Codex/Antigravity, dont les
   fichiers et sessions restent gérés par leurs éditeurs.
 
 ## 4. Surfaces sensibles et mesures associées
@@ -152,7 +152,7 @@ un utilisateur légitime qui contrôle sa session et son dossier de données.
   Anthropic, OpenAI), de leurs API et de leurs certificats.
 - La sécurité de Chrome, Edge, de leurs extensions et du profil personnel de
   l'utilisateur.
-- Claude Code, Claude Desktop, Codex et Antigravity, y compris leurs fichiers de
+- Claude Code, Codex et Antigravity, y compris leurs fichiers de
   jetons et leurs mises à jour.
 - Windows, les antivirus, proxys TLS d'entreprise, pilotes et périphériques.
 - Un attaquant qui exécute du code avec les privilèges de l'utilisateur, obtient

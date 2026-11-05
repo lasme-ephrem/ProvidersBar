@@ -7,8 +7,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const os = require('node:os');
 const path = require('node:path');
-const { createProviderFlows, chooseOrcaAccountRef, shouldFallbackToClaudeDesktop, claudeDesktopGuidance,
-  CLAUDE_LIVE_RESUME_MS, CLAUDE_FALLBACK_MESSAGE, CLAUDE_FALLBACK_STALE_MESSAGE, CLAUDE_RESUME_HINT } = require('../lib/provider-flows.cjs');
+const { createProviderFlows, chooseOrcaAccountRef, CLAUDE_CONNECTED_MESSAGE } = require('../lib/provider-flows.cjs');
 const { ORCA_ORIGIN, validateAccountRef } = require('../lib/orca-account.cjs');
 const { OLLAMA_ORIGIN, SETTINGS_URL } = require('../lib/ollama-account.cjs');
 const { isTracked } = require('../lib/domain.cjs');
@@ -183,7 +182,8 @@ function harness() {
   const flags = { quitting: false, stateless: false };
   const services = {
     claudeRead: async () => claudeSnapshotAt(Date.now()),
-    desktopRead: async () => claudeSnapshotAt(Date.now() - MINUTE, { connectorVersion: 'claude-desktop-local-v1' }),
+    cliSubscription: async () => identity(),
+    cliLogin: async () => identity(),
     antigravityRead: async () => antigravitySnapshotAt(Date.now()),
     fetchWallet: async () => snapshotAt(Date.now(), { connectorVersion: 'orca-wallet-v1' }),
     fetchOllamaCredits: async () => ollamaSnapshotAt(Date.now()),
@@ -256,7 +256,10 @@ function harness() {
     showMain: () => { calls.push('showMain'); },
     syncOne: (id, options) => { calls.push(['syncOne', id, options]); return services.syncOne(id, options); },
     claudeReader,
-    claudeDesktop: { readClaudeDesktopUsage: (previous, options) => { calls.push(['desktop', previous, options]); return services.desktopRead(previous, options); } },
+    claudeCli: {
+      subscription: () => { calls.push(['cli-status']); return services.cliSubscription(); },
+      login: () => { calls.push(['cli-login']); return services.cliLogin(); },
+    },
     antigravityTransport: { fetchAntigravityQuota: () => { calls.push(['antigravity']); return services.antigravityRead(); } },
     fetchWallet: (ref, fetchImpl) => { calls.push(['fetchWallet', ref, fetchImpl]); return services.fetchWallet(ref, fetchImpl); },
     validateAccountRef,
@@ -276,8 +279,8 @@ function harness() {
 }
 
 const idle = { status: 'idle', message: '' };
-// Session de repli : Desktop utilisé, lecture directe retentée à échéance.
-const resumeSessionAt = ms => ({ kind: 'claude-desktop-local', resumeLiveAfter: new Date(ms + CLAUDE_LIVE_RESUME_MS).toISOString() });
+// Identité renvoyée par `claude auth status` pour un abonnement Max.
+function identity() { return { loggedIn: true, method: 'claude.ai', subscription: 'max', plan: 'Max', email: 'moi@example.test' }; }
 
 // --- Fabrique ------------------------------------------------------------------
 
@@ -288,228 +291,170 @@ test('la fabrique démarre à l’état idle et tolère l’absence d’isQuitti
   assert.doesNotThrow(() => flows.syncClaudeWhenDue());
   await flows.closeAll({ reset: true });
   assert.equal(flows.chooseOrcaAccountRef, chooseOrcaAccountRef);
-  assert.equal(flows.shouldFallbackToClaudeDesktop, shouldFallbackToClaudeDesktop);
 });
 
 // --- Claude ------------------------------------------------------------------
+// Une seule connexion : l'abonnement Claude via Claude Code (comme Codex).
 
-test('verifyClaudeDesktop lit le relevé Claude Desktop par défaut et enregistre la session desktop-local', async t => {
+const fableSnapshotAt = ms => claudeSnapshotAt(ms, {
+  connectorVersion: 'claude-live-usage-v1',
+  quotaWindows: [
+    { label: '5 heures', remaining: 89, resetAt: null },
+    { label: 'Semaine', remaining: 77, resetAt: null },
+    { label: 'Fable · Semaine', remaining: 64, resetAt: null },
+  ],
+});
+
+test('verifyClaude lit les quotas de l’abonnement et enregistre la session claude-live-local', async t => {
   clock(t);
   const h = harness();
-  const desktopSnapshot = claudeSnapshotAt(T0 - 3 * MINUTE, { connectorVersion: 'claude-desktop-local-v1' });
-  h.services.desktopRead = async () => desktopSnapshot;
-  const result = await h.flows.verifyClaudeDesktop();
-  assert.deepEqual(h.find('desktop'), ['desktop', null, undefined], 'lecture Desktop normale : sans allowStale');
-  assert.deepEqual(h.p.claude.accountSession, { kind: 'claude-desktop-local' });
-  assert.equal(h.p.claude.snapshot, desktopSnapshot);
+  const live = fableSnapshotAt(T0);
+  h.services.claudeRead = async () => live;
+  const result = await h.flows.verifyClaude();
+  assert.equal(h.claudeReader.reads, 1);
+  assert.equal(h.claudeReader.credentialsChanges, 0, 'une lecture automatique ne lève aucun cooldown');
+  assert.deepEqual(h.p.claude.accountSession, { kind: 'claude-live-local' });
+  assert.equal(h.p.claude.snapshot, live);
+  assert.ok(h.p.claude.snapshot.quotaWindows.some(window => window.label === 'Fable · Semaine'));
   assert.equal(h.p.claude.lastAttempt, new Date(T0).toISOString());
   assert.equal(h.p.claude.error, null);
-  assert.equal(h.claudeReader.reads, 0);
-  assert.equal(h.p.claude.claudeSync, undefined, 'aucun cooldown direct en mode Desktop');
-  assert.equal(h.count('record'), 1);
-  assert.equal(h.state.connectorHealth.claude.strategy, 'claude-desktop');
-  assert.equal(h.state.connectorHealth.claude.state, 'ok');
-  assert.equal(result.connections.claude.status, 'connected');
-  assert.match(result.connections.claude.message, /Dernier relevé Claude Desktop récupéré/);
+  const nextRefresh = new Date(T0 + MINUTE).toISOString();
+  assert.deepEqual(h.p.claude.claudeSync, { nextAttemptAt: nextRefresh, errorCode: null }, 'le cooldown du lecteur est persisté');
+  assert.equal(h.state.connectorHealth.claude.strategy, 'claude-direct');
+  assert.deepEqual(result.connections.claude, { status: 'connected', message: CLAUDE_CONNECTED_MESSAGE, nextAttemptAt: nextRefresh, errorCode: null });
   assert.deepEqual(h.labels().slice(-2), ['persist', 'broadcast']);
-  assert.deepEqual(h.flows.pending(), []);
-  // Même relevé (date et version inchangées) : pas de doublon d'historique, santé rafraîchie.
-  await h.flows.verifyClaudeDesktop();
+  assert.equal(h.count('cli-status') + h.count('cli-login'), 0, 'une lecture n’interroge pas Claude Code');
+  // Même relevé : pas de doublon d'historique ; « Vérifier » lève le cooldown.
+  await h.flows.verifyClaude({ manual: true });
+  assert.equal(h.claudeReader.credentialsChanges, 1);
   assert.equal(h.count('record'), 1);
   assert.equal(h.count('markHealthSuccess'), 1);
   assert.equal(h.state.history.length, 1);
+});
+
+test('verifyClaude conserve l’identité de l’abonnement et convertit une ancienne session Claude Desktop', async t => {
+  clock(t);
+  const h = harness();
+  h.p.claude.accountSession = { kind: 'claude-live-local', plan: 'Max', email: 'moi@example.test' };
+  await h.flows.verifyClaude();
+  assert.deepEqual(h.p.claude.accountSession, { kind: 'claude-live-local', plan: 'Max', email: 'moi@example.test' });
+  const old = harness();
+  old.p.claude.accountSession = { kind: 'claude-desktop-local', resumeLiveAfter: new Date(T0).toISOString() };
+  await old.flows.verifyClaude();
+  assert.deepEqual(old.p.claude.accountSession, { kind: 'claude-live-local' }, 'plus de mode Claude Desktop');
+  assert.equal(old.claudeReader.reads, 1);
+});
+
+test('un échec de lecture conserve les dernières valeurs, sans repli, avec un message clair', async t => {
+  clock(t);
+  for (const code of ['rate-limit', 'auth-rate-limit', 'network', 'auth-required']) {
+    const h = harness();
+    const previous = claudeSnapshotAt(T0 - 30 * MINUTE);
+    h.p.claude.accountSession = { kind: 'claude-live-local', plan: 'Max' };
+    h.p.claude.snapshot = previous;
+    h.services.claudeRead = async () => { throw coded(code, `Message ${code}.`); };
+    await assert.rejects(h.flows.verifyClaude(), { code, message: `Message ${code}.` }, code);
+    assert.equal(h.p.claude.snapshot, previous, `${code} : dernières valeurs conservées`);
+    assert.deepEqual(h.p.claude.accountSession, { kind: 'claude-live-local', plan: 'Max' }, code);
+    assert.equal(h.p.claude.error, `Message ${code}.`, code);
+    assert.equal(h.count('record'), 0, code);
+    assert.equal(h.count('markHealthFailure'), 1, code);
+    assert.equal(h.state.connectorHealth.claude.strategy, 'claude-direct', code);
+    const info = h.flows.info().claude;
+    assert.equal(info.status, 'error', code);
+    assert.equal(info.errorCode, code, code);
+    assert.equal(info.nextAttemptAt, new Date(T0 + 5 * MINUTE).toISOString(), `${code} : prochain essai exposé`);
+    assert.deepEqual(h.flows.pending(), [], code);
+  }
+});
+
+test('connectClaude : Claude Code déjà connecté à l’abonnement, lecture immédiate sans navigateur', async t => {
+  clock(t);
+  const h = harness();
+  h.services.claudeRead = async () => fableSnapshotAt(T0);
+  const result = await h.flows.connectClaude();
+  assert.equal(h.count('cli-status'), 1);
+  assert.equal(h.count('cli-login'), 0, 'aucune connexion navigateur quand Claude Code est déjà connecté');
+  assert.deepEqual(h.p.claude.accountSession, { kind: 'claude-live-local', plan: 'Max', email: 'moi@example.test' });
+  assert.equal(h.p.claude.plan, 'Max', 'le forfait est renseigné automatiquement');
+  assert.equal(h.claudeReader.credentialsChanges, 1);
+  assert.equal(result.connections.claude.status, 'connected');
+});
+
+test('connectClaude ouvre la connexion officielle si Claude Code n’est pas connecté ou pas sur l’abonnement', async t => {
+  clock(t);
+  for (const code of ['auth-unavailable', 'not-subscription']) {
+    const h = harness();
+    h.services.cliSubscription = async () => { throw coded(code); };
+    const states = [];
+    h.services.cliLogin = async () => { states.push(h.flows.info().claude.status); return identity(); };
+    await h.flows.connectClaude();
+    assert.equal(h.count('cli-login'), 1, code);
+    assert.deepEqual(states, ['waiting'], `${code} : « termine la connexion dans ton navigateur » pendant la connexion`);
+    assert.deepEqual(h.p.claude.accountSession, { kind: 'claude-live-local', plan: 'Max', email: 'moi@example.test' }, code);
+    assert.equal(h.flows.info().claude.status, 'connected', code);
+  }
+  // Connexion présente mais refusée par Anthropic : nouvelle connexion, puis lecture.
+  const h = harness();
+  let reads = 0;
+  h.services.claudeRead = async () => { if (reads++ === 0) throw coded('auth-required', 'Connexion Claude expirée.'); return fableSnapshotAt(T0); };
+  await h.flows.connectClaude();
+  assert.equal(h.count('cli-login'), 1);
+  assert.equal(h.claudeReader.reads, 2);
   assert.equal(h.p.claude.error, null);
 });
 
-test('enableLive active la lecture directe et enregistre { kind: "claude-live-local" }', async t => {
+test('connectClaude rapporte un échec de connexion ou un Claude Code absent sans toucher aux valeurs', async t => {
   clock(t);
   const h = harness();
-  const live = claudeSnapshotAt(T0);
-  h.services.claudeRead = async () => live;
-  const result = await h.flows.verifyClaudeDesktop({ enableLive: true, manual: true });
-  assert.equal(h.claudeReader.credentialsChanges, 1, 'un clic manuel en mode direct réarme le lecteur');
-  assert.equal(h.claudeReader.reads, 1);
-  assert.equal(h.count('desktop'), 0);
-  assert.deepEqual(h.p.claude.accountSession, { kind: 'claude-live-local' });
-  assert.equal(h.p.claude.snapshot, live);
-  const nextRefresh = new Date(T0 + MINUTE).toISOString();
-  assert.deepEqual(h.p.claude.claudeSync, { nextAttemptAt: nextRefresh, errorCode: null }, 'le cooldown du lecteur est persisté avec le fournisseur');
-  assert.equal(h.state.connectorHealth.claude.strategy, 'claude-direct');
-  assert.deepEqual(result.connections.claude, {
-    status: 'connected', message: 'Quotas Claude lus directement. Actualisation automatique chaque minute.', nextAttemptAt: nextRefresh, errorCode: null,
-  });
-  // Les cycles suivants restent en lecture directe sans réarmer le lecteur.
-  await h.flows.verifyClaudeDesktop();
-  assert.equal(h.claudeReader.reads, 2);
-  assert.equal(h.claudeReader.credentialsChanges, 1);
-  await h.flows.verifyClaudeDesktop({ manual: true });
-  assert.equal(h.claudeReader.credentialsChanges, 2);
-  // En mode Desktop, un clic manuel ne touche pas au lecteur direct.
-  h.p.claude.accountSession = { kind: 'claude-desktop-local' };
-  await h.flows.verifyClaudeDesktop({ manual: true });
-  assert.equal(h.claudeReader.credentialsChanges, 2);
-  assert.equal(h.claudeReader.reads, 3);
-  assert.equal(h.count('desktop'), 1);
+  const previous = claudeSnapshotAt(T0 - MINUTE);
+  h.p.claude.snapshot = previous;
+  h.services.cliSubscription = async () => { throw coded('auth-unavailable'); };
+  h.services.cliLogin = async () => { throw coded('login-failed', 'La connexion à Claude n’a pas abouti.'); };
+  await assert.rejects(h.flows.connectClaude(), { code: 'login-failed' });
+  assert.equal(h.p.claude.snapshot, previous);
+  assert.equal(h.claudeReader.reads, 0);
+  assert.deepEqual(h.flows.info().claude, { status: 'error', message: 'La connexion à Claude n’a pas abouti.', errorCode: 'login-failed' });
+  const missing = harness();
+  missing.services.cliSubscription = async () => { throw coded('cli-missing', 'Claude Code n’est pas installé sur ce PC.'); };
+  await assert.rejects(missing.flows.connectClaude(), { code: 'cli-missing' });
+  assert.equal(missing.count('cli-login'), 0, 'sans Claude Code, aucune connexion n’est tentée');
+  // Une erreur de lecture non liée à la connexion n'ouvre pas le navigateur.
+  const busy = harness();
+  busy.services.claudeRead = async () => { throw coded('rate-limit', 'Trop de demandes.'); };
+  await assert.rejects(busy.flows.connectClaude(), { code: 'rate-limit' });
+  assert.equal(busy.count('cli-login'), 0);
 });
 
-test('un échec direct conserve un relevé frais et le mode direct sans consulter Claude Desktop', async t => {
-  clock(t);
-  const h = harness();
-  const fresh = claudeSnapshotAt(T0 - 2 * MINUTE);
-  h.p.claude.accountSession = { kind: 'claude-live-local' };
-  h.p.claude.snapshot = fresh;
-  h.services.claudeRead = async () => { throw coded('rate-limit', 'Trop de demandes.'); };
-  await assert.rejects(h.flows.verifyClaudeDesktop(), { code: 'rate-limit', message: 'Trop de demandes.' });
-  assert.equal(h.p.claude.snapshot, fresh, 'le relevé frais est conservé avec son horodatage');
-  assert.deepEqual(h.p.claude.accountSession, { kind: 'claude-live-local' });
-  assert.equal(h.count('desktop'), 0);
-  assert.equal(h.count('record'), 0);
-  assert.equal(h.p.claude.error, 'Trop de demandes.');
-  assert.equal(h.state.connectorHealth.claude.error.sourceCode, 'rate-limit');
-  assert.equal(h.state.connectorHealth.claude.state, 'rate');
-  assert.equal(h.state.connectorHealth.claude.strategy, 'claude-direct');
-  const info = h.flows.info().claude;
-  assert.equal(info.status, 'error');
-  assert.equal(info.message, 'Trop de demandes.');
-  assert.equal(info.errorCode, 'rate-limit');
-  assert.equal(info.nextAttemptAt, new Date(T0 + 5 * MINUTE).toISOString(), 'le cooldown du lecteur est exposé à l’interface');
-  assert.deepEqual(h.p.claude.claudeSync, { nextAttemptAt: new Date(T0 + 5 * MINUTE).toISOString(), errorCode: 'rate-limit' });
-  assert.deepEqual(h.labels().slice(-2), ['persist', 'broadcast']);
-  assert.deepEqual(h.flows.pending(), []);
-});
-
-test('le repli explicite vers Claude Desktop se produit quand le relevé direct est absent ou périmé', async t => {
-  clock(t);
-  const codes = ['rate-limit', 'auth-rate-limit', 'auth-required', 'auth-expired'];
-  const readings = { absent: null, périmé: claudeSnapshotAt(T0 - 11 * MINUTE) };
-  for (const code of codes) {
-    for (const [label, previous] of Object.entries(readings)) {
-      const context = `${code} / relevé ${label}`;
-      const h = harness();
-      h.p.claude.accountSession = { kind: 'claude-live-local' };
-      h.p.claude.snapshot = previous;
-      h.services.claudeRead = async () => { throw coded(code, 'Lecture directe bloquée.'); };
-      const desktopSnapshot = claudeSnapshotAt(T0 - 30 * MINUTE, { connectorVersion: 'claude-desktop-local-v1' });
-      h.services.desktopRead = async () => desktopSnapshot;
-      const result = await h.flows.verifyClaudeDesktop();
-      assert.deepEqual(h.find('desktop'), ['desktop', previous, { allowStale: true }], context);
-      assert.deepEqual(h.p.claude.accountSession, resumeSessionAt(T0), context);
-      assert.equal(h.p.claude.snapshot, desktopSnapshot, context);
-      assert.equal(h.p.claude.error, null, context);
-      assert.equal(h.count('record'), 1, context);
-      assert.equal(h.count('markHealthFailure'), 0, context);
-      assert.equal(h.state.connectorHealth.claude.strategy, 'claude-desktop', context);
-      assert.equal(result.connections.claude.status, 'connected', context);
-      assert.equal(result.connections.claude.message, CLAUDE_FALLBACK_MESSAGE + CLAUDE_RESUME_HINT, context);
-      assert.match(result.connections.claude.message, /sans Hebdo Fable.*reprendra automatiquement/, context);
-      // Le cooldown du lecteur direct reste exposé avec la bascule annoncée.
-      assert.equal(result.connections.claude.errorCode, code, context);
-      assert.deepEqual(h.p.claude.claudeSync, h.claudeReader.status, context);
-      assert.deepEqual(h.labels().slice(-2), ['persist', 'broadcast'], context);
-      assert.deepEqual(h.flows.pending(), [], context);
-    }
-  }
-  // Variante « relevé ancien » : un échantillon Desktop de plus de 45 min est annoncé comme tel.
-  const h = harness();
-  h.p.claude.accountSession = { kind: 'claude-live-local' };
-  h.services.claudeRead = async () => { throw coded('auth-rate-limit', 'Renouvellement limité.'); };
-  h.services.desktopRead = async () => claudeSnapshotAt(T0 - 50 * MINUTE, { connectorVersion: 'claude-desktop-local-v1', stale: true });
-  const result = await h.flows.verifyClaudeDesktop();
-  assert.equal(result.connections.claude.message, CLAUDE_FALLBACK_STALE_MESSAGE + CLAUDE_RESUME_HINT);
-  assert.equal(h.p.claude.snapshot.stale, true);
-});
-
-test('aucune bascule quand Claude Desktop est illisible : mode direct conservé, consigne ajoutée, puis bascule stable', async t => {
-  clock(t);
-  const h = harness();
-  const stale = claudeSnapshotAt(T0 - 20 * MINUTE);
-  h.p.claude.accountSession = { kind: 'claude-live-local' };
-  h.p.claude.snapshot = stale;
-  h.services.claudeRead = async () => { throw coded('auth-rate-limit', 'Renouvellement limité.'); };
-  h.services.desktopRead = async () => { throw new Error('Aucun relevé local trouvé.'); };
-  const expected = `Renouvellement limité. ${claudeDesktopGuidance()}`;
-  await assert.rejects(h.flows.verifyClaudeDesktop(), { code: 'auth-rate-limit', message: expected });
-  assert.deepEqual(h.find('desktop'), ['desktop', stale, { allowStale: true }]);
-  assert.deepEqual(h.p.claude.accountSession, { kind: 'claude-live-local' }, 'le mode direct est conservé');
-  assert.equal(h.p.claude.snapshot, stale, 'le dernier relevé reste affiché');
-  assert.equal(h.p.claude.error, expected);
-  assert.equal(h.count('record'), 0);
-  assert.equal(h.count('markHealthFailure'), 1);
-  assert.equal(h.state.connectorHealth.claude.error.sourceCode, 'auth-rate-limit');
-  assert.equal(h.state.connectorHealth.claude.strategy, 'claude-direct');
-  const info = h.flows.info().claude;
-  assert.equal(info.status, 'error');
-  assert.match(info.message, /Ouvre Claude Desktop \(page Utilisation\)/);
-  assert.equal(info.errorCode, 'auth-rate-limit');
-  assert.equal(info.nextAttemptAt, new Date(T0 + 5 * MINUTE).toISOString(), 'le cooldown direct est conservé');
-  // Cycle suivant : Desktop redevient lisible → bascule annoncée, puis aucune oscillation.
-  const desktopSnapshot = claudeSnapshotAt(T0 - MINUTE, { connectorVersion: 'claude-desktop-local-v1' });
-  h.services.desktopRead = async () => desktopSnapshot;
-  await h.flows.verifyClaudeDesktop();
-  assert.deepEqual(h.p.claude.accountSession, resumeSessionAt(T0));
-  assert.equal(h.p.claude.snapshot, desktopSnapshot);
-  assert.equal(h.claudeReader.reads, 2);
-  await h.flows.verifyClaudeDesktop();
-  assert.equal(h.claudeReader.reads, 2, 'avant l’échéance de reprise, seul le relevé Desktop est relu');
-  assert.deepEqual(h.p.claude.accountSession, resumeSessionAt(T0), 'la reprise prévue est conservée');
-  assert.equal(h.flows.info().claude.status, 'connected');
-});
-
-test('les erreurs sans code éligible et les échecs Desktop ne déclenchent aucun repli', async t => {
-  clock(t);
-  const h = harness();
-  h.p.claude.accountSession = { kind: 'claude-live-local' };
-  h.p.claude.snapshot = claudeSnapshotAt(T0 - 30 * MINUTE);
-  h.services.claudeRead = async () => { throw coded('network', 'Connexion impossible.'); };
-  await assert.rejects(h.flows.verifyClaudeDesktop(), { code: 'network' });
-  assert.equal(h.count('desktop'), 0, 'un code réseau ne justifie pas la bascule');
-  assert.deepEqual(h.p.claude.accountSession, { kind: 'claude-live-local' });
-  assert.equal(h.flows.info().claude.errorCode, 'network');
-  // Mode Desktop : une erreur sans code est rapportée telle quelle, sans cooldown direct.
-  const d = harness();
-  d.p.claude.accountSession = { kind: 'claude-desktop-local' };
-  d.services.desktopRead = async () => { throw new Error('Aucun relevé local trouvé.'); };
-  await assert.rejects(d.flows.verifyClaudeDesktop(), { message: 'Aucun relevé local trouvé.' });
-  assert.deepEqual(d.flows.info().claude, { status: 'error', message: 'Aucun relevé local trouvé.', errorCode: null });
-  assert.equal(d.p.claude.claudeSync, undefined);
-  assert.equal(d.p.claude.error, 'Aucun relevé local trouvé.');
-  assert.equal(d.claudeReader.reads, 0);
-  assert.deepEqual(d.p.claude.accountSession, { kind: 'claude-desktop-local' });
-  assert.equal(d.state.connectorHealth.claude.strategy, 'claude-desktop');
-});
-
-test('verifyClaudeDesktop refuse pendant une déconnexion ou la fermeture et partage le travail en cours', async t => {
+test('verifyClaude et connectClaude refusent pendant une déconnexion ou la fermeture et partagent le travail en cours', async t => {
   const { flush } = clock(t);
   const h = harness();
   h.disconnecting.add('claude');
-  await assert.rejects(h.flows.verifyClaudeDesktop(), /Déconnexion en cours/);
+  await assert.rejects(h.flows.verifyClaude(), /Déconnexion en cours/);
+  await assert.rejects(h.flows.connectClaude(), /Déconnexion en cours/);
   h.disconnecting.delete('claude');
   h.flags.quitting = true;
-  await assert.rejects(h.flows.verifyClaudeDesktop({ enableLive: true }), /Déconnexion en cours/);
+  await assert.rejects(h.flows.verifyClaude(), /Déconnexion en cours/);
+  await assert.rejects(h.flows.connectClaude(), /Déconnexion en cours/);
   h.flags.quitting = false;
-  assert.equal(h.count('desktop') + h.claudeReader.reads, 0);
-  // Deux appels Desktop concurrents partagent la même lecture.
+  assert.equal(h.claudeReader.reads, 0);
+  // Deux lectures concurrentes partagent le même travail ; Connecter attend sa fin.
   const gate = deferred();
-  h.services.desktopRead = () => gate.promise;
-  const first = h.flows.verifyClaudeDesktop();
-  const second = h.flows.verifyClaudeDesktop();
+  h.services.claudeRead = () => gate.promise;
+  const first = h.flows.verifyClaude();
+  const second = h.flows.verifyClaude();
   await flush();
-  assert.equal(h.count('desktop'), 1);
+  assert.equal(h.claudeReader.reads, 1);
   assert.equal(h.flows.pending().length, 1);
   assert.equal(h.flows.info().claude.status, 'verifying');
-  // enableLive attend la fin du travail en cours avant de passer en lecture directe.
-  const sequence = [];
-  h.services.claudeRead = async () => { sequence.push('live'); return claudeSnapshotAt(Date.now()); };
-  const third = h.flows.verifyClaudeDesktop({ enableLive: true });
+  const third = h.flows.connectClaude();
   await flush();
-  assert.deepEqual(sequence, []);
-  gate.resolve(claudeSnapshotAt(T0 - MINUTE, { connectorVersion: 'claude-desktop-local-v1' }));
+  assert.equal(h.count('cli-status'), 0, 'Connecter attend la lecture en cours');
+  h.services.claudeRead = async () => fableSnapshotAt(Date.now());
+  gate.resolve(fableSnapshotAt(T0));
   const results = await Promise.all([first, second, third]);
-  assert.deepEqual(sequence, ['live']);
-  assert.equal(h.count('desktop'), 1);
   assert.equal(results[1].connections, results[0].connections);
-  assert.deepEqual(h.p.claude.accountSession, { kind: 'claude-live-local' });
-  assert.equal(h.flows.info().claude.status, 'connected');
+  assert.equal(h.count('cli-status'), 1);
   assert.deepEqual(h.flows.pending(), []);
 });
 
@@ -527,10 +472,16 @@ test('syncClaudeWhenDue respecte nextAttemptAt, le suivi, l’actualisation auto
   tick(MINUTE);
   h.flows.syncClaudeWhenDue();
   assert.equal(due(), 2, 'le cooldown échu relance la synchronisation');
+  // Fichier de connexion réécrit (connexion ou renouvellement par Claude Code) :
+  // un cooldown d'authentification est levé, la lecture repart aussitôt.
+  h.claudeReader.status = { nextAttemptAt: new Date(T0 + 30 * MINUTE).toISOString(), errorCode: 'auth-required' };
+  h.flows.syncClaudeWhenDue({ credentialsChanged: true });
+  assert.equal(h.claudeReader.credentialsChanges, 1);
+  assert.equal(due(), 3);
   h.state.settings.autoRefresh = false;
   h.flows.syncClaudeWhenDue();
   h.state.settings.autoRefresh = true;
-  h.p.claude.accountSession = { kind: 'claude-desktop-local' };
+  h.p.claude.accountSession = null;
   h.flows.syncClaudeWhenDue();
   h.p.claude.accountSession = { kind: 'claude-live-local' };
   h.p.claude.active = false;
@@ -542,125 +493,12 @@ test('syncClaudeWhenDue respecte nextAttemptAt, le suivi, l’actualisation auto
   h.flags.stateless = true;
   h.flows.syncClaudeWhenDue();
   h.flags.stateless = false;
-  assert.equal(due(), 2, 'actualisation désactivée, mode Desktop, suivi inactif, fermeture ou état absent : rien');
+  assert.equal(due(), 3, 'actualisation désactivée, non connecté, suivi inactif, fermeture ou état absent : rien');
   // Un échec de synchronisation est absorbé : aucune promesse non gérée.
   h.services.syncOne = async () => { throw new Error('échec'); };
   h.flows.syncClaudeWhenDue();
   await new Promise(resolve => setImmediate(resolve));
-  assert.equal(due(), 3);
-});
-
-// Repli puis reprise : la lecture directe reste voulue après une bascule Desktop.
-function fallenBackHarness() {
-  const h = harness();
-  h.p.claude.accountSession = { kind: 'claude-live-local' };
-  h.services.claudeRead = async () => { throw coded('auth-rate-limit', 'Renouvellement limité.'); };
-  h.services.desktopRead = async () => claudeSnapshotAt(T0 - 2 * MINUTE, { connectorVersion: 'claude-desktop-local-v1' });
-  return h;
-}
-const fableSnapshotAt = ms => claudeSnapshotAt(ms, {
-  connectorVersion: 'claude-live-usage-v1',
-  quotaWindows: [
-    { label: '5 heures', remaining: 89, resetAt: null },
-    { label: 'Semaine', remaining: 77, resetAt: null },
-    { label: 'Fable · Semaine', remaining: 64, resetAt: null },
-  ],
-});
-
-test('après un repli, un jeton renouvelé par Claude Code relance aussitôt la lecture directe (Hebdo Fable revient)', async t => {
-  clock(t);
-  const h = fallenBackHarness();
-  await h.flows.verifyClaudeDesktop();
-  assert.deepEqual(h.p.claude.accountSession, resumeSessionAt(T0));
-  assert.equal(h.p.claude.claudeSync.errorCode, 'auth-rate-limit');
-  // Avant l'échéance et sans nouveau jeton : aucune tentative.
-  h.flows.syncClaudeWhenDue();
-  assert.equal(h.count('syncOne'), 0, 'le repli ne relance pas la lecture directe toutes les deux secondes');
-  // Claude Code réécrit son fichier de jeton : cooldown levé, reprise immédiate.
-  h.flows.syncClaudeWhenDue({ credentialsChanged: true });
-  assert.equal(h.claudeReader.credentialsChanges, 1);
-  assert.deepEqual(h.find('syncOne'), ['syncOne', 'claude', { force: false }]);
-  assert.equal(h.p.claude.accountSession.resumeLiveAfter, new Date(T0).toISOString(), 'la reprise est due immédiatement');
-  // syncOne appelle verifyClaudeDesktop : la lecture directe réussit.
-  const live = fableSnapshotAt(T0);
-  h.services.claudeRead = async () => live;
-  const result = await h.flows.verifyClaudeDesktop();
-  assert.deepEqual(h.p.claude.accountSession, { kind: 'claude-live-local' });
-  assert.equal(h.p.claude.snapshot, live);
-  assert.ok(h.p.claude.snapshot.quotaWindows.some(window => window.label === 'Fable · Semaine'));
-  assert.equal(h.p.claude.error, null);
-  assert.equal(h.state.connectorHealth.claude.strategy, 'claude-direct');
-  assert.equal(result.connections.claude.message, 'Quotas Claude lus directement. Actualisation automatique chaque minute.');
-  // Hors repli, un fichier réécrit garde le comportement direct habituel :
-  // la cadence d'une minute après un succès est respectée.
-  h.flows.syncClaudeWhenDue({ credentialsChanged: true });
-  assert.equal(h.count('syncOne'), 1);
-});
-
-test('en repli, un essai échu qui échoue reste sur Claude Desktop sans erreur et reporte le suivant', async t => {
-  const { advance } = clock(t);
-  const h = fallenBackHarness();
-  await h.flows.verifyClaudeDesktop();
-  assert.equal(h.claudeReader.reads, 1);
-  // Un nouveau relevé Desktop entre deux essais : seul Desktop est relu, la reprise reste prévue.
-  await advance(MINUTE);
-  const newer = claudeSnapshotAt(T0 + MINUTE, { connectorVersion: 'claude-desktop-local-v1' });
-  h.services.desktopRead = async () => newer;
-  const between = await h.flows.verifyClaudeDesktop();
-  assert.equal(h.claudeReader.reads, 1);
-  assert.equal(h.p.claude.snapshot, newer);
-  assert.deepEqual(h.p.claude.accountSession, resumeSessionAt(T0));
-  assert.equal(between.connections.claude.message, CLAUDE_FALLBACK_MESSAGE + CLAUDE_RESUME_HINT);
-  // Échéance atteinte : syncClaudeWhenDue relance, l'essai échoue encore.
-  await advance(CLAUDE_LIVE_RESUME_MS - MINUTE);
-  h.flows.syncClaudeWhenDue();
-  assert.equal(h.count('syncOne'), 1, 'l’échéance de reprise déclenche un essai');
-  const failures = h.count('markHealthFailure');
-  const retried = await h.flows.verifyClaudeDesktop();
-  assert.equal(h.claudeReader.reads, 2);
-  assert.deepEqual(h.p.claude.accountSession, resumeSessionAt(T0 + CLAUDE_LIVE_RESUME_MS), 'le prochain essai est reporté d’un quart d’heure');
-  assert.equal(h.p.claude.error, null, 'aucune erreur affichée : le relevé Desktop reste valable');
-  assert.equal(h.count('markHealthFailure'), failures);
-  assert.equal(retried.connections.claude.status, 'connected');
-  assert.equal(h.state.connectorHealth.claude.strategy, 'claude-desktop');
-  h.flows.syncClaudeWhenDue();
-  assert.equal(h.count('syncOne'), 1, 'pas de nouvel essai avant la nouvelle échéance');
-  // Essai échu avec Desktop illisible : dernier relevé conservé, toujours sans erreur.
-  await advance(CLAUDE_LIVE_RESUME_MS);
-  h.services.desktopRead = async () => { throw new Error('Aucun relevé local trouvé.'); };
-  const kept = await h.flows.verifyClaudeDesktop();
-  assert.equal(h.claudeReader.reads, 3);
-  assert.equal(h.p.claude.snapshot, newer);
-  assert.equal(h.p.claude.error, null);
-  assert.deepEqual(h.p.claude.accountSession, resumeSessionAt(T0 + 2 * CLAUDE_LIVE_RESUME_MS));
-  assert.equal(kept.connections.claude.message, CLAUDE_FALLBACK_MESSAGE + CLAUDE_RESUME_HINT);
-});
-
-test('en repli, « Vérifier » et « Réessayer la lecture directe » tentent la lecture directe tout de suite', async t => {
-  clock(t);
-  const h = fallenBackHarness();
-  await h.flows.verifyClaudeDesktop();
-  await h.flows.verifyClaudeDesktop({ manual: true });
-  assert.equal(h.claudeReader.reads, 2, 'un clic manuel n’attend pas l’échéance');
-  assert.equal(h.claudeReader.credentialsChanges, 1);
-  assert.deepEqual(h.p.claude.accountSession, resumeSessionAt(T0), 'échec : repli conservé, sans erreur');
-  assert.equal(h.p.claude.error, null);
-  // Relevé Desktop ancien : le message l'annonce.
-  h.services.desktopRead = async () => claudeSnapshotAt(T0 - 50 * MINUTE, { connectorVersion: 'claude-desktop-local-v1', stale: true });
-  h.p.claude.snapshot = null;
-  const stale = await h.flows.verifyClaudeDesktop({ enableLive: true, manual: true });
-  assert.equal(stale.connections.claude.message, CLAUDE_FALLBACK_STALE_MESSAGE + CLAUDE_RESUME_HINT);
-  h.services.claudeRead = async () => fableSnapshotAt(Date.now());
-  await h.flows.verifyClaudeDesktop({ enableLive: true, manual: true });
-  assert.deepEqual(h.p.claude.accountSession, { kind: 'claude-live-local' });
-  // Une connexion Desktop choisie (sans reprise prévue) ne tente jamais la lecture directe seule.
-  const d = harness();
-  d.p.claude.accountSession = { kind: 'claude-desktop-local' };
-  d.flows.syncClaudeWhenDue({ credentialsChanged: true });
-  await d.flows.verifyClaudeDesktop();
-  assert.equal(d.count('syncOne'), 0);
-  assert.equal(d.claudeReader.reads, 0);
-  assert.deepEqual(d.p.claude.accountSession, { kind: 'claude-desktop-local' });
+  assert.equal(due(), 4);
 });
 
 // --- Antigravity -------------------------------------------------------------
@@ -1289,8 +1127,8 @@ test('cancelOrca, cancelOllama, cancelClaude et cancelAntigravity ferment, annul
   assert.equal(h.count('fetchOllamaCredits'), 0);
   // Claude et Antigravity : le travail en cours est attendu (même en échec) avant la remise à zéro.
   const claudeGate = deferred();
-  h.services.desktopRead = () => claudeGate.promise;
-  const claudeWork = h.flows.verifyClaudeDesktop();
+  h.services.claudeRead = () => claudeGate.promise;
+  const claudeWork = h.flows.verifyClaude();
   const antigravityGate = deferred();
   h.services.antigravityRead = () => antigravityGate.promise;
   const antigravityWork = h.flows.verifyAntigravity();
@@ -1301,7 +1139,7 @@ test('cancelOrca, cancelOllama, cancelClaude et cancelAntigravity ferment, annul
   const cancelling = Promise.all([h.flows.cancelClaude(), h.flows.cancelAntigravity()]).then(() => { cancelled = true; });
   await flush();
   assert.equal(cancelled, false, 'les annulations attendent la fin du travail');
-  claudeGate.reject(new Error('Aucun relevé local trouvé.'));
+  claudeGate.reject(coded('network', 'Lecture impossible.'));
   antigravityGate.reject(coded('ANTIGRAVITY_NOT_RUNNING', 'Antigravity 2.0 est introuvable sur ce PC.'));
   const outcomes = await settled;
   assert.deepEqual(outcomes.map(item => item.status), ['rejected', 'rejected']);
@@ -1332,7 +1170,7 @@ test('pending et closeAll attendent les travaux, ferment fenêtres et navigateur
   assert.equal(h.count('fetchWallet'), 1);
   const claudeGate = deferred();
   h.services.claudeRead = () => claudeGate.promise;
-  const claudeWork = h.flows.verifyClaudeDesktop({ enableLive: true });
+  const claudeWork = h.flows.verifyClaude();
   await flush();
   assert.equal(h.flows.pending().length, 2, 'vérification OrcaRouter et lecture Claude en cours');
   let closed = false;

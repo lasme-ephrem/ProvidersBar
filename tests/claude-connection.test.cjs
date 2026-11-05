@@ -105,7 +105,7 @@ test('A failed Windows save retains rotation in memory and retries the save with
 test('Logout while renewing does not recreate credentials; a compromised lock cannot publish the response', async t => {
   const { file, options } = await fixture(t);
   const connection = createClaudeConnection({ ...options, fetchImpl: async () => { await fs.unlink(file); return reply(fresh()); } });
-  await assert.rejects(connection.read(), /indisponible/);
+  await assert.rejects(connection.read(), /n’est pas connecté/);
   await assert.rejects(fs.stat(file), { code: 'ENOENT' });
   const second = await fixture(t);
   const controller = new AbortController();
@@ -141,8 +141,8 @@ test('Refresh failures leave the existing credentials intact, honor server coold
         // The OAuth refresh endpoint is throttled, not the usage endpoint.
         assert.equal(error.code, 'auth-rate-limit');
         assert.equal(error.retryAt, stamp + 7200000);
-        assert.match(error.message, /Renouvellement du jeton Claude Code limité/);
-        assert.match(error.message, /Claude Desktop \(Déconnecter puis Connecter\)/);
+        assert.match(error.message, /limite temporairement le renouvellement/);
+        assert.doesNotMatch(error.message, /Desktop|Déconnecter/);
         assert.ok(!error.message.includes('old-test-access') && !error.message.includes('old-test-refresh'));
       } else {
         assert.equal(error.code, 'auth-network');
@@ -160,7 +160,7 @@ test('A refresh 429 carries a distinct auth-rate-limit code for retry-after seco
   for (const header of ['7200', new Date(stamp + 7200000).toUTCString()]) {
     const { options } = await fixture(t);
     const connection = createClaudeConnection({ ...options, fetchImpl: async () => ({ status: 429, ok: false, headers: new Headers({ 'retry-after': header }) }) });
-    await assert.rejects(connection.read(), error => error.code === 'auth-rate-limit' && error.retryAt === stamp + 7200000 && /ouvre Claude Code/.test(error.message));
+    await assert.rejects(connection.read(), error => error.code === 'auth-rate-limit' && error.retryAt === stamp + 7200000 && /limite temporairement le renouvellement/.test(error.message));
   }
 });
 

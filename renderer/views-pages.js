@@ -275,7 +275,7 @@ function settingsPage({ version = null, electronVersion = null, packaged = null,
     + `<span>Choisis le thème du tableau de bord et du widget. « Système » suit Windows.</span></span>`
     + `<select name="theme" aria-label="Thème de l’application">${themeOptions}</select></label>`
     + `<label class="settings-row"><span class="settings-row-text"><strong>Actualisation automatique</strong>`
-    + `<span>Relit Claude chaque minute et les autres comptes toutes les 5 minutes. `
+    + `<span>Relit tes comptes connectés toutes les 5 minutes. `
     + `L’application doit rester ouverte, même dans la zone de notification.</span></span>`
     + `<input name="autoRefresh" type="checkbox" ${state.settings.autoRefresh ? 'checked' : ''}></label>`
     + `<label class="settings-row"><span class="settings-row-text"><strong>Notifications Windows</strong>`
@@ -489,61 +489,72 @@ function accountConnectionBody(provider) {
     + `${provider.error ? `<p class="form-error">${escapeHtml(provider.error)}</p>` : ''}`;
 }
 
+// Claude : une seule connexion, l'abonnement via Claude Code (comme Codex).
+// Trois états lisibles : connecté, valeurs conservées en attente d'un nouvel
+// essai automatique, reconnexion nécessaire (bouton « Connecter Claude »).
+const CLAUDE_RECONNECT_CODES = ['auth-required', 'auth-unavailable', 'auth-refused', 'not-subscription',
+  'login-failed', 'login-timeout', 'cli-missing', 'cli-failed'];
+
+function claudeConnectionState(provider) {
+  const session = provider.accountSession || {};
+  const progress = provider.accountConnection || {};
+  const code = provider.claudeSync?.errorCode || progress.errorCode || null;
+  if (progress.status === 'waiting' || progress.status === 'verifying') return { state: 'busy', code };
+  if (!provider.connected || session.kind !== 'claude-live-local') return { state: 'disconnected', code };
+  if (provider.error && CLAUDE_RECONNECT_CODES.includes(code)) return { state: 'reconnect', code };
+  if (provider.error) return { state: 'waiting', code };
+  return { state: 'connected', code };
+}
+
 function claudeConnectionBody(provider) {
-  const direct = provider.accountSession?.kind === 'claude-live-local';
-  // Repli automatique : la lecture directe reste voulue et sera retentée.
-  const resumeAt = !direct && Number.isFinite(Date.parse(provider.accountSession?.resumeLiveAfter))
-    ? provider.accountSession.resumeLiveAfter : null;
+  const session = provider.accountSession || {};
+  const { state: status } = claudeConnectionState(provider);
   const retry = provider.claudeSync?.nextAttemptAt;
-  const windows = provider.snapshot?.quotaWindows?.length
+  const planName = session.plan || provider.plan;
+  const subscription = `ton abonnement Claude${planName && planName !== provider.name ? ' ' + planName : ''}`;
+  const account = session.email ? ` (${session.email})` : '';
+  const headline = {
+    connected: `<div class="connection-success">Connecté à ${escapeHtml(subscription + account)} · lecture toutes les 5 minutes</div>`,
+    waiting: `<div class="connection-note">Connecté à ${escapeHtml(subscription + account)} · dernières valeurs affichées</div>`,
+    reconnect: '<div class="form-error" role="status">Reconnexion nécessaire</div>',
+    busy: '',
+    disconnected: '',
+  }[status];
+  // Un échec de connexion alors que Claude n'est pas (ou plus) suivi reste
+  // affiché : c'est la seule explication de l'absence de connexion.
+  const failedConnection = provider.accountConnection?.status === 'error' ? provider.accountConnection.message : '';
+  const message = status === 'busy' ? provider.accountConnection.message
+    : (status === 'waiting' || status === 'reconnect') ? provider.error
+      : failedConnection;
+  const windows = provider.snapshot?.quotaWindows?.length && status !== 'disconnected'
     ? `<div class="source-note">${provider.snapshot.quotaWindows.map(window =>
-      `<strong>${escapeHtml(window.label)} : ${window.remaining} % restants</strong>`
-      + `${direct ? ` (${Math.round((100 - window.remaining) * 100) / 100} % utilisés)` : ''}`
+      `<strong>${escapeHtml(quotaPeriodLabel(provider, QuotaResets.canonical(window.label), window.label))} : `
+      + `${window.remaining} % restants</strong>`
       + `${window.resetAt ? `<br>Remise à zéro : ${new Date(window.resetAt).toLocaleString('fr-FR')}` : ''}`)
       .join('<br>')}<br>Relevé du ${new Date(provider.snapshot.updatedAt).toLocaleString('fr-FR')}`
       + ` · ${age(provider.snapshot.updatedAt)}</div>`
     : '';
-  return `${provider.connected
-    ? `<div class="${provider.error ? 'source-note' : 'connection-success'}">${direct
-      ? (provider.error ? 'Lecture directe activée · dernier relevé conservé'
-        : 'Lecture directe Claude activée · chaque minute')
-      : resumeAt ? 'Lecture directe en pause · relevé Claude Desktop utilisé (sans Hebdo Fable)'
-        : 'Suivi Claude Desktop activé sur ce PC'}</div>` : ''}`
-    + `<p class="connection-note">${escapeHtml(provider.connector.instructions)}</p>`
-    + `${provider.accountConnection?.message
-      ? `<p class="${provider.accountConnection.status === 'error' ? 'form-error' : 'connection-note'}"`
-        + ` role="status">${escapeHtml(provider.accountConnection.message)}</p>` : ''}`
-    + `<div class="source-note">${direct
-      ? 'Source : service de quotas Claude, via le compte connecté dans Claude Code. '
-        + 'Lecture chaque minute, renouvellement automatique de la connexion et reprise après une panne. '
-        + 'Ce suivi est périodique ; les délais imposés par Claude sont respectés.'
-      : 'Source : historique local de Claude Desktop. Détection des nouveaux relevés sous 2 secondes ; '
-        + 'Claude Desktop peut espacer ou suspendre ses mesures.'}`
-    + `${direct && !state.settings.autoRefresh
-      ? '<br><strong>Actualisation automatique désactivée dans Réglages.</strong>' : ''}</div>`
-    + `${provider.error && retry && Date.parse(retry) > Date.now()
-      ? `<p class="connection-note">Prochaine tentative : ${new Date(retry).toLocaleTimeString('fr-FR')}.</p>` : ''}`
-    + `${resumeAt
-      ? `<p class="connection-note">Reprise automatique dès que Claude Code renouvelle son jeton, `
-        + `sinon prochain essai vers ${new Date(Math.max(Date.parse(resumeAt), Date.parse(retry) || 0)).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}.</p>` : ''}`
+  const primary = status === 'connected' || status === 'waiting'
+    ? '<button type="button" class="primary" data-action="account-verify">Vérifier maintenant</button>'
+    : `<button type="button" class="primary" data-action="claude-enable-live"${status === 'busy' ? ' disabled' : ''}>`
+      + 'Connecter Claude</button>';
+  return headline
+    + `${status === 'disconnected' || status === 'reconnect'
+      ? `<p class="connection-note">${escapeHtml(provider.connector.instructions)}</p>` : ''}`
+    + `${message ? `<p class="${status === 'reconnect' || (status === 'disconnected' && failedConnection) ? 'form-error' : 'connection-note'}" role="status">`
+      + `${escapeHtml(message)}</p>` : ''}`
+    + `${status === 'waiting' && retry && Date.parse(retry) > Date.now()
+      ? `<p class="connection-note">Prochain essai automatique : ${new Date(retry).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}.</p>` : ''}`
     + `${windows}`
-    + `${!direct && !resumeAt
-      ? `<p class="connection-note">Activer la lecture directe autorise Lasmium TOKENS-HUB à utiliser et `
-        + `renouveler la connexion Claude Code existante auprès d’Anthropic pour lire les quotas. `
-        + `Les jetons renouvelés sont enregistrés uniquement dans le fichier de connexion Claude Code, `
-        + `jamais dans les données Lasmium TOKENS-HUB.</p>` : ''}`
-    + `${!direct
-      ? `<div class="form-actions"><button type="button" class="primary" `
-        + `data-action="claude-enable-live">${resumeAt ? 'Réessayer la lecture directe maintenant'
-          : 'Activer la lecture directe (1 min)'}</button></div>` : ''}`
-    // En repli, « Vérifier » retente aussi la lecture directe : un seul bouton suffit.
-    + `${resumeAt ? '' : `<div class="form-actions"><button type="button" class="secondary" data-action="account-verify">`
-      + `${direct ? 'Actualiser les quotas Claude' : 'Relire le relevé Claude Desktop'}</button></div>`}`
+    + `<p class="source-note">La connexion est celle de Claude Code sur ce PC, toujours sur ton abonnement `
+    + `(jamais une clé API). Aucun mot de passe n’est lu par Lasmium TOKENS-HUB.`
+    + `${provider.connected && !state.settings.autoRefresh
+      ? ' <strong>Actualisation automatique désactivée dans Réglages.</strong>' : ''}</p>`
+    + `<div class="form-actions">${primary}</div>`
     + `<p class="form-error" id="account-account-error" role="alert"></p>`
     + `${provider.connected
       ? `<div class="form-actions"><button type="button" class="secondary" data-action="disconnect">`
-        + `Arrêter le suivi Claude</button></div>` : ''}`
-    + `${provider.error ? `<p class="form-error">${escapeHtml(provider.error)}</p>` : ''}`;
+        + `Arrêter le suivi Claude</button></div>` : ''}`;
 }
 
 function antigravityConnectionBody(provider) {

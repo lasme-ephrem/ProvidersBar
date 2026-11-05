@@ -474,34 +474,33 @@ test('les smoke tests couvrent les non-régressions critiques de la refonte 0.3'
     'Couvre P0-5/P0-6',    // traçabilité explicite des scénarios
   ];
   for (const marker of dashboardMarkers) assert.ok(dashboard.includes(marker), `scripts/smoke.cjs doit couvrir « ${marker} ».`);
-  const claudeMarkers = ['deny-token', 'offline', 'fixture-live-access', 'Prochaine tentative', 'chaque minute', 'USERPROFILE', 'LOCALAPPDATA', 'APPDATA', 'auth-rate-limit', 'claude-desktop-local'];
+  const claudeMarkers = ['deny-token', 'offline', 'fixture-live-access', 'Prochain essai automatique', 'toutes les 5 minutes', 'USERPROFILE', 'auth-rate-limit', 'claude-desktop-local'];
   for (const marker of claudeMarkers) assert.ok(claude.includes(marker), `scripts/smoke-claude.cjs doit couvrir « ${marker} ».`);
   const resourceMarkers = ['state.settings.theme', 'Toutes les limites atteintes', 'resource-empty', 'quick-fact', 'quick-level', 'quick-fact-value'];
   for (const marker of resourceMarkers) assert.ok(resources.includes(marker), `scripts/smoke-resource-status.cjs doit couvrir « ${marker} ».`);
   // Aucun smoke ne doit utiliser le vrai profil Claude Code de l'utilisateur.
   assert.match(claude, /USERPROFILE/, 'smoke-claude doit isoler le profil Claude Code');
-  assert.match(claude, /LOCALAPPDATA/, 'smoke-claude doit isoler le relevé Claude Desktop');
+  assert.match(claude, /childProcess\.spawn = /, 'smoke-claude ne doit jamais lancer le vrai Claude Code');
   assert.match(dashboard, /smoke-home-|USERPROFILE/, 'smoke doit isoler le profil Claude Code');
 });
 
-// T9/T10/T11 : le repli explicite vers Claude Desktop et le toast associé ne
-// doivent jamais être confondus avec une lecture directe active.
-test('le repli explicite Claude Desktop est couvert par le smoke Claude', async () => {
+// 0.6.8 : une seule connexion Claude, l'abonnement via Claude Code. Le smoke
+// prouve la connexion en un clic, l'absence de clé API transmise à Claude Code,
+// la migration des sessions Claude Desktop et des messages sans Claude Desktop.
+test('la connexion Claude simplifiée est couverte par le smoke Claude', async () => {
   const claude = await read('scripts/smoke-claude.cjs');
   const markers = [
-    'rate-limit-token',            // 429 de renouvellement OAuth simulé
-    'auth-rate-limit',             // code d'erreur typé attendu dans claudeSync
-    'claude-desktop-local',        // bascule effective vers la lecture Desktop
-    'Claude-Data',                 // chemin officiel du relevé Claude Desktop
-    'plan-usage-history.json',     // fichier agrégé officiel uniquement
-    'claude-desktop-fallback',     // capture dédiée du scénario
-    'Connexion Claude mise à jour', // toast neutre du contrat T11
-    'Lecture directe Claude activée', // doit apparaître uniquement en négation
+    'rate-limit-token',             // 429 de renouvellement OAuth simulé
+    'auth login --claudeai',        // connexion officielle sur l'abonnement
+    'smoke-api-key-never-used',     // leurre : la clé API n'atteint jamais Claude Code
+    'claude-desktop-local',         // migration d'une ancienne session
+    'Connecter Claude',             // bouton unique de connexion
+    'Vérifier maintenant',          // bouton unique de vérification
+    'n’a pas abouti',               // connexion qui échoue : message clair
   ];
   for (const marker of markers) assert.ok(claude.includes(marker), `scripts/smoke-claude.cjs doit couvrir « ${marker} ».`);
-  // Le smoke vérifie explicitement l'absence de l'ancien toast sur une bascule.
-  assert.match(claude, /doesNotMatch\(fallbackToast, \/Lecture directe Claude activée\/\)/, 'le toast « Lecture directe » doit être interdit lors d’une bascule Desktop');
-  assert.match(claude, /quotaWindows\.map\(window => window\.remaining\), \[100, 38\]/, 'le snapshot Desktop de repli doit être vérifié (100/38)');
+  assert.match(claude, /doesNotMatch\(limitedText, \/Desktop\|Déconnecter\/\)/, 'aucun message ne renvoie vers Claude Desktop');
+  assert.equal(exists('lib/claude-desktop-usage.cjs'), false, 'la lecture Claude Desktop est retirée');
 });
 
 // ---------------------------------------------------------------------------

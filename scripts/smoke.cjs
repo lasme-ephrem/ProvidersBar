@@ -19,10 +19,14 @@ const pastDate = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10)
 const CLAUDE_TOKEN_URL = 'https://platform.claude.com/v1/oauth/token';
 const CLAUDE_USAGE_URL = 'https://api.anthropic.com/api/oauth/usage';
 let desktop;
+// Faux claude.exe en tête du PATH : Lasmium le trouve mais ne l'exécute jamais
+// (spawn simulé par fakeClaudeCode), donc jamais le vrai compte Claude.
+let claudeBin = null;
 
 async function launch(dataDir, home) {
   const env = { ...process.env, PROVIDERSBAR_DATA_DIR: dataDir };
   if (home) { env.USERPROFILE = home; env.HOME = home; }
+  if (claudeBin) { env.PATH = `${claudeBin}${path.delimiter}${process.env.PATH || process.env.Path || ''}`; delete env.Path; }
   delete env.ELECTRON_RUN_AS_NODE;
   return electron.launch({
     executablePath: process.env.PROVIDERSBAR_EXECUTABLE || require('electron'),
@@ -54,6 +58,30 @@ async function resetMainClock() {
   });
 }
 
+// Claude Code simulé dans le processus principal (`auth status`, `auth login`).
+async function fakeClaudeCode(loggedIn) {
+  await desktop.evaluate((_electron, connected) => {
+    const req = process.mainModule.require;
+    const childProcess = req('node:child_process');
+    const { EventEmitter } = req('node:events');
+    globalThis.__realSpawn = globalThis.__realSpawn || childProcess.spawn;
+    childProcess.spawn = (file, args, options) => {
+      if (!/claude\.exe$/i.test(String(file))) return globalThis.__realSpawn(file, args, options);
+      const child = new EventEmitter();
+      child.stdout = new EventEmitter();
+      child.stderr = new EventEmitter();
+      child.kill = () => {};
+      setImmediate(() => {
+        child.stdout.emit('data', JSON.stringify(connected
+          ? { loggedIn: true, authMethod: 'claude.ai', email: 'smoke@example.test', subscriptionType: 'max' }
+          : { loggedIn: false, authMethod: 'none' }));
+        child.emit('close', connected ? 0 : 1);
+      });
+      return child;
+    };
+  }, loggedIn);
+}
+
 async function openProvider(page, id, tab) {
   await page.locator(`[data-open="${id}"]`).first().click();
   await page.waitForFunction(() => document.querySelector('dialog')?.open);
@@ -69,6 +97,8 @@ async function main() {
   await fs.mkdir(results, { recursive: true });
   const dataDir = await fs.mkdtemp(path.join(results, 'smoke-data-'));
   const home = await fs.mkdtemp(path.join(results, 'smoke-home-'));
+  claudeBin = await fs.mkdtemp(path.join(results, 'smoke-claude-bin-'));
+  await fs.writeFile(path.join(claudeBin, 'claude.exe'), '');
   // Claude Code lit USERPROFILE/.claude/.credentials.json : le smoke utilise un
   // faux profil isolé, jamais le fichier réel de l'utilisateur.
   await fs.mkdir(path.join(home, '.claude'), { recursive: true });
@@ -954,8 +984,6 @@ const fontBytes = await fs.readFile(fontFile);
       let open = true;
       return { isOpen: () => open, close: async () => { open = false; }, readSubscriptionPage: async () => ({ authenticated: true, windows: [{ label: '5 heures', remaining: 80, resetAt: null }, { label: 'Semaine', remaining: id === 'openai' ? 62 : 45, resetAt: null }] }) };
     };
-    const claudeDesktop = process.mainModule.require('./lib/claude-desktop-usage.cjs');
-    claudeDesktop.readClaudeDesktopUsage = async () => ({ source: 'api', connectorVersion: 'claude-desktop-local-v1', updatedAt: new Date().toISOString(), balances: [], quotaRemaining: 80, resetAt: null, quotaWindows: [{ label: '5 heures', remaining: 80, resetAt: null }, { label: 'Semaine', remaining: 91, resetAt: null }], quotaLabel: 'Claude Pro · 5 heures · Claude Desktop' });
   });
   await page.locator('[data-nav="connections"]').click();
   for (const id of ['openai', 'grok', 'zai']) {
@@ -1021,27 +1049,13 @@ const fontBytes = await fs.readFile(fontFile);
   assert.equal(resetState.providers.find(p => p.id === 'zai').manualResets.Semaine.at, null);
   await assert.rejects(page.evaluate(() => window.lasmium.saveResets('zai', { Semaine: { date: '2099-02-30' } })), /invalide/);
   await closeDialog(page);
-  // Claude Desktop : relevé ancien actionnable, puis relevé frais.
+  // Claude : connexion à l'abonnement via Claude Code (simulé), en un clic,
+  // avec un faux profil Claude Code (USERPROFILE temporaire) et un transport
+  // HTTP simulé, jamais le vrai compte.
   await openProvider(page, 'claude', 'connection');
   assert.equal(await page.locator('[data-action="account-open"]').count(), 0);
-  await desktop.evaluate(() => {
-    const local = process.mainModule.require('./lib/claude-desktop-usage.cjs');
-    globalThis.savedClaudeRead = local.readClaudeDesktopUsage;
-    local.readClaudeDesktopUsage = async () => { throw new Error('Relevé Claude Desktop ancien : aucun nouveau quota depuis plus de 45 minutes.'); };
-  });
-  await page.evaluate(() => window.lasmium.verifyAccount('claude')).catch(() => {});
-  const staleClaude = await page.evaluate(() => window.lasmium.getState());
-  assert.equal(staleClaude.providers.find(p => p.id === 'claude').accountSession.kind, 'claude-desktop-local');
-  assert.match(await page.evaluate(() => statusBadge(state.providers.find(p => p.id === 'claude'))), /Relevé ancien/);
-  await desktop.evaluate(() => { process.mainModule.require('./lib/claude-desktop-usage.cjs').readClaudeDesktopUsage = globalThis.savedClaudeRead; });
-  await page.locator('[data-action="account-verify"]').click();
-  await page.waitForFunction(() => !state.providers.find(p => p.id === 'claude').error);
-  const claudeState = await page.evaluate(() => window.lasmium.getState());
-  assert.equal(claudeState.providers.find(p => p.id === 'claude').accountSession.kind, 'claude-desktop-local');
-  assert.deepEqual(claudeState.providers.find(p => p.id === 'claude').snapshot.quotaWindows.map(w => w.remaining), [80, 91]);
-  // Lecture directe opt-in : le lecteur réel utilise un faux profil Claude Code
-  // (USERPROFILE temporaire) et un transport HTTP simulé, jamais le vrai compte.
-  assert.equal(await page.locator('[data-action="claude-enable-live"]').count(), 1);
+  assert.equal(await page.locator('[data-action="claude-enable-live"]').innerText(), 'Connecter Claude');
+  await fakeClaudeCode(true);
   await desktop.evaluate(({ session }, urls) => {
     session.defaultSession.fetch = async (url, _options) => {
       if (String(url) === urls.token) return { ok: false, status: 400, headers: new Headers(), json: async () => ({}) };
@@ -1050,18 +1064,18 @@ const fontBytes = await fs.readFile(fontFile);
     };
   }, { token: CLAUDE_TOKEN_URL, usage: CLAUDE_USAGE_URL });
   await page.locator('[data-action="claude-enable-live"]').click();
-  await page.waitForFunction(() => state.providers.find(p => p.id === 'claude').accountSession.kind === 'claude-live-local');
+  await page.waitForFunction(() => state.providers.find(p => p.id === 'claude').snapshot?.quotaWindows?.length === 3);
   assert.equal(await page.locator('[data-action="claude-enable-live"]').count(), 0);
-  assert.match(await page.locator('.connection-success').innerText(), /chaque minute/);
-  assert.match(await page.locator('.dialog-body').innerText(), /9 % utilisés/);
+  assert.match(await page.locator('.connection-success').innerText(), /Claude Max .* toutes les 5 minutes/);
+  assert.match(await page.locator('.dialog-body').innerText(), /Hebdo Fable : 69 % restants/);
   const directClaude = await page.evaluate(() => window.lasmium.getState());
+  assert.deepEqual(directClaude.providers.find(p => p.id === 'claude').accountSession, { kind: 'claude-live-local', plan: 'Max', email: 'smoke@example.test' });
   assert.deepEqual(directClaude.providers.find(p => p.id === 'claude').snapshot.quotaWindows.map(w => w.remaining), [91, 58, 69]);
-  await desktop.evaluate(() => { process.mainModule.require('./lib/claude-desktop-usage.cjs').readClaudeDesktopUsage = async () => { throw new Error('Must not read old Desktop history in direct mode'); }; });
   await page.locator('[data-action="account-verify"]').click();
   assert.equal((await page.evaluate(() => window.lasmium.getState())).providers.find(p => p.id === 'claude').error, null);
   await page.screenshot({ path: path.join(results, 'claude-live-connection.png') });
-  // Panne du service : dernier relevé conservé, puis reprise après backoff.
-  await setMainClockOffset(61000);
+  // Panne du service : dernier relevé conservé, puis reprise après le délai de 5 minutes.
+  await setMainClockOffset(6 * 60000);
   await desktop.evaluate(({ session }, usageUrl) => {
     session.defaultSession.fetch = async url => { if (String(url) === usageUrl) throw new Error('Claude smoke offline'); throw new Error('Unexpected Claude endpoint'); };
   }, CLAUDE_USAGE_URL);
@@ -1070,7 +1084,7 @@ const fontBytes = await fs.readFile(fontFile);
   assert.equal(failedClaude.snapshot.updatedAt, directClaude.providers.find(p => p.id === 'claude').snapshot.updatedAt);
   assert.deepEqual(failedClaude.snapshot.quotaWindows.map(w => w.remaining), [91, 58, 69]);
   assert.ok(failedClaude.error);
-  await setMainClockOffset(122000);
+  await setMainClockOffset(12 * 60000);
   await desktop.evaluate(({ session }, usageUrl) => {
     session.defaultSession.fetch = async url => {
       if (String(url) === usageUrl) return { ok: true, status: 200, json: async () => ({ five_hour: { utilization: 9, resets_at: '2099-09-30T11:00:00Z' }, seven_day: { utilization: 42, resets_at: '2099-10-07T08:00:00Z' }, limits: [{ display_name: 'Fable', percent: 31, resets_at: '2099-10-07T08:00:00Z' }] }) };
@@ -1085,7 +1099,6 @@ const fontBytes = await fs.readFile(fontFile);
   const claudePersisted = await fs.readFile(path.join(dataDir, 'state.json'), 'utf8');
   assert.ok(!claudePersisted.includes('smoke-claude-access'));
   await page.locator('[data-action="disconnect"]').click();
-  await desktop.evaluate(() => { process.mainModule.require('./lib/claude-desktop-usage.cjs').readClaudeDesktopUsage = globalThis.savedClaudeRead; });
   await closeDialog(page);
   await page.screenshot({ path: path.join(results, 'connections-updated.png'), fullPage: true });
 

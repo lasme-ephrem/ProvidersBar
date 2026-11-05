@@ -1,11 +1,12 @@
-// Smoke Claude 0.3.1 — injection de pannes dans Electron, sans identifiants
-// réels : USERPROFILE, LOCALAPPDATA et APPDATA pointent vers des dossiers isolés
-// (profil Claude Code et relevé Claude Desktop factices), et le transport HTTP
-// du processus principal (session.defaultSession.fetch) est simulé.
-// Couvre : échec initial, persistance du mode direct après redémarrage, panne
-// puis reprise après backoff, repli explicite en lecture Claude Desktop quand le
-// renouvellement du jeton est limité et qu'aucun relevé n'existe, affichage
-// utilisé/restant, absence de jeton dans les données Lasmium TOKENS-HUB.
+// Smoke Claude 0.6.8 — connexion simplifiée à l'abonnement via Claude Code,
+// dans Electron, sans identifiants réels : USERPROFILE pointe vers un profil
+// isolé, Claude Code est simulé dans le processus principal (connexion et
+// statut) et le transport HTTP (session.defaultSession.fetch) est simulé.
+// Couvre : « Connecter Claude » en un clic (statut, refus, connexion officielle,
+// lecture), environnement « abonnement seulement » (clé API ignorée), migration
+// d'une ancienne session Claude Desktop, redémarrage, panne puis reprise,
+// renouvellement limité (auth-rate-limit) sans bouton de reconnexion, échec de
+// connexion, aucun jeton dans les données Lasmium TOKENS-HUB.
 const { _electron: electron } = require(process.env.PROVIDERSBAR_PLAYWRIGHT || 'playwright');
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
@@ -16,10 +17,23 @@ const root = path.resolve(__dirname, '..');
 const results = path.join(root, 'test-results');
 const TOKEN_URL = 'https://platform.claude.com/v1/oauth/token';
 const USAGE_URL = 'https://api.anthropic.com/api/oauth/usage';
+const MINUTE = 60000;
 let desktop;
 
-async function launch(dataDir, home, extraEnv = {}) {
-  const env = { ...process.env, PROVIDERSBAR_DATA_DIR: dataDir, USERPROFILE: home, HOME: home, ...extraEnv };
+// Un faux claude.exe dans un dossier placé en tête du PATH : Lasmium le trouve,
+// mais ne l'exécute jamais (spawn est simulé).
+async function fakeClaudeBin() {
+  const bin = await fs.mkdtemp(path.join(results, 'claude-bin-'));
+  await fs.writeFile(path.join(bin, 'claude.exe'), '');
+  return bin;
+}
+
+async function launch(dataDir, home, bin) {
+  const env = { ...process.env, PROVIDERSBAR_DATA_DIR: dataDir, USERPROFILE: home, HOME: home,
+    PATH: `${bin}${path.delimiter}${process.env.PATH || process.env.Path || ''}`,
+    // Leurre : une clé API dans l'environnement ne doit jamais atteindre Claude Code.
+    ANTHROPIC_API_KEY: 'smoke-api-key-never-used', CLAUDE_CODE_OAUTH_TOKEN: 'smoke-setup-token-never-used' };
+  delete env.Path;
   delete env.ELECTRON_RUN_AS_NODE;
   return electron.launch({
     executablePath: process.env.PROVIDERSBAR_EXECUTABLE || require('electron'),
@@ -46,6 +60,45 @@ async function writeCredentials(home, document) {
   const directory = path.join(home, '.claude');
   await fs.mkdir(directory, { recursive: true });
   await fs.writeFile(path.join(directory, '.credentials.json'), JSON.stringify(document));
+}
+
+// Claude Code simulé : `auth status --json` et `auth login --claudeai`. La
+// connexion réussie écrit un fichier de connexion valide, comme le vrai logiciel.
+async function fakeClaudeCode(options) {
+  await desktop.evaluate((_electron, opts) => {
+    const req = process.mainModule.require;
+    const childProcess = req('node:child_process');
+    const { EventEmitter } = req('node:events');
+    const fsSync = req('node:fs');
+    const { CREDENTIAL_PATH } = req('./lib/claude-connection.cjs');
+    globalThis.__realSpawn = globalThis.__realSpawn || childProcess.spawn;
+    globalThis.__claudeCode = { ...opts, calls: [] };
+    childProcess.spawn = (file, args, spawnOptions) => {
+      if (!/claude\.exe$/i.test(String(file))) return globalThis.__realSpawn(file, args, spawnOptions);
+      const fake = globalThis.__claudeCode;
+      const env = spawnOptions?.env || {};
+      fake.calls.push({ args, apiKey: 'ANTHROPIC_API_KEY' in env, setupToken: 'CLAUDE_CODE_OAUTH_TOKEN' in env, hidden: spawnOptions?.windowsHide === true });
+      const child = new EventEmitter();
+      child.stdout = new EventEmitter();
+      child.stderr = new EventEmitter();
+      child.kill = () => {};
+      setImmediate(() => {
+        if (args[1] === 'login') {
+          if (!fake.loginSucceeds) { child.stderr.emit('data', 'OAuth error'); child.emit('close', 1); return; }
+          fsSync.writeFileSync(CREDENTIAL_PATH, JSON.stringify(fake.loginCredentials));
+          fake.loggedIn = true;
+          child.stdout.emit('data', 'Opening browser to sign in…\nLogin successful.\n');
+          child.emit('close', 0);
+          return;
+        }
+        child.stdout.emit('data', JSON.stringify(fake.loggedIn
+          ? { loggedIn: true, authMethod: 'claude.ai', apiProvider: 'firstParty', email: 'smoke@example.test', subscriptionType: 'max' }
+          : { loggedIn: false, authMethod: 'none' }));
+        child.emit('close', fake.loggedIn ? 0 : 1);
+      });
+      return child;
+    };
+  }, options);
 }
 
 async function patchFetch(mode) {
@@ -79,8 +132,8 @@ async function patchFetch(mode) {
   }, { mode, tokenUrl: TOKEN_URL, usageUrl: USAGE_URL });
 }
 
-// Horloge décalée dans le processus principal pour franchir le backoff de 60 s
-// sans attente réelle ; le renderer et les captures restent inchangés.
+// Horloge décalée dans le processus principal pour franchir la cadence de
+// 5 minutes et les délais d'attente sans attente réelle.
 async function setMainClockOffset(offsetMs) {
   await desktop.evaluate((_electron, offset) => {
     const RealDate = globalThis.__lasmiumRealDate || Date;
@@ -101,184 +154,145 @@ async function resetMainClock() {
   });
 }
 
+const claudeOf = state => state.providers.find(p => p.id === 'claude');
+
+async function openClaude(page) {
+  await page.evaluate(() => openDetail('claude', 'connection'));
+  await page.waitForFunction(() => document.querySelector('dialog')?.open);
+}
+
 async function main() {
   await fs.mkdir(results, { recursive: true });
   const dataDir = await fs.mkdtemp(path.join(results, 'claude-smoke-'));
   const home = await fs.mkdtemp(path.join(results, 'claude-home-'));
-  // Isolation complète des sources Claude Desktop : sans cela, un relevé réel
-  // dans %LOCALAPPDATA% déclencherait le repli T9 et changerait le scénario
-  // « auth-required sans snapshot ».
-  const isolatedEnv = {
-    LOCALAPPDATA: await fs.mkdtemp(path.join(results, 'claude-localappdata-')),
-    APPDATA: await fs.mkdtemp(path.join(results, 'claude-appdata-')),
-  };
+  const bin = await fakeClaudeBin();
   const initial = createSeed();
   initial.settings.autoRefresh = false;
   await fs.writeFile(path.join(dataDir, 'state.json'), JSON.stringify(initial));
-  // Jetons expirés et renouvellement refusé : reproduit une connexion Claude Code
-  // à renouveler, sans jamais toucher au vrai profil de l'utilisateur.
-  await writeCredentials(home, credentialDocument({ accessToken: 'fixture-old-access', refreshToken: 'fixture-old-refresh', expiresAt: Date.now() - 60000 }));
+  // Connexion Claude Code expirée dont le renouvellement est refusé : seule une
+  // nouvelle connexion officielle peut la rétablir.
+  await writeCredentials(home, credentialDocument({ accessToken: 'fixture-old-access', refreshToken: 'fixture-old-refresh', expiresAt: Date.now() - MINUTE }));
 
-  desktop = await launch(dataDir, home, isolatedEnv);
+  // ------------------------------------------------------------------ *
+  // 1. « Connecter Claude » en un clic : statut, refus du jeton, connexion
+  //    officielle (navigateur), lecture. Aucune clé API transmise.
+  // ------------------------------------------------------------------ *
+  desktop = await launch(dataDir, home, bin);
   let page = await desktop.firstWindow();
   await page.waitForSelector('.cards .card');
   await patchFetch('deny-token');
-  await assert.rejects(page.evaluate(() => window.lasmium.enableClaudeLive()), /renouveler/);
-  const failed = (await page.evaluate(() => window.lasmium.getState())).providers.find(p => p.id === 'claude');
-  assert.equal(failed.accountSession.kind, 'claude-live-local');
-  assert.equal(failed.snapshot, null);
-  assert.equal(failed.claudeSync.errorCode, 'auth-required');
-  assert.ok(Number.isFinite(Date.parse(failed.claudeSync.nextAttemptAt)));
-  await page.evaluate(() => openDetail('claude', 'connection'));
-  await page.waitForFunction(() => document.querySelector('dialog')?.open);
-  assert.equal(await page.locator('.connection-success').count(), 0);
-  assert.match(await page.locator('.dialog-body').innerText(), /Prochaine tentative/);
-  await page.screenshot({ path: path.join(results, 'claude-initial-failure.png') });
-  const saved = JSON.parse(await fs.readFile(path.join(dataDir, 'state.json'), 'utf8'));
-  assert.equal(saved.providers.find(p => p.id === 'claude').accountSession.kind, 'claude-live-local');
-  assert.equal(saved.providers.find(p => p.id === 'claude').snapshot, null);
-  const firstProcessRequests = await desktop.evaluate(() => globalThis.__claudeRequests);
-  assert.ok(firstProcessRequests.token >= 1, 'le renouvellement initial doit avoir été tenté');
+  await fakeClaudeCode({ loggedIn: true, loginSucceeds: true, loginCredentials: credentialDocument() });
+  await openClaude(page);
+  assert.equal(await page.locator('[data-action="claude-enable-live"]').innerText(), 'Connecter Claude');
+  assert.equal(await page.locator('[data-action="account-verify"]').count(), 0);
+  assert.doesNotMatch(await page.locator('.dialog-body').innerText(), /Desktop/);
+  await page.locator('[data-action="claude-enable-live"]').click();
+  await page.waitForFunction(() => state.providers.find(p => p.id === 'claude').snapshot?.quotaWindows?.length === 3);
+  const connected = claudeOf(await page.evaluate(() => window.lasmium.getState()));
+  assert.deepEqual(connected.accountSession, { kind: 'claude-live-local', plan: 'Max', email: 'smoke@example.test' });
+  assert.equal(connected.plan, 'Max', 'le forfait est renseigné depuis Claude Code');
+  assert.equal(connected.error, null);
+  assert.deepEqual(connected.snapshot.quotaWindows.map(w => [w.label, w.remaining]), [['5 heures', 91], ['Semaine', 58], ['Fable · Semaine', 69]]);
+  const cliCalls = await desktop.evaluate(() => globalThis.__claudeCode.calls);
+  assert.deepEqual(cliCalls.map(call => call.args.join(' ')), ['auth status --json', 'auth login --claudeai', 'auth status --json']);
+  assert.ok(cliCalls.every(call => !call.apiKey && !call.setupToken && call.hidden), 'Claude Code est toujours lancé sur l’abonnement, sans fenêtre');
+  assert.match(await page.locator('.connection-success').innerText(), /ton abonnement Claude Max \(smoke@example\.test\) · lecture toutes les 5 minutes/);
+  assert.match(await page.locator('.dialog-body').innerText(), /Hebdo Fable : 69 % restants/);
+  assert.equal(await page.locator('[data-action="account-verify"]').innerText(), 'Vérifier maintenant');
+  assert.equal(await page.locator('[data-action="claude-enable-live"]').count(), 0);
+  assert.match(await page.locator('#toast').innerText(), /Claude connecté à ton abonnement/);
+  await page.screenshot({ path: path.join(results, 'claude-connected.png') });
+  await page.locator('[data-action="close-dialog"]').click();
+  assert.deepEqual(await page.locator('.card:has([data-open="claude"]) .quota-period-label').allTextContents(), ['Hebdo', 'Horaire', 'Hebdo Fable']);
   await desktop.close(); desktop = null;
 
-  // Redémarrage : le mode choisi est conservé, le cooldown d'échec est restauré.
-  desktop = await launch(dataDir, home, isolatedEnv);
+  // ------------------------------------------------------------------ *
+  // 2. Redémarrage et migration : une ancienne session Claude Desktop devient
+  //    la connexion à l'abonnement.
+  // ------------------------------------------------------------------ *
+  const savedState = JSON.parse(await fs.readFile(path.join(dataDir, 'state.json'), 'utf8'));
+  claudeOf(savedState).accountSession = { kind: 'claude-desktop-local', resumeLiveAfter: new Date().toISOString() };
+  await fs.writeFile(path.join(dataDir, 'state.json'), JSON.stringify(savedState));
+  desktop = await launch(dataDir, home, bin);
   page = await desktop.firstWindow();
   await page.waitForSelector('.cards .card');
-  assert.equal((await page.evaluate(() => window.lasmium.getState())).providers.find(p => p.id === 'claude').accountSession.kind, 'claude-live-local');
-
-  // Changement de connexion Claude Code (fichier local) : le cooldown d'auth est
-  // levé immédiatement, comme le fait le veilleur de credentials de main.cjs.
-  // Le transport simulé est installé AVANT le changement de credentials pour
-  // qu'aucune lecture déclenchée pendant l'attente n'utilise le réseau réel.
   await patchFetch('success');
-  await writeCredentials(home, credentialDocument());
-  await page.waitForTimeout(3000);
-  let claudeState, lastVerifyError;
-  for (let attempt = 0; attempt < 20; attempt++) {
-    try { claudeState = await page.evaluate(() => window.lasmium.verifyAccount('claude')); break; }
-    catch (error) { lastVerifyError = error; await page.waitForTimeout(500); }
-  }
-  if (!claudeState) {
-    const pageDebug = await page.evaluate(() => {
-      const claude = state.providers.find(p => p.id === 'claude');
-      return { session: claude.accountSession, error: claude.error, claudeSync: claude.claudeSync };
-    });
-    const mainDebug = await desktop.evaluate(() => {
-      const req = process.mainModule.require;
-      const cc = req('./lib/claude-connection.cjs');
-      const fs = req('node:fs');
-      const doc = JSON.parse(fs.readFileSync(cc.CREDENTIAL_PATH, 'utf8'));
-      return { path: cc.CREDENTIAL_PATH, expiresAt: doc.claudeAiOauth.expiresAt, now: Date.now(), hasClientId: doc.claudeAiOauth.clientId != null, scopes: doc.claudeAiOauth.scopes };
-    });
-    console.log('DEBUG CLAUDE', JSON.stringify({ pageDebug, mainDebug }));
-  }
-  assert.ok(claudeState, 'la vérification Claude doit réussir après le renouvellement local'
-    + (lastVerifyError ? ` (dernière erreur : ${lastVerifyError.message})` : ' (aucune erreur retournée)'));
-  const first = claudeState.providers.find(p => p.id === 'claude');
-  assert.equal(first.accountSession.kind, 'claude-live-local');
-  assert.equal(first.error, null);
-  assert.deepEqual(first.snapshot.quotaWindows.map(w => w.remaining), [91, 58, 69]);
-  await page.evaluate(() => openDetail('claude', 'connection'));
-  await page.waitForFunction(() => document.querySelector('dialog')?.open);
-  assert.equal(await page.locator('.connection-success').count(), 1);
-  assert.match(await page.locator('.connection-success').innerText(), /chaque minute/);
-  assert.match(await page.locator('.dialog-body').innerText(), /91 % restants/);
-  assert.match(await page.locator('.dialog-body').innerText(), /9 % utilisés/);
-  await page.screenshot({ path: path.join(results, 'claude-recovery.png') });
+  await fakeClaudeCode({ loggedIn: true, loginSucceeds: true, loginCredentials: credentialDocument() });
+  assert.deepEqual(claudeOf(await page.evaluate(() => window.lasmium.getState())).accountSession, { kind: 'claude-live-local' });
+  const verified = claudeOf(await page.evaluate(() => window.lasmium.verifyAccount('claude')));
+  assert.equal(verified.error, null);
+  assert.equal(verified.snapshot.quotaWindows.length, 3);
 
-  // Panne : dernier relevé conservé, puis reprise après le backoff de 60 s.
+  // ------------------------------------------------------------------ *
+  // 3. Panne : dernières valeurs conservées, un seul message, prochain essai
+  //    automatique ; reprise après le délai de 5 minutes.
+  // ------------------------------------------------------------------ *
   await patchFetch('offline');
-  await setMainClockOffset(61000);
+  await setMainClockOffset(6 * MINUTE);
   await page.evaluate(() => window.lasmium.verifyAccount('claude')).catch(() => {});
-  const failedAgain = (await page.evaluate(() => window.lasmium.getState())).providers.find(p => p.id === 'claude');
-  assert.equal(failedAgain.snapshot.updatedAt, first.snapshot.updatedAt);
-  assert.deepEqual(failedAgain.snapshot.quotaWindows.map(w => w.remaining), [91, 58, 69]);
-  assert.ok(failedAgain.error, 'une panne doit être signalée sans effacer le relevé');
-  assert.equal(await page.locator('.connection-success').count(), 0);
-  await setMainClockOffset(122000);
+  const offline = claudeOf(await page.evaluate(() => window.lasmium.getState()));
+  assert.equal(offline.snapshot.updatedAt, verified.snapshot.updatedAt, 'une panne n’efface pas les valeurs');
+  assert.match(offline.error, /Lecture des quotas Claude impossible \(réseau\)/);
+  await page.evaluate(() => { state = null; });
+  await page.evaluate(async () => { state = await window.lasmium.getState(); render(); });
+  await openClaude(page);
+  const offlineText = await page.locator('.dialog-body').innerText();
+  assert.match(offlineText, /dernières valeurs affichées/);
+  assert.match(offlineText, /Prochain essai automatique/);
+  assert.equal(offlineText.split('Lecture des quotas Claude impossible').length - 1, 1, 'le message d’erreur apparaît une seule fois');
+  assert.equal(await page.locator('[data-action="claude-enable-live"]').count(), 0, 'une panne ne demande pas de reconnexion');
+  assert.match(await page.evaluate(() => statusBadge(state.providers.find(p => p.id === 'claude'))), /Dernières valeurs/);
+  await setMainClockOffset(12 * MINUTE);
   await patchFetch('success');
-  const recovered = await page.evaluate(() => window.lasmium.verifyAccount('claude'));
-  const recoveredClaude = recovered.providers.find(p => p.id === 'claude');
-  assert.equal(recoveredClaude.error, null);
-  assert.notEqual(recoveredClaude.snapshot.updatedAt, first.snapshot.updatedAt);
+  const recovered = claudeOf(await page.evaluate(() => window.lasmium.verifyAccount('claude')));
+  assert.equal(recovered.error, null);
+  assert.notEqual(recovered.snapshot.updatedAt, verified.snapshot.updatedAt);
+
+  // ------------------------------------------------------------------ *
+  // 4. Renouvellement limité par Anthropic (auth-rate-limit) : attente
+  //    automatique, aucune mention de Claude Desktop, pas de reconnexion.
+  // ------------------------------------------------------------------ *
+  await setMainClockOffset(18 * MINUTE);
+  await patchFetch('rate-limit-token');
+  await writeCredentials(home, credentialDocument({ expiresAt: Date.now() - MINUTE }));
+  await page.waitForTimeout(2500);
+  await page.evaluate(() => window.lasmium.verifyAccount('claude')).catch(() => {});
+  const limited = claudeOf(await page.evaluate(() => window.lasmium.getState()));
+  assert.equal(limited.claudeSync.errorCode, 'auth-rate-limit');
+  assert.equal(limited.snapshot.updatedAt, recovered.snapshot.updatedAt);
+  await page.evaluate(async () => { state = await window.lasmium.getState(); render(); });
+  await openClaude(page);
+  const limitedText = await page.locator('.dialog-body').innerText();
+  assert.match(limitedText, /Anthropic limite temporairement le renouvellement/);
+  assert.match(limitedText, /Prochain essai automatique/);
+  assert.doesNotMatch(limitedText, /Desktop|Déconnecter/);
+  assert.equal(await page.locator('[data-action="account-verify"]').count(), 1);
+  await page.screenshot({ path: path.join(results, 'claude-waiting.png') });
   await resetMainClock();
+
+  // ------------------------------------------------------------------ *
+  // 5. Arrêt du suivi puis connexion qui n'aboutit pas : message clair et
+  //    bouton « Connecter Claude », dernières valeurs effacées de la fiche.
+  // ------------------------------------------------------------------ *
+  await page.locator('[data-action="disconnect"]').click();
+  await page.waitForFunction(() => !state.providers.find(p => p.id === 'claude').accountSession);
+  await fakeClaudeCode({ loggedIn: false, loginSucceeds: false });
+  await openClaude(page);
+  await page.locator('[data-action="claude-enable-live"]').click();
+  await page.waitForFunction(() => document.querySelector('.dialog-body')?.innerText.includes('n’a pas abouti'));
+  assert.equal(await page.locator('[data-action="claude-enable-live"]').innerText(), 'Connecter Claude');
+  await page.screenshot({ path: path.join(results, 'claude-login-failed.png') });
 
   // Aucun jeton ni contenu privé dans les données Lasmium TOKENS-HUB.
   const persisted = await fs.readFile(path.join(dataDir, 'state.json'), 'utf8');
-  for (const forbidden of ['fixture-live-access', 'fixture-rotated-refresh', 'fixture-old-access', 'fixture-old-refresh']) {
+  for (const forbidden of ['fixture-live-access', 'fixture-rotated-refresh', 'fixture-old-access', 'fixture-old-refresh', 'smoke-api-key-never-used', 'smoke-setup-token-never-used']) {
     assert.ok(!persisted.includes(forbidden), `state.json ne doit pas contenir ${forbidden}`);
   }
   assert.equal(await page.evaluate(() => JSON.stringify(state).includes('fixture-live-access')), false);
   const requests = await desktop.evaluate(() => globalThis.__claudeRequests);
-  assert.ok(requests.usage >= 3, 'lecture initiale, panne et reprise doivent avoir appelé le service');
-  await page.evaluate(() => openDetail('claude', 'connection'));
-  assert.equal(await page.locator('.connection-success').count(), 1);
-  await page.screenshot({ path: path.join(results, 'claude-recovered.png') });
+  assert.ok(requests.usage >= 3, 'lectures initiales, panne et reprise doivent avoir appelé le service');
   await desktop.close(); desktop = null;
-
-  // ------------------------------------------------------------------ *
-  // Repli explicite Claude Desktop (T9) : session live sans snapshot, jeton
-  // expiré dont le renouvellement est limité (auth-rate-limit), relevé Desktop
-  // frais dans un LOCALAPPDATA isolé → bascule Desktop annoncée, sans écraser
-  // de relevé existant, et toast neutre (T11) au lieu de « lecture directe active ».
-  // ------------------------------------------------------------------ *
-  const fallbackDataDir = await fs.mkdtemp(path.join(results, 'claude-fallback-data-'));
-  const fallbackHome = await fs.mkdtemp(path.join(results, 'claude-fallback-home-'));
-  const fallbackEnv = {
-    LOCALAPPDATA: await fs.mkdtemp(path.join(results, 'claude-fallback-localappdata-')),
-    APPDATA: await fs.mkdtemp(path.join(results, 'claude-fallback-appdata-')),
-  };
-  const profileDirectory = path.join(fallbackEnv.LOCALAPPDATA, 'Claude-Data', 'claude_pzs8sxrjxfjjc');
-  await fs.mkdir(profileDirectory, { recursive: true });
-  const desktopSampleAt = Date.now() - 60000;
-  // Fixture alignée sur le relevé réel observé sur cette machine : 5 h 100 %, semaine 38 %.
-  await fs.writeFile(path.join(profileDirectory, 'plan-usage-history.json'), JSON.stringify({
-    version: 2,
-    samples: [{ t: desktopSampleAt, u: { fh: 0, sd: 62 } }],
-  }));
-  const fallbackInitial = createSeed();
-  fallbackInitial.settings.autoRefresh = false;
-  await fs.writeFile(path.join(fallbackDataDir, 'state.json'), JSON.stringify(fallbackInitial));
-  await writeCredentials(fallbackHome, credentialDocument({ accessToken: 'fixture-expired-access', refreshToken: 'fixture-expired-refresh', expiresAt: Date.now() - 60000 }));
-
-  desktop = await launch(fallbackDataDir, fallbackHome, fallbackEnv);
-  page = await desktop.firstWindow();
-  await page.waitForSelector('.cards .card');
-  await patchFetch('rate-limit-token');
-  await page.evaluate(() => openDetail('claude', 'connection'));
-  await page.waitForFunction(() => document.querySelector('dialog')?.open);
-  assert.equal(await page.locator('[data-action="claude-enable-live"]').count(), 1);
-  await page.locator('[data-action="claude-enable-live"]').click();
-  await page.waitForFunction(() => state.providers.find(p => p.id === 'claude').accountSession?.kind === 'claude-desktop-local');
-  const fallback = (await page.evaluate(() => window.lasmium.getState())).providers.find(p => p.id === 'claude');
-  assert.equal(fallback.error, null);
-  assert.equal(fallback.snapshot.source, 'api');
-  assert.deepEqual(fallback.snapshot.quotaWindows.map(window => [window.label, window.remaining]), [['5 heures', 100], ['Semaine', 38]]);
-  assert.equal(fallback.claudeSync.errorCode, 'auth-rate-limit');
-  assert.ok(Number.isFinite(Date.parse(fallback.claudeSync.nextAttemptAt)));
-  // La fiche montre le message de bascule explicite, et le toast est neutre :
-  // jamais « Lecture directe Claude activée » pour un mode Desktop (contrat T11).
-  await page.waitForFunction(() => document.querySelector('.dialog-body')?.innerText.includes('relevé Claude Desktop'));
-  assert.match(await page.locator('.dialog-body').innerText(), /Lecture directe indisponible/);
-  assert.match(await page.locator('.dialog-body').innerText(), /Claude Desktop/);
-  const fallbackToast = await page.locator('#toast').innerText();
-  assert.match(fallbackToast, /Connexion Claude mise à jour|relevé Claude Desktop|Desktop/);
-  assert.doesNotMatch(fallbackToast, /Lecture directe Claude activée/);
-  // 0.6.7 : la lecture directe reste voulue, la fiche annonce la reprise automatique.
-  assert.match(await page.locator('.dialog-body').innerText(), /reprendra automatiquement/);
-  assert.match(await page.locator('.connection-success').innerText(), /Lecture directe en pause/);
-  assert.equal(await page.locator('[data-action="claude-enable-live"]').innerText(), 'Réessayer la lecture directe maintenant');
-  assert.equal(await page.locator('[data-action="account-verify"]').count(), 0);
-  await page.screenshot({ path: path.join(results, 'claude-desktop-fallback.png') });
-  const fallbackSaved = JSON.parse(await fs.readFile(path.join(fallbackDataDir, 'state.json'), 'utf8')).providers.find(p => p.id === 'claude');
-  assert.equal(fallbackSaved.accountSession.kind, 'claude-desktop-local');
-  assert.ok(Date.parse(fallbackSaved.accountSession.resumeLiveAfter) > Date.now(), 'la reprise automatique est planifiée et persistée');
-  assert.deepEqual(fallbackSaved.snapshot.quotaWindows.map(window => window.remaining), [100, 38]);
-  assert.equal(fallbackSaved.claudeSync.errorCode, 'auth-rate-limit');
-  assert.ok(!JSON.stringify(fallbackSaved).includes('fixture-expired'));
-  await desktop.close(); desktop = null;
-  console.log('PASS: échec initial auth-required (Desktop isolé absent), mode direct persisté, redémarrage, reprise après renouvellement local, panne + backoff + reprise, rendu utilisé/restant, repli explicite auth-rate-limit → Claude Desktop (snapshot 100/38, message fiche, toast neutre, claudeSync auth-rate-limit persistant), aucun jeton persisté dans Lasmium TOKENS-HUB.');
+  console.log('PASS: Connecter Claude en un clic (statut, jeton refusé, connexion officielle, lecture Horaire/Hebdo/Hebdo Fable, forfait Max), Claude Code lancé sans clé API ni jeton longue durée, migration claude-desktop-local, redémarrage, panne + prochain essai automatique + reprise (message unique), auth-rate-limit sans mention Desktop ni reconnexion, connexion non aboutie avec message clair, aucun jeton persisté dans Lasmium TOKENS-HUB.');
 }
 
 main().catch(async error => { console.error(error); if (desktop) await desktop.close().catch(() => {}); process.exitCode = 1; });

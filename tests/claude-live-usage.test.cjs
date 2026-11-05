@@ -82,11 +82,11 @@ test('429 throttling honors Retry-After and errors never masquerade as fresh mea
     let time = stamp, calls = 0;
     const reader = createClaudeLiveReader({ now: () => new Date(time), readToken: async () => 'test-only',
       fetchImpl: async () => ++calls === 1 ? { status: 429, headers: new Headers({ 'retry-after': header }) } : reply(usage()) });
-    await assert.rejects(reader.read(), /limite les lectures/);
+    await assert.rejects(reader.read(), /limite temporairement la lecture/);
     // A 429 from the usage endpoint keeps the historical "rate-limit" code.
     assert.equal(reader.info().errorCode, 'rate-limit');
     time += ['0', '999999999999999999999999999999'].includes(header) ? 299999 : 7199999;
-    await assert.rejects(reader.read(), /limite les lectures/); assert.equal(calls, 1);
+    await assert.rejects(reader.read(), /limite temporairement la lecture/); assert.equal(calls, 1);
     time++; assert.equal((await reader.read()).updatedAt, new Date(time).toISOString()); assert.equal(calls, 2);
   }
 });
@@ -110,8 +110,8 @@ test('A token-refresh 429 surfaces as auth-rate-limit through the reader, distin
   await assert.rejects(reader.read(), error => {
     assert.equal(error.code, 'auth-rate-limit');
     assert.equal(error.retryAt, stamp + 7200000);
-    assert.match(error.message, /Renouvellement du jeton Claude Code limité/);
-    assert.match(error.message, /Claude Desktop \(Déconnecter puis Connecter\)/);
+    assert.match(error.message, /limite temporairement le renouvellement/);
+    assert.doesNotMatch(error.message, /Desktop|Déconnecter/);
     assert.ok(!error.message.includes('private-refresh-token') && !error.message.includes('expired-test-access'));
     return true;
   });
@@ -140,14 +140,14 @@ test('Local connection is read without rewriting credentials and rejects expired
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'lasmium-claude-live-'));
   t.after(() => fs.rm(root, { recursive: true, force: true }));
   const file = path.join(root, '.credentials.json');
-  await assert.rejects(readLocalConnection(new Date(stamp), file), /indisponible/);
+  await assert.rejects(readLocalConnection(new Date(stamp), file), /n’est pas connecté/);
   const text = JSON.stringify({ claudeAiOauth: { accessToken: 'fixture-only', expiresAt: stamp + REFRESH_MS } });
   await fs.writeFile(file, text);
   assert.equal(await readLocalConnection(new Date(stamp), file), 'fixture-only');
   assert.equal(await fs.readFile(file, 'utf8'), text);
-  await assert.rejects(readLocalConnection(new Date(stamp + REFRESH_MS), file), /renouveler/);
+  await assert.rejects(readLocalConnection(new Date(stamp + REFRESH_MS), file), /Connexion Claude expirée/);
   await fs.writeFile(file, JSON.stringify({ claudeAiOauth: { expiresAt: stamp + REFRESH_MS } }));
-  await assert.rejects(readLocalConnection(new Date(stamp), file), /indisponible/);
+  await assert.rejects(readLocalConnection(new Date(stamp), file), /n’est pas connecté/);
 });
 
 test('An early 401 renews once and measures again; repeated refusal cannot loop', async () => {
@@ -186,7 +186,7 @@ test('Cooldown survives restart and wake or credential changes cannot bypass a s
   const before = createClaudeLiveReader(options); await assert.rejects(before.read());
   const after = createClaudeLiveReader(options); after.restore(before.info());
   after.wake(); after.credentialsChanged();
-  await assert.rejects(after.read(), /limite les lectures/); assert.equal(calls, 1);
+  await assert.rejects(after.read(), /limite temporairement la lecture/); assert.equal(calls, 1);
   time += 7200000; await assert.rejects(after.read()); assert.equal(calls, 2);
 });
 

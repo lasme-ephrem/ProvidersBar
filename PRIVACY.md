@@ -25,7 +25,6 @@ Il ne constitue pas une certification de conformité juridique (voir
 | Sessions de connexion aux comptes | Profils Chrome/Edge dédiés et partitions Electron (`persist:ollama-account`, `persist:orcarouter-account`) : cookies de session, stockage local des portails fournisseurs | Connexion de l'utilisateur sur les sites officiels |
 | Identifiants de compte pseudonymes | Pour OpenAI : empreinte SHA-256 de l'adresse e-mail du compte Codex (jamais l'adresse en clair). Pour OrcaRouter : identifiants **numériques** de compte et d'espace de travail. | Réponses des services officiels |
 | Cooldowns API | Empreintes SHA-256 de clés API et échéance de reprise après une réponse HTTP 429 (plafond 100 entrées) | Réponses des fournisseurs |
-| Relevé local Claude Desktop | Deux pourcentages lus dans `plan-usage-history.json` du profil Claude Desktop local | Fichier local de Claude Desktop |
 | Jetons Claude Code | Jetons OAuth lus **en mémoire** depuis le fichier officiel de Claude Code, jamais copiés dans Lasmium TOKENS-HUB | Fichier local `~/.claude/.credentials.json` |
 | Journal local | Échecs de lecture (code et message), sauvegardes d'état, démarrages, disponibilité d'une mise à jour ; **sans clé, jeton, solde ni chemin absolu** | Fonctionnement de l'application |
 | Mise à jour automatique | Version disponible, archive téléchargée et journal du script d'installation (`updates/update.log`) | Manifeste et archive de la release officielle |
@@ -87,23 +86,27 @@ Il ne faut jamais partager ni synchroniser ce dossier.
 
 ## 4. Jetons Claude Code
 
-La lecture directe des quotas Claude est **optionnelle** et activée
-explicitement. Elle utilise la connexion OAuth existante de Claude Code :
+La lecture des quotas Claude est activée par le bouton « Connecter Claude ».
+Elle utilise la connexion OAuth de Claude Code à ton abonnement Claude ; si
+elle manque, Lasmium TOKENS-HUB lance la connexion officielle
+(`claude auth login --claudeai`) dans le navigateur. Seul le statut de Claude
+Code (connecté, forfait, adresse e-mail) est lu ; la clé API et le jeton longue
+durée éventuellement présents dans l'environnement ne lui sont pas transmis :
 
 - les jetons sont lus depuis `~/.claude/.credentials.json` et restent en mémoire
   du processus principal ; ils ne sont **jamais** copiés dans les données
   Lasmium TOKENS-HUB, jamais envoyés au renderer et jamais exportés ;
 - le renouvellement de la connexion réécrit ce même fichier officiel, avec les
   verrous et l'écriture atomique de Claude Code, et conserve les autres champs ;
-- l'activation du mode direct et les délais de reprise sont enregistrés dans
-  `state.json` sous forme de code d'erreur et d'horodatage, sans jeton.
+- le forfait, l'adresse e-mail du compte et les délais de reprise sont
+  enregistrés dans `state.json` (code d'erreur et horodatage), sans jeton.
 
 L'effacement des données de Lasmium TOKENS-HUB ne supprime **pas** ce fichier : il
 appartient à Claude Code. Une révocation ou une déconnexion dans Claude Code
 reste la manière de supprimer cette connexion.
 
 De la même façon, OpenAI s'appuie sur la session Codex installée sur le poste
-(gérée par Codex), et Claude Desktop sur son propre fichier local de relevés.
+(gérée par Codex). Le relevé local de Claude Desktop n'est plus lu.
 Ces composants restent sous la responsabilité de leurs éditeurs.
 
 ## 5. Réseau et absence de télémétrie

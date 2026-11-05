@@ -3,8 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
-const { collectDiagnostics, defaultEndpoints, CRITICAL_IDS, checkEndpoint, checkDataDir, checkClaudeCode, checkClaudeDesktop, checkAntigravity } = require('../lib/diagnostics.cjs');
-const { usagePaths, readClaudeDesktopUsage } = require('../lib/claude-desktop-usage.cjs');
+const { collectDiagnostics, defaultEndpoints, CRITICAL_IDS, checkEndpoint, checkDataDir, checkClaudeCode, checkAntigravity } = require('../lib/diagnostics.cjs');
 const { formatReport, exitCode, criticalFailures } = require('../scripts/doctor.cjs');
 
 async function fixture(t) {
@@ -33,18 +32,15 @@ test('Diagnostics collects every prerequisite without secrets and without authen
     exec: async () => ({ stdout: 'OK' }),
     findCodexImpl: async () => 'C:/Codex/codex.exe',
     discover: async () => [{ port: 1, csrf: 'private-csrf-token' }, { port: 2, csrf: 'private-csrf-token' }],
-    paths: [],
-    readDesktop: async () => ({ quotaWindows: [] }),
     credentialPath,
     endpoints: [{ id: 'endpoint:test', label: 'Accès test', url: 'https://example.test/' }],
     fetchImpl: async (url, options) => { requests.push({ url, options }); return { status: 401 }; },
   });
-  assert.deepEqual(items.map(item => item.id), ['data-dir', 'encryption', 'browser', 'codex', 'claude-desktop', 'claude-code', 'antigravity', 'endpoint:test']);
+  assert.deepEqual(items.map(item => item.id), ['data-dir', 'encryption', 'browser', 'codex', 'claude-code', 'antigravity', 'endpoint:test']);
   assert.equal(items.find(item => item.id === 'data-dir').ok, true);
   assert.equal(items.find(item => item.id === 'encryption').ok, true);
   assert.equal(items.find(item => item.id === 'browser').ok, true);
   assert.equal(items.find(item => item.id === 'codex').ok, true);
-  assert.equal(items.find(item => item.id === 'claude-desktop').ok, false);
   assert.equal(items.find(item => item.id === 'claude-code').ok, true);
   assert.equal(items.find(item => item.id === 'antigravity').ok, true);
   assert.equal(items.find(item => item.id === 'endpoint:test').ok, true);
@@ -66,7 +62,7 @@ test('Diagnostics collects every prerequisite without secrets and without authen
   // version en dur (les correctifs changent la version).
   const packageVersion = require('../package.json').version.replace(/\./g, '\\.');
   assert.match(formatReport(items), new RegExp(`Lasmium TOKENS-HUB ${packageVersion}`));
-  assert.match(formatReport(items), /avertissements/);
+  assert.match(formatReport(items), /Tous les prérequis sont présents/);
 });
 
 test('Missing data directory and unavailable encryption are critical failures', async t => {
@@ -78,7 +74,6 @@ test('Missing data directory and unavailable encryption are critical failures', 
     exec: async () => { throw new Error('DPAPI inaccessible'); },
     findCodexImpl: async () => { throw new Error('Codex absent'); },
     discover: async () => [],
-    paths: [],
     credentialPath: path.join(root, 'missing-credentials.json'),
     endpoints: [],
   });
@@ -86,7 +81,6 @@ test('Missing data directory and unavailable encryption are critical failures', 
   assert.equal(items.find(item => item.id === 'encryption').ok, false);
   assert.equal(items.find(item => item.id === 'browser').ok, false);
   assert.equal(items.find(item => item.id === 'codex').ok, false);
-  assert.equal(items.find(item => item.id === 'claude-desktop').ok, false);
   assert.equal(items.find(item => item.id === 'claude-code').ok, false);
   assert.equal(items.find(item => item.id === 'antigravity').ok, false);
   assert.deepEqual(criticalFailures(items).map(item => item.id), ['data-dir', 'encryption']);
@@ -150,27 +144,6 @@ test('Default endpoint list covers every connector and every account origin with
     assert.equal(new URL(endpoint.url).protocol, 'https:');
   }
   assert.deepEqual(CRITICAL_IDS, ['data-dir', 'encryption']);
-});
-
-test('Claude Desktop diagnostic finds the Claude-Data profile and explains an old sample', async t => {
-  const root = await fixture(t);
-  const local = path.join(root, 'local');
-  const roaming = path.join(root, 'roaming');
-  const profile = path.join(local, 'Claude-Data', 'claude_pzs8sxrjxfjjc');
-  await fs.mkdir(profile, { recursive: true });
-  const sampleTime = Date.parse('2026-09-26T00:48:00.000Z');
-  await fs.writeFile(path.join(profile, 'plan-usage-history.json'), JSON.stringify({ version: 2, samples: [{ t: sampleTime, u: { fh: 10, sd: 20 } }] }));
-  const readDesktop = (previous, options) => readClaudeDesktopUsage(previous, { ...options, localAppData: local, roamingAppData: roaming });
-  const fresh = await checkClaudeDesktop({ paths: usagePaths(local, roaming), readDesktop, now: () => new Date(sampleTime + 60000) });
-  assert.equal(fresh.ok, true);
-  assert.match(fresh.detail, /1 fichier/);
-  const stale = await checkClaudeDesktop({ paths: usagePaths(local, roaming), readDesktop, now: () => new Date(sampleTime + 46 * 60000) });
-  assert.equal(stale.ok, false);
-  assert.match(stale.detail, /45 minutes/);
-  assert.match(stale.hint, /page Utilisation/);
-  const absent = await checkClaudeDesktop({ paths: usagePaths(path.join(root, 'absent'), path.join(root, 'absent-roaming')) });
-  assert.equal(absent.ok, false);
-  assert.match(absent.hint, /Claude-Data/);
 });
 
 test('Antigravity diagnostic distinguishes a missing service from unreadable ports', async () => {

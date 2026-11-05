@@ -55,7 +55,7 @@ function harness(overrides = {}, { providers, contract = false } = {}) {
     ollamaSession: () => ({ fetch: async () => {} }),
     openAiAccount: { read: async identity => { calls.push(['openai', identity]); } },
     verifyAntigravity: async () => { calls.push(['antigravity']); },
-    verifyClaudeDesktop: async () => { calls.push(['claude']); },
+    verifyClaude: async () => { calls.push(['claude']); },
     subscriptionAccounts: { read: async (id, options) => { calls.push(['browser', id, options]); } },
     isBrowserAccount: () => false,
     breakerOpen,
@@ -176,7 +176,7 @@ test('une erreur conserve le dernier relevé, marque la santé et n’efface que
     const fail = async () => { throw failure; };
     const health = [];
     const h = harness({
-      fetchWallet: fail, fetchOllamaCredits: fail, openAiAccount: { read: fail }, verifyAntigravity: fail, verifyClaudeDesktop: fail,
+      fetchWallet: fail, fetchOllamaCredits: fail, openAiAccount: { read: fail }, verifyAntigravity: fail, verifyClaude: fail,
       subscriptionAccounts: { read: fail }, isBrowserAccount: candidate => candidate === 'grok',
       markHealthFailure: (provider, error) => { health.push([provider.id, error.code]); },
     }, { providers });
@@ -238,7 +238,7 @@ test('la stratégie du connecteur est enregistrée dans la santé, en succès co
       if (failApi) throw Object.assign(new Error('fetch failed'), { code: 'NETWORK' });
       return { updatedAt: new Date().toISOString(), balances: [{ currency: 'USD', remaining: 8 }] };
     },
-    verifyClaudeDesktop: async () => { claudeReads++; throw Object.assign(new Error('Renouvellement limité.'), { code: 'auth-rate-limit' }); },
+    verifyClaude: async () => { claudeReads++; throw Object.assign(new Error('Renouvellement limité.'), { code: 'auth-rate-limit' }); },
   }, { providers, contract: true });
   await h.sync.syncOne('openrouter');
   let api = h.state.connectorHealth.openrouter;

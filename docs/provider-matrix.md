@@ -7,7 +7,7 @@ lors de la dernière tentative.
 
 | Fournisseur | Mode | Chaîne de stratégies | Santé / erreurs typiques | Pack signé |
 | --- | --- | --- | --- | --- |
-| Claude | Abonnement | `claude-direct` → `claude-desktop` | auth, rate, drift, down | — |
+| Claude | Abonnement | `claude-direct` (Claude Code, abonnement) | auth, rate, drift, down | — |
 | OpenAI / Codex | Abonnement | `openai-codex` | auth, rate, drift, down | — |
 | Antigravity | Abonnement | `antigravity-local` | auth, down, drift | — |
 | Grok / SuperGrok | Abonnement navigateur | `browser-session` | auth, rate, drift, down | — |
