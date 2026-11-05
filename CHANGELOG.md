@@ -1,5 +1,40 @@
 # Historique des versions
 
+## 0.6.8 — 5 novembre 2026
+
+Version **Connexion Claude simplifiée** : Claude se connecte comme Codex, en un
+bouton, toujours sur l'abonnement. Toutes les autres fonctionnalités 0.6.7 sont
+conservées.
+
+### Nouveautés
+
+- Claude : bouton unique « Connecter Claude ». Si Claude Code est déjà connecté
+  à l'abonnement Claude, la lecture est immédiate ; sinon la connexion officielle
+  de Claude Code (`claude auth login --claudeai`) s'ouvre dans le navigateur.
+  Le forfait (Pro, Max) et le compte sont affichés et renseignés automatiquement.
+- Claude : toujours l'abonnement. Claude Code est lancé sans `ANTHROPIC_API_KEY`
+  ni `CLAUDE_CODE_OAUTH_TOKEN` ; une clé API ou un jeton longue durée présents
+  dans l'environnement ne sont jamais utilisés.
+- Fiche Claude réduite à trois états : connecté (« Vérifier maintenant »),
+  dernières valeurs affichées avec l'heure du prochain essai automatique, et
+  reconnexion nécessaire (« Connecter Claude »). Un seul message à la fois.
+
+### Corrections
+
+- Claude : les quotas sont lus toutes les 5 minutes au lieu de chaque minute.
+  La lecture par minute déclenchait des refus (HTTP 429) pendant des heures.
+- Claude : le relevé Claude Desktop et le mécanisme de repli sont retirés. Ils
+  n'affichaient que deux limites (sans Hebdo Fable), et leurs messages
+  conseillaient de se déconnecter. Une ancienne session Claude Desktop devient
+  automatiquement la connexion à l'abonnement.
+- Diagnostic : la vérification « Claude Desktop » est remplacée par celle de la
+  connexion Claude Code à l'abonnement.
+
+### Qualité
+
+- 348 tests, dont un module dédié à Claude Code (`claude-cli`) ; smoke Claude
+  réécrit (Claude Code simulé, clé API leurre jamais transmise).
+
 ## 0.6.7 — 5 novembre 2026
 
 Version **corrective** : Claude retrouve seul Hebdo Fable après un repli, et deux

@@ -2,11 +2,18 @@
 
 Application desktop Windows pour suivre les abonnements, quotas et crédits de **dix fournisseurs d’IA**. Un tableau de bord et un widget dans la zone de notification regroupent les abonnements et les API avec leurs ressources restantes et leurs dates de réinitialisation.
 
+**Version 0.6.8 — 5 novembre 2026 :** **connexion Claude simplifiée** : un bouton « Connecter Claude », comme pour Codex, toujours sur ton abonnement (jamais une clé API) ; lecture toutes les 5 minutes avec Hebdo Fable ; Claude Desktop n'est plus utilisé. Détails dans [CHANGELOG.md](CHANGELOG.md).
+
 **Version 0.6.7 — 5 novembre 2026 :** version **corrective** : après un repli vers Claude Desktop, la lecture directe Claude (et donc **Hebdo Fable**) reprend seule dès que Claude Code renouvelle son jeton ; dates de réinitialisation et réserve Ollama mieux séparées. Toutes les fonctionnalités 0.6.6 sont conservées ; détails dans [CHANGELOG.md](CHANGELOG.md).
 
 **Version 0.6.6 — 5 novembre 2026 :** version **Qualité** : correction d'un timer orphelin du navigateur de connexion Ollama, URL de mise à jour vers le dépôt renommé, CI fusionnée et workflow de release automatisé, ESLint, 352 tests, renderer découpé. Toutes les fonctionnalités 0.6.5 sont conservées ; détails dans [CHANGELOG.md](CHANGELOG.md).
 
 **Version 0.6.5 — 4 novembre 2026 :** **mise à jour automatique signée** du portable, vérifiée par manifeste Ed25519 et SHA-256, avec remplacement après fermeture et conservation stricte de `data/` ; **canary live** prêt à recevoir des clés de test locales. Toutes les fonctionnalités 0.5.0 sont conservées. Détails dans [CHANGELOG.md](CHANGELOG.md), [updates.md](docs/updates.md), la [matrice fournisseurs](docs/provider-matrix.md) et le [runbook](docs/runbook-connectors.md).
+
+## Maintenance 0.6.8
+
+- **Claude** : connexion par Claude Code uniquement (`claude auth status` puis, si besoin, `claude auth login --claudeai`), sans clé API ni jeton longue durée ; lecture toutes les 5 minutes ; fiche à trois états et un seul message. Le relevé Claude Desktop et le repli sont retirés.
+- **Qualité** : 348 tests, lint sans erreur, trois smoke tests Windows.
 
 ## Maintenance 0.6.7
 
