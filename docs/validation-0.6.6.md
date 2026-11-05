@@ -43,7 +43,9 @@ runner Windows → brouillon de release) avec signature locale du manifeste.
 
 ## Flux réel 0.6.5 → 0.6.6
 
-Portable personnel en 0.6.5, avec comptes, abonnements et historique réels.
+Installation 0.6.5 **téléchargée depuis la release GitHub** (dossier Documents de
+l'utilisateur, utilisée au quotidien), donc le parcours exact d'un utilisateur final,
+et non le portable de développement `dist/ProvidersBar-win32-x64`.
 
 1. **Réglages → Mises à jour** : la 0.6.6 est détectée automatiquement
    (« Mise à jour disponible », 151,9 Mo, publiée le 2026-11-05, notes du
@@ -58,8 +60,8 @@ Résultat vérifié :
 
 - version finale : **0.6.6** (À propos et panneau Mises à jour, état « Prête à
   vérifier ») ;
-- `data/` conservé : inventaire de 10 fournisseurs et 6 abonnements, réglages
-  (actualisation automatique, seuil USD) et historique intacts ;
+- `data/` conservé : inventaire de 10 fournisseurs et 6 abonnements et réglages
+  personnalisés (actualisation automatique, seuil USD) intacts ;
 - aucune reconnexion de compte ni ressaisie de clé nécessaire.
 
 ## Limites connues
@@ -67,6 +69,9 @@ Résultat vérifié :
 - Le journal `data/updates/update.log` et la présence de `resources/app.rollback-*`
   n'ont pas été relevés lors de cette validation ; le comportement est celui
   validé en 0.6.5 (script inchangé).
+- Une installation placée dans un dossier synchronisé (OneDrive, Documents
+  synchronisés) expose son `data/` à la synchronisation : à éviter, voir
+  [`SECURITY.md`](../SECURITY.md) §8.
 - `latest.json` reste signé localement : le secret `LASMIUM_UPDATER_PRIVATE_KEY`
   n'est pas configuré, par choix (voir `docs/updates.md`).
 - Windows x64 uniquement, HTTPS obligatoire, aucun certificat Authenticode.
